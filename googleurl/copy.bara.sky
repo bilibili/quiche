@@ -1,0 +1,112 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Ideally, we would import things from Chromium Git.  However, checking out
+# Chromium is *really* slow, so we use a local checkout instead.
+origin = folder.origin()
+
+# Import all URL-related files, plus some parts of //base, primarily those
+# related to string handling.
+import_list = glob(
+    include = [
+        "AUTHORS",
+        "LICENSE",
+        "base/compiler_specific.h",
+        "base/containers/checked_iterators.h",
+        "base/containers/contiguous_iterator.h",
+        "base/containers/span.h",
+        "base/containers/util.h",
+        "base/functional/*.h",
+        "base/ranges/*.h",
+        "base/macros.h",
+        "base/debug/leak_annotations.h",
+        "base/no_destructor.h",
+        "base/optional.h",
+        "base/stl_util.h",
+        "base/template_util.h",
+        "base/strings/*.cc",
+        "base/strings/*.h",
+        "base/third_party/icu/**",
+        "build/build_config.h",
+        "url/*.cc",
+        "url/*.h",
+        "url/third_party/mozilla/**",
+    ],
+    exclude = [
+        "url/url_idna_icu_alternatives*",
+    ],
+)
+
+target_files = glob(
+    include = [
+        "base/**",
+        "build/**",
+        "url/**",
+        "AUTHORS",
+        "LICENSE",
+    ],
+    exclude = [
+        "**/BUILD",
+    ],
+)
+
+# Those headers are pulled from //polyfill instead of copied from Chromium.
+# Should be in sync with //polyfill/BUILD.
+polyfilled_headers = [
+    "base/base_export.h",
+    "base/check.h",
+    "base/check_op.h",
+    "base/component_export.h",
+    "base/debug/alias.h",
+    "base/export_template.h",
+    "base/logging.h",
+    "base/notreached.h",
+    "base/trace_event/memory_usage_estimator.h",
+]
+
+transformations = [
+    # Prefix the logging-related macros.
+    core.replace(
+        "${log}",
+        "GURL_${log}",
+        regex_groups = {"log": "\\bD?(LOG|CHECK|CHECK_(EQ|LT|GT|LE|GE|NE))\\b"},
+    ),
+    core.replace("DCHECK_IS_ON", "GURL_DCHECK_IS_ON"),
+    core.replace("NOTREACHED()", "GURL_NOTREACHED()"),
+
+    # Rename base:: to gurl_base::
+    core.replace("namespace base ", "namespace gurl_base "),
+    core.replace("base::", "gurl_base::"),
+
+    # Ugly hack.  In Chromium, ICU is built with UChar = uint16_t.  We can't
+    # really do that with the system ICU, so we have to work this around with a
+    # cast.
+    core.replace(
+        "src, src_len, output->data(),",
+        "(UChar*)src, src_len, (UChar*)output->data(),",
+    ),
+
+    # Use system ICU.
+    core.replace(
+        '"third_party/icu/source/common/unicode/${file}.h"',
+        "<unicode/${file}.h>",
+        regex_groups = {"file": "\\w+"},
+    ),
+]
+
+transformations += [
+    core.replace('#include "%s"' % header, '#include "polyfills/%s"' % header)
+    for header in polyfilled_headers
+]
+
+core.workflow(
+    name = "import",
+    origin = origin,
+    origin_files = import_list,
+    destination = folder.destination(),
+    destination_files = target_files,
+    authoring = authoring.pass_thru("GURL Maintainers <noreply@google.com>"),
+    mode = "SQUASH",
+    transformations = transformations,
+)

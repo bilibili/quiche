@@ -1,0 +1,12 @@
+[submodule "third_party/abseil-cpp"]
+	path = third_party/abseil-cpp
+	url = https://github.com/abseil/abseil-cpp.git
+[submodule "third_party/spdlog"]
+	path = third_party/spdlog
+	url = https://github.com/gabime/spdlog.git
+[submodule "third_party/fmt"]
+	path = third_party/fmt
+	url = https://github.com/fmtlib/fmt.git
+[submodule "third_party/boringssl"]
+	path = third_party/boringssl
+	url = https://github.com/google/boringssl.git
