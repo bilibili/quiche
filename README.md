@@ -66,4 +66,4 @@ Run the quic server and client
 > ./simple_quic_server --quic_response_cache_dir=/data/quic-root/ --certificate_file=/data/quic-cert/leaf_cert.pem --key_file=/data/quic-cert/leaf_cert.pkcs8
 > ./simple_quic_client --disable_certificate_verification=true --host=127.0.0.1 --port=6121 "https://www.example.org/index.html"
 
-You can alse use broswers to access simple_quic_server, e.g. chrome, and check the request/response protocol by DevTools -> Network panel.
+You can alse use browsers to access simple_quic_server, e.g. chrome, and check the request/response protocol by DevTools -> Network panel.
