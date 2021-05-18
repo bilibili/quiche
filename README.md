@@ -49,3 +49,21 @@ Google quiche is used in Chromium (http://www.chromium.org/quic) project. This r
 | ENABLE_LINK_TCMALLOC | on, off | on |
 
 ## Play examples
+A sample quic server and client implementation are provided in gquiche. To use these you should build the binaries.
+> make simple_quic_server simple_quic_client
+
+Download a copy of www.example.org, which we will serve locally using the simple_quic_server binary.  
+> mkdir -p /data/quic-root && cd /data/quic-root  
+> wget -p --save-headers https://www.example.org
+
+In order to run the simple_quic_server, you will need a valid certificate, and a private key is pkcs8 format. If you don't have one, there are scripts to generate them.
+> cd utils
+> ./generate-certs.sh
+> mkdir -p /data/quic-cert
+> mv ./out/* /data/quic-cert/
+
+Run the quic server and client
+> ./simple_quic_server --quic_response_cache_dir=/data/quic-root/ --certificate_file=/data/quic-cert/leaf_cert.pem --key_file=/data/quic-cert/leaf_cert.pkcs8
+> ./simple_quic_client --disable_certificate_verification=true --host=127.0.0.1 --port=6121 "https://www.example.org/index.html"
+
+You can alse use broswers to access simple_quic_server, e.g. chrome, and check the request/response protocol by DevTools -> Network panel.
