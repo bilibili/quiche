@@ -30,7 +30,7 @@ Google quiche is used in Chromium (http://www.chromium.org/quic) project. This r
 - `platform/quic_platform_impl`: Implementation of quic stack functions
 - `platform/quiche_platform_impl`: Implementation of google quiche platform functions
 - `platform/spdy_platform_impl`: Implementation of spdy stack functions
--`third_party`: Submodules of thirdparty repositories
+- `third_party`: Submodules of thirdparty repositories
 - `utils`: Scripts of some usefull utilities
 
 ## Building quiche
