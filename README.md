@@ -15,12 +15,12 @@ Google quiche is used in Chromium (http://www.chromium.org/quic) project. This r
 - Platform related implementations of epoll server/client, http2 stack, quic stack
 - Rewrite include directives for google quiche source files
 
-## Features
+### Features
 - Easy building with cmake
 - Only support Linux platform
 - Easy to keep pace with Google quiche upgrading
 
-## Source Layout
+### Source Layout
 - `base`: Implementation of basic platform functions
 - `googleurl`: Googleurl source files
 - `gquiche`: Google quiche source files 
@@ -33,37 +33,69 @@ Google quiche is used in Chromium (http://www.chromium.org/quic) project. This r
 - `third_party`: Submodules of thirdparty repositories
 - `utils`: Scripts of some usefull utilities
 
-## Building quiche
+## Getting Started
 
-**1. Prerequisite**  
+### Prerequisite  
 
-> apt-get install git cmake build-essential protobuf-compiler libprotobuf-dev golang-go libunwind-dev libicu-dev
+```bash
+apt-get install cmake build-essential protobuf-compiler libprotobuf-dev golang-go libunwind-dev libicu-dev
+git submodule update --init
+```
 
-**2. Build**  
+### Build  
 
-> mkdir build && cd build  
-> cmake .. && make
+```bash
+mkdir build && cd build  
+cmake .. && make
+cd -
+```
 
 | extra cmake options | values | default |
 | ------ | ------ | ------ |
 | ENABLE_LINK_TCMALLOC | on, off | on |
 
-## Play examples
-A sample quic server and client implementation are provided in gquiche. To use these you should build the binaries.
-> make simple_quic_server simple_quic_client
+### Play examples
+- A sample quic server and client implementation are provided in quiche. To use these you should build the binaries.
 
-Download a copy of www.example.org, which we will serve locally using the simple_quic_server binary.  
-> mkdir -p /data/quic-root && cd /data/quic-root  
-> wget -p --save-headers https://www.example.org
+```bash
+cd build
+make simple_quic_server simple_quic_client
+cd -
+```
 
-In order to run the simple_quic_server, you will need a valid certificate, and a private key is pkcs8 format. If you don't have one, there are scripts to generate them.
-> cd utils
-> ./generate-certs.sh
-> mkdir -p /data/quic-cert
-> mv ./out/* /data/quic-cert/
+- Download a copy of www.example.org, which we will serve locally using the simple_quic_server binary.
 
-Run the quic server and client
-> ./simple_quic_server --quic_response_cache_dir=/data/quic-root/ --certificate_file=/data/quic-cert/leaf_cert.pem --key_file=/data/quic-cert/leaf_cert.pkcs8
-> ./simple_quic_client --disable_certificate_verification=true --host=127.0.0.1 --port=6121 "https://www.example.org/index.html"
+```bash
+mkdir -p /data/quic-root
+wget -p --save-headers https://www.example.org -P /data/quic-root
+```
 
-You can alse use browsers to access simple_quic_server, e.g. chrome, and check the request/response protocol by DevTools -> Network panel.
+- In order to run the simple_quic_server, you will need a valid certificate, and a private key is pkcs8 format. If you don't have one, there are scripts to generate them.
+
+```bash
+cd utils
+./generate-certs.sh
+mkdir -p /data/quic-cert
+mv ./out/* /data/quic-cert/
+cd -
+```
+
+- Run the quic server
+
+```bash
+./build/simple_quic_server \
+  --quic_response_cache_dir=/data/quic-root/ \
+  --certificate_file=/data/quic-cert/leaf_cert.pem \
+  --key_file=/data/quic-cert/leaf_cert.pkcs8
+```
+
+- Request the file with quic client
+
+```bash
+./build/simple_quic_client \
+  --disable_certificate_verification=true \
+  --host=127.0.0.1 --port=6121 \
+  "https://www.example.org/index.html"
+```
+
+You can also use chormium-based browsers to access simple_quic_server at `127.0.0.1:6121`, and check the request/response protocol by DevTools -> Network panel.
