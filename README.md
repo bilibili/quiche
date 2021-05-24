@@ -39,6 +39,7 @@ Google quiche is used in Chromium (http://www.chromium.org/quic) project. This r
 
 ```bash
 apt-get install cmake build-essential protobuf-compiler libprotobuf-dev golang-go libunwind-dev libicu-dev
+git submodule update --init
 ```
 
 ### Build  
