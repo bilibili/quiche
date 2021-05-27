@@ -38,16 +38,16 @@ Google quiche is used in Chromium (http://www.chromium.org/quic) project. This r
 ### Prerequisite  
 
 ```bash
-apt-get install cmake build-essential protobuf-compiler libprotobuf-dev golang-go libunwind-dev libicu-dev
+apt-get install cmake ninja build-essential protobuf-compiler libprotobuf-dev golang-go libunwind-dev libicu-dev
 git submodule update --init
 ```
 
 ### Build  
 
 ```bash
-mkdir build && cd build  
-cmake .. && make
-cd -
+mkdir build
+cmake -G Ninja -S . -B build
+ninja -C build
 ```
 
 | extra cmake options | values | default |
@@ -58,9 +58,7 @@ cd -
 - A sample quic server and client implementation are provided in quiche. To use these you should build the binaries.
 
 ```bash
-cd build
-make simple_quic_server simple_quic_client
-cd -
+ninja -C simple_quic_server simple_quic_client
 ```
 
 - Download a copy of www.example.org, which we will serve locally using the simple_quic_server binary.
