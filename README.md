@@ -58,7 +58,7 @@ ninja -C build
 - A sample quic server and client implementation are provided in quiche. To use these you should build the binaries.
 
 ```bash
-ninja -C simple_quic_server simple_quic_client
+ninja -C build simple_quic_server simple_quic_client
 ```
 
 - Download a copy of www.example.org, which we will serve locally using the simple_quic_server binary.
