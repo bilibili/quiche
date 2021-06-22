@@ -290,6 +290,8 @@ SET(GQUICHE_SRCS
     gquiche/quic/core/quic_server_id.cc
     gquiche/quic/core/quic_session.cc
     gquiche/quic/core/quic_simple_buffer_allocator.cc
+    gquiche/quic/core/quic_linux_socket_utils.cc
+    gquiche/quic/core/quic_syscall_wrapper.cc
     gquiche/quic/core/quic_socket_address_coder.cc
     gquiche/quic/core/quic_stream.cc
     gquiche/quic/core/quic_stream_id_manager.cc
@@ -356,6 +358,7 @@ ADD_LIBRARY(quiche
     ${NET_SRCS}
     ${PLATFORM_SRCS}
     ${GQUICHE_SRCS}
+    ${QUIC_TOOLS_SRCS}
     ${CoreProtoSource}
 )
 
