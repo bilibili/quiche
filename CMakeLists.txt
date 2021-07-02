@@ -118,6 +118,10 @@ SET(GQUICHE_SRCS
     gquiche/http2/hpack/varint/hpack_varint_encoder.cc
     gquiche/http2/http2_constants.cc
     gquiche/http2/http2_structures.cc
+    gquiche/quic/core/batch_writer/quic_batch_writer_base.cc
+    gquiche/quic/core/batch_writer/quic_batch_writer_buffer.cc
+    gquiche/quic/core/batch_writer/quic_gso_batch_writer.cc
+    gquiche/quic/core/batch_writer/quic_sendmmsg_batch_writer.cc
     gquiche/quic/core/congestion_control/bandwidth_sampler.cc
     gquiche/quic/core/congestion_control/bbr2_drain.cc
     gquiche/quic/core/congestion_control/bbr2_misc.cc
@@ -278,6 +282,7 @@ SET(GQUICHE_SRCS
     gquiche/quic/core/quic_framer.cc
     gquiche/quic/core/quic_idle_network_detector.cc
     gquiche/quic/core/quic_legacy_version_encapsulator.cc
+    gquiche/quic/core/quic_linux_socket_utils.cc
     gquiche/quic/core/quic_mtu_discovery.cc
     gquiche/quic/core/quic_network_blackhole_detector.cc
     gquiche/quic/core/quic_packet_creator.cc
@@ -299,6 +304,7 @@ SET(GQUICHE_SRCS
     gquiche/quic/core/quic_stream_sequencer.cc
     gquiche/quic/core/quic_stream_sequencer_buffer.cc
     gquiche/quic/core/quic_sustained_bandwidth_recorder.cc
+    gquiche/quic/core/quic_syscall_wrapper.cc
     gquiche/quic/core/quic_tag.cc
     gquiche/quic/core/quic_time_wait_list_manager.cc
     gquiche/quic/core/quic_time.cc
@@ -355,6 +361,7 @@ message("BINARY_SRC = ${CMAKE_CURRENT_BINARY_DIR}")
 ### quiche library
 ADD_LIBRARY(quiche
     ${BASE_SRCS}
+    ${EPOLL_SERVER_SRC}
     ${NET_SRCS}
     ${PLATFORM_SRCS}
     ${GQUICHE_SRCS}
