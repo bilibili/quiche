@@ -1,15 +1,15 @@
 [submodule "third_party/abseil-cpp"]
 	path = third_party/abseil-cpp
-	url = git@git.bilibili.co:bvc-cabin/abseil-cpp.git
+	url = https://github.com/abseil/abseil-cpp.git
 [submodule "third_party/spdlog"]
 	path = third_party/spdlog
-	url = git@git.bilibili.co:bvc-cabin/spdlog.git
+	url = https://github.com/gabime/spdlog.git
 [submodule "third_party/fmt"]
 	path = third_party/fmt
-	url = git@git.bilibili.co:bvc-cabin/fmt.git
+	url = https://github.com/fmtlib/fmt.git
 [submodule "third_party/boringssl"]
 	path = third_party/boringssl
-	url = git@git.bilibili.co:bvc-cabin/boringssl.git
+	url = https://github.com/google/boringssl.git
 [submodule "third_party/rapidjson"]
 	path = third_party/rapidjson
-	url = git@git.bilibili.co:bvc-cabin/rapidjson.git
+	url = https://github.com/Tencent/rapidjson.git
