@@ -7,6 +7,7 @@
 
 #include "gquiche/quic/platform/api/quic_logging.h"
 #include "platform/quic_platform_impl/quic_test_impl.h"
+#include "gquiche/common/platform/api/quiche_test.h"
 
 using QuicFlagSaver = QuicFlagSaverImpl;
 
@@ -24,9 +25,6 @@ using ScopedEnvironmentForThreads = ScopedEnvironmentForThreadsImpl;
 inline std::string QuicGetTestMemoryCachePath() {
   return QuicGetTestMemoryCachePathImpl();
 }
-
-#define EXPECT_QUIC_DEBUG_DEATH(condition, message) \
-  EXPECT_QUIC_DEBUG_DEATH_IMPL(condition, message)
 
 #define QUIC_SLOW_TEST(test) QUIC_SLOW_TEST_IMPL(test)
 

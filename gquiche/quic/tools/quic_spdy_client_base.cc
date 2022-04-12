@@ -13,7 +13,7 @@
 #include "gquiche/quic/core/quic_server_id.h"
 #include "gquiche/quic/platform/api/quic_flags.h"
 #include "gquiche/quic/platform/api/quic_logging.h"
-#include "gquiche/common/platform/api/quiche_text_utils.h"
+#include "gquiche/common/quiche_text_utils.h"
 
 using spdy::Http2HeaderBlock;
 
@@ -67,6 +67,10 @@ const QuicSpdyClientSession* QuicSpdyClientBase::client_session() const {
 }
 
 void QuicSpdyClientBase::InitializeSession() {
+  if (max_inbound_header_list_size_ > 0) {
+    client_session()->set_max_inbound_header_list_size(
+        max_inbound_header_list_size_);
+  }
   client_session()->Initialize();
   client_session()->CryptoConnect();
 }

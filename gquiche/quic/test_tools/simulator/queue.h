@@ -6,8 +6,8 @@
 #define QUICHE_QUIC_TEST_TOOLS_SIMULATOR_QUEUE_H_
 
 #include "gquiche/quic/core/quic_alarm.h"
-#include "gquiche/quic/core/quic_circular_deque.h"
 #include "gquiche/quic/test_tools/simulator/link.h"
+#include "gquiche/common/quiche_circular_deque.h"
 
 namespace quic {
 namespace simulator {
@@ -73,7 +73,7 @@ class Queue : public Actor, public UnconstrainedPortInterface {
   };
 
   // Alarm handler for aggregation timeout.
-  class AggregationAlarmDelegate : public QuicAlarm::Delegate {
+  class AggregationAlarmDelegate : public QuicAlarm::DelegateWithoutContext {
    public:
     explicit AggregationAlarmDelegate(Queue* queue);
 
@@ -110,7 +110,7 @@ class Queue : public Actor, public UnconstrainedPortInterface {
   std::unique_ptr<QuicAlarm> aggregation_timeout_alarm_;
 
   ConstrainedPortInterface* tx_port_;
-  QuicCircularDeque<EnqueuedPacket> queue_;
+  quiche::QuicheCircularDeque<EnqueuedPacket> queue_;
 
   ListenerInterface* listener_;
 };

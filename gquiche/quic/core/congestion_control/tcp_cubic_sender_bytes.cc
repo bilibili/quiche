@@ -56,6 +56,15 @@ TcpCubicSenderBytes::TcpCubicSenderBytes(
 
 TcpCubicSenderBytes::~TcpCubicSenderBytes() {}
 
+TcpCubicSenderBytes::DebugState::DebugState(const TcpCubicSenderBytes& sender)
+    : min_rtt(sender.rtt_stats_->smoothed_rtt()),
+      latest_rtt(sender.rtt_stats_->latest_rtt()),
+      smoothed_rtt(sender.rtt_stats_->smoothed_rtt()),
+      mean_deviation(sender.rtt_stats_->mean_deviation()),
+      bandwidth_est(sender.BandwidthEstimate()) {}
+
+TcpCubicSenderBytes::DebugState::DebugState(const DebugState& state) = default;
+
 void TcpCubicSenderBytes::SetFromConfig(const QuicConfig& config,
                                         Perspective perspective) {
   if (perspective == Perspective::IS_SERVER) {
@@ -255,6 +264,10 @@ void TcpCubicSenderBytes::OnRetransmissionTimeout(bool packets_retransmitted) {
 
 std::string TcpCubicSenderBytes::GetDebugState() const {
   return "";
+}
+
+TcpCubicSenderBytes::DebugState TcpCubicSenderBytes::ExportDebugState() const {
+  return DebugState(*this);
 }
 
 void TcpCubicSenderBytes::OnApplicationLimited(

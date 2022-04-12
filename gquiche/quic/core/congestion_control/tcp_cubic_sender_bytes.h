@@ -42,6 +42,15 @@ class QUIC_EXPORT_PRIVATE TcpCubicSenderBytes : public SendAlgorithmInterface {
   TcpCubicSenderBytes(const TcpCubicSenderBytes&) = delete;
   TcpCubicSenderBytes& operator=(const TcpCubicSenderBytes&) = delete;
   ~TcpCubicSenderBytes() override;
+  struct QUIC_EXPORT_PRIVATE DebugState {
+    explicit DebugState(const TcpCubicSenderBytes& sender);
+    DebugState(const DebugState& state);
+    QuicTime::Delta min_rtt;
+    QuicTime::Delta latest_rtt;
+    QuicTime::Delta smoothed_rtt;
+    QuicTime::Delta mean_deviation;
+    QuicBandwidth bandwidth_est;
+  };
 
   // Start implementation of SendAlgorithmInterface.
   void SetFromConfig(const QuicConfig& config,
@@ -78,7 +87,8 @@ class QUIC_EXPORT_PRIVATE TcpCubicSenderBytes : public SendAlgorithmInterface {
   void OnApplicationLimited(QuicByteCount bytes_in_flight) override;
   void PopulateConnectionStats(QuicConnectionStats* /*stats*/) const override {}
   // End implementation of SendAlgorithmInterface.
-
+  
+  DebugState ExportDebugState() const;
   QuicByteCount min_congestion_window() const { return min_congestion_window_; }
 
  protected:

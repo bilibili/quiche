@@ -5,8 +5,11 @@
 #ifndef QUICHE_QUIC_QBONE_BONNET_TUN_DEVICE_PACKET_EXCHANGER_H_
 #define QUICHE_QUIC_QBONE_BONNET_TUN_DEVICE_PACKET_EXCHANGER_H_
 
+#include <linux/if_ether.h>
+
 #include "gquiche/quic/core/quic_packets.h"
 #include "gquiche/quic/qbone/platform/kernel_interface.h"
+#include "gquiche/quic/qbone/platform/netlink_interface.h"
 #include "gquiche/quic/qbone/qbone_client_interface.h"
 #include "gquiche/quic/qbone/qbone_packet_exchanger.h"
 
@@ -35,8 +38,6 @@ class TunDevicePacketExchanger : public QbonePacketExchanger {
     ABSL_MUST_USE_RESULT virtual int64_t PacketsWritten() const = 0;
   };
 
-  // |fd| is a open file descriptor on a TUN device that's opened for both read
-  // and write.
   // |mtu| is the mtu of the TUN device.
   // |kernel| is not owned but should out live objects of this class.
   // |visitor| is not owned but should out live objects of this class.
@@ -44,14 +45,13 @@ class TunDevicePacketExchanger : public QbonePacketExchanger {
   // the TUN device become blocked.
   // |stats| is notified about packet read/write statistics. It is not owned,
   // but should outlive objects of this class.
-  TunDevicePacketExchanger(int fd,
-                           size_t mtu,
-                           KernelInterface* kernel,
+  TunDevicePacketExchanger(size_t mtu, KernelInterface* kernel,
+                           NetlinkInterface* netlink,
                            QbonePacketExchanger::Visitor* visitor,
-                           size_t max_pending_packets,
-                           StatsInterface* stats);
+                           size_t max_pending_packets, bool is_tap,
+                           StatsInterface* stats, absl::string_view ifname);
 
-  ABSL_MUST_USE_RESULT int file_descriptor() const;
+  void set_file_descriptor(int fd);
 
   ABSL_MUST_USE_RESULT const StatsInterface* stats_interface() const;
 
@@ -66,9 +66,19 @@ class TunDevicePacketExchanger : public QbonePacketExchanger {
                    bool* blocked,
                    std::string* error) override;
 
+  std::unique_ptr<QuicData> ApplyL2Headers(const QuicData& l3_packet);
+
+  std::unique_ptr<QuicData> ConsumeL2Headers(const QuicData& l2_packet);
+
   int fd_ = -1;
   size_t mtu_;
   KernelInterface* kernel_;
+  NetlinkInterface* netlink_;
+  const std::string ifname_;
+
+  const bool is_tap_;
+  uint8_t tap_mac_[ETH_ALEN]{};
+  bool mac_initialized_ = false;
 
   StatsInterface* stats_;
 };

@@ -5,7 +5,7 @@
 #ifndef QUICHE_QUIC_PLATFORM_API_QUIC_EXPORT_H_
 #define QUICHE_QUIC_PLATFORM_API_QUIC_EXPORT_H_
 
-#include "platform/quiche_platform_impl/quiche_export_impl.h"
+#include "gquiche/common/platform/default/quiche_platform_impl/quiche_export_impl.h"
 
 // QUIC_EXPORT is not meant to be used.
 #define QUIC_EXPORT QUICHE_EXPORT_IMPL

@@ -5,7 +5,7 @@
 #ifndef QUICHE_QUIC_PLATFORM_API_QUIC_EPOLL_TEST_TOOLS_H_
 #define QUICHE_QUIC_PLATFORM_API_QUIC_EPOLL_TEST_TOOLS_H_
 
-#include "platform/quic_epoll_test_tools_impl.h"
+#include "platform/quic_platform_impl/quic_epoll_test_tools_impl.h"
 
 using QuicFakeEpollServer = QuicFakeEpollServerImpl;
 

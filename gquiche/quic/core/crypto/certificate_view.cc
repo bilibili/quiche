@@ -30,9 +30,9 @@
 #include "gquiche/quic/platform/api/quic_bug_tracker.h"
 #include "gquiche/quic/platform/api/quic_ip_address.h"
 #include "gquiche/quic/platform/api/quic_logging.h"
-#include "gquiche/common/platform/api/quiche_text_utils.h"
 #include "gquiche/common/platform/api/quiche_time_utils.h"
 #include "gquiche/common/quiche_data_reader.h"
+#include "gquiche/common/quiche_text_utils.h"
 
 namespace quic {
 namespace {
@@ -586,7 +586,7 @@ skip:
 }
 
 std::string CertificatePrivateKey::Sign(absl::string_view input,
-                                        uint16_t signature_algorithm) {
+                                        uint16_t signature_algorithm) const {
   if (!ValidForSignatureAlgorithm(signature_algorithm)) {
     QUIC_BUG(quic_bug_10640_2)
         << "Mismatch between the requested signature algorithm and the "
@@ -626,12 +626,13 @@ std::string CertificatePrivateKey::Sign(absl::string_view input,
   return output;
 }
 
-bool CertificatePrivateKey::MatchesPublicKey(const CertificateView& view) {
+bool CertificatePrivateKey::MatchesPublicKey(
+    const CertificateView& view) const {
   return EVP_PKEY_cmp(view.public_key(), private_key_.get()) == 1;
 }
 
 bool CertificatePrivateKey::ValidForSignatureAlgorithm(
-    uint16_t signature_algorithm) {
+    uint16_t signature_algorithm) const {
   return PublicKeyTypeFromSignatureAlgorithm(signature_algorithm) ==
          PublicKeyTypeFromKey(private_key_.get());
 }

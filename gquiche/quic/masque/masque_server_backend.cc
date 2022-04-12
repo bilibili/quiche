@@ -50,7 +50,9 @@ bool MasqueServerBackend::MaybeHandleMasqueRequest(
     masque_path = std::string(path.substr(sizeof("/.well-known/masque/") - 1));
   } else {
     QUICHE_DCHECK_EQ(masque_mode_, MasqueMode::kOpen);
-    if (method != "CONNECT-UDP") {
+    auto protocol_pair = request_headers.find(":protocol");
+    if (method != "CONNECT" || protocol_pair == request_headers.end() ||
+        protocol_pair->second != "connect-udp") {
       // This is not a MASQUE request.
       return false;
     }
@@ -90,7 +92,7 @@ bool MasqueServerBackend::MaybeHandleMasqueRequest(
   QUIC_DLOG(INFO) << "Sending MASQUE response for "
                   << request_headers.DebugString();
 
-  request_handler->OnResponseBackendComplete(response.get(), {});
+  request_handler->OnResponseBackendComplete(response.get());
   it->second.responses.emplace_back(std::move(response));
 
   return true;

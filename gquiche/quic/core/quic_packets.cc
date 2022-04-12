@@ -15,7 +15,6 @@
 #include "gquiche/quic/core/quic_versions.h"
 #include "gquiche/quic/platform/api/quic_flag_utils.h"
 #include "gquiche/quic/platform/api/quic_flags.h"
-#include "gquiche/common/platform/api/quiche_text_utils.h"
 
 namespace quic {
 

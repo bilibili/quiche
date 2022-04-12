@@ -279,11 +279,7 @@ TEST_P(TlsClientHandshakerTest, ConnectedAfterHandshake) {
 TEST_P(TlsClientHandshakerTest, ConnectionClosedOnTlsError) {
   // Have client send ClientHello.
   stream()->CryptoConnect();
-  if (GetQuicReloadableFlag(quic_send_tls_crypto_error_code)) {
-    EXPECT_CALL(*connection_, CloseConnection(QUIC_HANDSHAKE_FAILED, _, _, _));
-  } else {
-    EXPECT_CALL(*connection_, CloseConnection(QUIC_HANDSHAKE_FAILED, _, _));
-  }
+  EXPECT_CALL(*connection_, CloseConnection(QUIC_HANDSHAKE_FAILED, _, _, _));
 
   // Send a zero-length ServerHello from server to client.
   char bogus_handshake_message[] = {
@@ -421,6 +417,55 @@ TEST_P(TlsClientHandshakerTest, ZeroRttResumption) {
   EXPECT_TRUE(stream()->IsResumption());
   EXPECT_TRUE(stream()->EarlyDataAccepted());
   EXPECT_EQ(stream()->EarlyDataReason(), ssl_early_data_accepted);
+}
+
+// Regression test for b/186438140.
+TEST_P(TlsClientHandshakerTest, ZeroRttResumptionWithAyncProofVerifier) {
+  // Finish establishing the first connection, so the second connection can
+  // resume.
+  CompleteCryptoHandshake();
+
+  EXPECT_EQ(PROTOCOL_TLS1_3, stream()->handshake_protocol());
+  EXPECT_TRUE(stream()->encryption_established());
+  EXPECT_TRUE(stream()->one_rtt_keys_available());
+  EXPECT_FALSE(stream()->IsResumption());
+
+  // Create a second connection.
+  CreateConnection();
+  InitializeFakeServer();
+  EXPECT_CALL(*session_, OnConfigNegotiated());
+  EXPECT_CALL(*connection_, SendCryptoData(_, _, _))
+      .Times(testing::AnyNumber());
+  // Enable TestProofVerifier to capture the call to VerifyCertChain and run it
+  // asynchronously.
+  TestProofVerifier* proof_verifier =
+      static_cast<TestProofVerifier*>(crypto_config_->proof_verifier());
+  proof_verifier->Activate();
+  // Start the second handshake.
+  stream()->CryptoConnect();
+
+  ASSERT_EQ(proof_verifier->NumPendingCallbacks(), 1u);
+
+  // Advance the handshake with the server. Since cert verification has not
+  // finished yet, client cannot derive HANDSHAKE and 1-RTT keys.
+  crypto_test_utils::AdvanceHandshake(connection_, stream(), 0,
+                                      server_connection_, server_stream(), 0);
+
+  EXPECT_FALSE(stream()->one_rtt_keys_available());
+  EXPECT_FALSE(server_stream()->one_rtt_keys_available());
+
+  // Finish cert verification after receiving packets from server.
+  proof_verifier->InvokePendingCallback(0);
+
+  QuicFramer* framer = QuicConnectionPeer::GetFramer(connection_);
+  // Verify client has derived HANDSHAKE key.
+  EXPECT_NE(nullptr,
+            QuicFramerPeer::GetEncrypter(framer, ENCRYPTION_HANDSHAKE));
+
+  // Ideally, we should also verify that the process_undecryptable_packets_alarm
+  // is set and processing the undecryptable packets can advance the handshake
+  // to completion. Unfortunately, the test facilities used in this test does
+  // not support queuing and processing undecryptable packets.
 }
 
 TEST_P(TlsClientHandshakerTest, ZeroRttRejection) {
@@ -565,23 +610,14 @@ TEST_P(TlsClientHandshakerTest, ServerRequiresCustomALPN) {
       .WillOnce([kTestAlpn](const std::vector<absl::string_view>& alpns) {
         return std::find(alpns.cbegin(), alpns.cend(), kTestAlpn);
       });
-  if (GetQuicReloadableFlag(quic_send_tls_crypto_error_code)) {
-    EXPECT_CALL(
-        *server_connection_,
-        CloseConnection(
-            QUIC_HANDSHAKE_FAILED,
-            static_cast<QuicIetfTransportErrorCodes>(CRYPTO_ERROR_FIRST + 120),
-            "TLS handshake failure (ENCRYPTION_INITIAL) 120: "
-            "no application protocol",
-            _));
-  } else {
-    EXPECT_CALL(
-        *server_connection_,
-        CloseConnection(QUIC_HANDSHAKE_FAILED,
-                        "TLS handshake failure (ENCRYPTION_INITIAL) 120: "
-                        "no application protocol",
-                        _));
-  }
+
+  EXPECT_CALL(*server_connection_,
+              CloseConnection(QUIC_HANDSHAKE_FAILED,
+                              static_cast<QuicIetfTransportErrorCodes>(
+                                  CRYPTO_ERROR_FIRST + 120),
+                              "TLS handshake failure (ENCRYPTION_INITIAL) 120: "
+                              "no application protocol",
+                              _));
 
   stream()->CryptoConnect();
   crypto_test_utils::AdvanceHandshake(connection_, stream(), 0,

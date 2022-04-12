@@ -8,10 +8,10 @@
 #include <memory>
 
 #include "absl/types/optional.h"
-#include "gquiche/quic/core/quic_circular_deque.h"
 #include "gquiche/quic/core/quic_time.h"
 #include "gquiche/quic/core/quic_types.h"
 #include "gquiche/quic/platform/api/quic_mem_slice.h"
+#include "gquiche/common/quiche_circular_deque.h"
 
 namespace quic {
 
@@ -80,7 +80,7 @@ class QUIC_EXPORT_PRIVATE QuicDatagramQueue {
   const QuicClock* clock_;
 
   QuicTime::Delta max_time_in_queue_ = QuicTime::Delta::Zero();
-  QuicCircularDeque<Datagram> queue_;
+  quiche::QuicheCircularDeque<Datagram> queue_;
   std::unique_ptr<Observer> observer_;
 };
 

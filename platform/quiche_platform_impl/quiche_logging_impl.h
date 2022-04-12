@@ -111,6 +111,7 @@
 #define QUICHE_DCHECK_EQ_IMPL(a, b) QUICHE_DCHECK_IMPL((a) == (b))
 
 #define QUICHE_PREDICT_FALSE_IMPL(x) ABSL_PREDICT_FALSE(x)
+#define QUICHE_PREDICT_TRUE_IMPL(x) (x)
 
 namespace quiche {
 

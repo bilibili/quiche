@@ -22,12 +22,16 @@ SET(BUILD_SRCS
 
 SET(BASE_STRINGS_SRCS
     base/strings/string16.cc
+    base/strings/escape.cc
+    base/strings/strcat.cc
+    base/strings/pattern.cc
     base/strings/string_piece.cc
     base/strings/string_split.cc
     base/strings/string_util.cc
     base/strings/string_util_constants.cc
     base/strings/utf_string_conversion_utils.cc
     base/strings/utf_string_conversions.cc
+    base/strings/utf_offset_string_conversions.cc
 )
 
 SET(URL_SRCS

@@ -6,7 +6,7 @@
 #define QUICHE_QUIC_PLATFORM_API_QUIC_MUTEX_H_
 
 // TODO(b/178613777): move into the common QUICHE platform.
-#include "platform/quiche_platform_impl/quic_mutex_impl.h"
+#include "gquiche/common/platform/default/quiche_platform_impl/quic_mutex_impl.h"
 
 #define QUIC_EXCLUSIVE_LOCKS_REQUIRED QUIC_EXCLUSIVE_LOCKS_REQUIRED_IMPL
 #define QUIC_GUARDED_BY QUIC_GUARDED_BY_IMPL

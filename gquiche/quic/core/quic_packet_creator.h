@@ -22,14 +22,15 @@
 
 #include "absl/base/attributes.h"
 #include "absl/strings/string_view.h"
+#include "absl/types/optional.h"
 #include "gquiche/quic/core/frames/quic_stream_frame.h"
-#include "gquiche/quic/core/quic_circular_deque.h"
 #include "gquiche/quic/core/quic_coalesced_packet.h"
 #include "gquiche/quic/core/quic_connection_id.h"
 #include "gquiche/quic/core/quic_framer.h"
 #include "gquiche/quic/core/quic_packets.h"
 #include "gquiche/quic/core/quic_types.h"
 #include "gquiche/quic/platform/api/quic_export.h"
+#include "gquiche/common/quiche_circular_deque.h"
 
 namespace quic {
 namespace test {
@@ -204,6 +205,10 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
   // Returns true if there are frames pending to be serialized.
   bool HasPendingFrames() const;
 
+  // TODO(haoyuewang) Remove this debug utility.
+  // Returns the information of pending frames as a string.
+  std::string GetPendingFramesInfo() const;
+
   // Returns true if there are retransmittable frames pending to be serialized.
   bool HasPendingRetransmittableFrames() const;
 
@@ -258,7 +263,7 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
   // |payloads| is cleared.
   std::unique_ptr<SerializedPacket>
   SerializePathResponseConnectivityProbingPacket(
-      const QuicCircularDeque<QuicPathFrameBuffer>& payloads,
+      const quiche::QuicheCircularDeque<QuicPathFrameBuffer>& payloads,
       const bool is_padded);
 
   // Add PATH_RESPONSE to current packet, flush before or afterwards if needed.
@@ -307,6 +312,11 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
   // Sets the encryption level that will be applied to new packets.
   void set_encryption_level(EncryptionLevel level);
   EncryptionLevel encryption_level() { return packet_.encryption_level; }
+
+  // Sets whether initial packets are protected with chaos.
+  void set_chaos_protection_enabled(bool chaos_protection_enabled) {
+    chaos_protection_enabled_ = chaos_protection_enabled;
+  }
 
   // packet number of the last created packet, or 0 if no packets have been
   // created.
@@ -411,7 +421,7 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
 
   // Tries to add a message frame containing |message| and returns the status.
   MessageStatus AddMessageFrame(QuicMessageId message_id,
-                                QuicMemSliceSpan message);
+                                absl::Span<QuicMemSlice> message);
 
   // Returns the largest payload that will fit into a single MESSAGE frame.
   QuicPacketLength GetCurrentLargestMessagePayload() const;
@@ -465,7 +475,7 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
       const QuicPacketHeader& header,
       char* buffer,
       size_t packet_length,
-      const QuicCircularDeque<QuicPathFrameBuffer>& payloads,
+      const quiche::QuicheCircularDeque<QuicPathFrameBuffer>& payloads,
       const bool is_padded,
       EncryptionLevel level);
 
@@ -507,6 +517,13 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
    private:
     QuicPacketCreator* creator_;  // Unowned.
   };
+
+  // Attempts to build a data packet with chaos protection. If this packet isn't
+  // supposed to be protected or if serialization fails then absl::nullopt is
+  // returned. Otherwise returns the serialized length.
+  absl::optional<size_t> MaybeBuildDataPacketWithChaosProtection(
+      const QuicPacketHeader& header,
+      char* buffer);
 
   // Creates a stream frame which fits into the current open packet. If
   // |data_size| is 0 and fin is true, the expected behavior is to consume
@@ -692,6 +709,9 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
   // accept. There is no limit for QUIC_CRYPTO connections, but QUIC+TLS
   // negotiates this during the handshake.
   QuicByteCount max_datagram_frame_size_;
+
+  // Whether to attempt protecting initial packets with chaos.
+  bool chaos_protection_enabled_;
 };
 
 }  // namespace quic

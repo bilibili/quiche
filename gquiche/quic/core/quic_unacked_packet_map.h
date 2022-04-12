@@ -7,15 +7,15 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <deque>
 
+#include "absl/container/inlined_vector.h"
 #include "absl/strings/str_cat.h"
-#include "gquiche/quic/core/quic_circular_deque.h"
 #include "gquiche/quic/core/quic_packets.h"
 #include "gquiche/quic/core/quic_transmission_info.h"
 #include "gquiche/quic/core/session_notifier_interface.h"
 #include "gquiche/quic/platform/api/quic_export.h"
 #include "gquiche/quic/platform/api/quic_flags.h"
+#include "gquiche/common/quiche_circular_deque.h"
 
 namespace quic {
 
@@ -70,12 +70,12 @@ class QUIC_EXPORT_PRIVATE QuicUnackedPacketMap {
 
   // Called to neuter all unencrypted packets to ensure they do not get
   // retransmitted. Returns a vector of neutered packet numbers.
-  QuicInlinedVector<QuicPacketNumber, 2> NeuterUnencryptedPackets();
+  absl::InlinedVector<QuicPacketNumber, 2> NeuterUnencryptedPackets();
 
   // Called to neuter packets in handshake packet number space to ensure they do
   // not get retransmitted. Returns a vector of neutered packet numbers.
   // TODO(fayang): Consider to combine this with NeuterUnencryptedPackets.
-  QuicInlinedVector<QuicPacketNumber, 2> NeuterHandshakePackets();
+  absl::InlinedVector<QuicPacketNumber, 2> NeuterHandshakePackets();
 
   // Returns true if |packet_number| has retransmittable frames. This will
   // return false if all frames of this packet are either non-retransmittable or
@@ -113,10 +113,10 @@ class QUIC_EXPORT_PRIVATE QuicUnackedPacketMap {
   QuicPacketNumber GetLeastUnacked() const;
 
   using const_iterator =
-      QuicCircularDeque<QuicTransmissionInfo>::const_iterator;
+      quiche::QuicheCircularDeque<QuicTransmissionInfo>::const_iterator;
   using const_reverse_iterator =
-      QuicCircularDeque<QuicTransmissionInfo>::const_reverse_iterator;
-  using iterator = QuicCircularDeque<QuicTransmissionInfo>::iterator;
+      quiche::QuicheCircularDeque<QuicTransmissionInfo>::const_reverse_iterator;
+  using iterator = quiche::QuicheCircularDeque<QuicTransmissionInfo>::iterator;
 
   const_iterator begin() const { return unacked_packets_.begin(); }
   const_iterator end() const { return unacked_packets_.end(); }
@@ -300,7 +300,7 @@ class QUIC_EXPORT_PRIVATE QuicUnackedPacketMap {
   // If the old packet is acked before the new packet, then the old entry will
   // be removed from the map and the new entry's retransmittable frames will be
   // set to nullptr.
-  QuicCircularDeque<QuicTransmissionInfo> unacked_packets_;
+  quiche::QuicheCircularDeque<QuicTransmissionInfo> unacked_packets_;
 
   // The packet at the 0th index of unacked_packets_.
   QuicPacketNumber least_unacked_;

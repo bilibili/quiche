@@ -5,7 +5,6 @@
 #include "gquiche/http2/hpack/tools/hpack_block_builder.h"
 
 #include "absl/strings/escaping.h"
-#include "gquiche/http2/platform/api/http2_string_utils.h"
 #include "gquiche/common/platform/api/quiche_test.h"
 
 namespace http2 {

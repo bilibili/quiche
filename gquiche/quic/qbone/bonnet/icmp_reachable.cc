@@ -11,8 +11,8 @@
 #include "gquiche/quic/platform/api/quic_logging.h"
 #include "gquiche/quic/platform/api/quic_mutex.h"
 #include "gquiche/quic/qbone/platform/icmp_packet.h"
-#include "gquiche/common/platform/api/quiche_text_utils.h"
 #include "gquiche/common/quiche_endian.h"
+#include "gquiche/common/quiche_text_utils.h"
 
 namespace quic {
 namespace {

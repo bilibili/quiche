@@ -7,8 +7,10 @@
 
 #include <string>
 
+#include "gquiche/quic/core/quic_simple_buffer_allocator.h"
 #include "gquiche/quic/core/web_transport_interface.h"
 #include "gquiche/quic/platform/api/quic_logging.h"
+#include "gquiche/common/quiche_circular_deque.h"
 
 namespace quic {
 
@@ -26,6 +28,10 @@ class WebTransportDiscardVisitor : public WebTransportStreamVisitor {
   }
 
   void OnCanWrite() override {}
+
+  void OnResetStreamReceived(WebTransportStreamError /*error*/) override {}
+  void OnStopSendingReceived(WebTransportStreamError /*error*/) override {}
+  void OnWriteSideInDataRecvdState() override {}
 
  private:
   WebTransportStream* stream_;
@@ -49,6 +55,10 @@ class WebTransportBidirectionalEchoVisitor : public WebTransportStreamVisitor {
   }
 
   void OnCanWrite() override {
+    if (stop_sending_received_) {
+      return;
+    }
+
     if (!buffer_.empty()) {
       bool success = stream_->Write(buffer_);
       QUIC_DVLOG(1) << "Attempted writing on WebTransport bidirectional stream "
@@ -67,10 +77,26 @@ class WebTransportBidirectionalEchoVisitor : public WebTransportStreamVisitor {
     }
   }
 
+  void OnResetStreamReceived(WebTransportStreamError /*error*/) override {
+    // Send FIN in response to a stream reset.  We want to test that we can
+    // operate one side of the stream cleanly while the other is reset, thus
+    // replying with a FIN rather than a RESET_STREAM is more appropriate here.
+    send_fin_ = true;
+    OnCanWrite();
+  }
+  void OnStopSendingReceived(WebTransportStreamError /*error*/) override {
+    stop_sending_received_ = true;
+  }
+  void OnWriteSideInDataRecvdState() override {}
+
+ protected:
+  WebTransportStream* stream() { return stream_; }
+
  private:
   WebTransportStream* stream_;
   std::string buffer_;
   bool send_fin_ = false;
+  bool stop_sending_received_ = false;
 };
 
 // Buffers all of the data and calls |callback| with the entirety of the stream
@@ -97,6 +123,10 @@ class WebTransportUnidirectionalEchoReadVisitor
   }
 
   void OnCanWrite() override { QUIC_NOTREACHED(); }
+
+  void OnResetStreamReceived(WebTransportStreamError /*error*/) override {}
+  void OnStopSendingReceived(WebTransportStreamError /*error*/) override {}
+  void OnWriteSideInDataRecvdState() override {}
 
  private:
   WebTransportStream* stream_;
@@ -127,9 +157,105 @@ class WebTransportUnidirectionalEchoWriteVisitor
     QUICHE_DCHECK(fin_sent);
   }
 
+  void OnResetStreamReceived(WebTransportStreamError /*error*/) override {}
+  void OnStopSendingReceived(WebTransportStreamError /*error*/) override {}
+  void OnWriteSideInDataRecvdState() override {}
+
  private:
   WebTransportStream* stream_;
   std::string data_;
+};
+
+// A session visitor which sets unidirectional or bidirectional stream visitors
+// to echo.
+class EchoWebTransportSessionVisitor : public WebTransportVisitor {
+ public:
+  EchoWebTransportSessionVisitor(WebTransportSession* session)
+      : session_(session) {}
+
+  void OnSessionReady(const spdy::SpdyHeaderBlock&) override {
+    if (session_->CanOpenNextOutgoingBidirectionalStream()) {
+      OnCanCreateNewOutgoingBidirectionalStream();
+    }
+  }
+
+  void OnSessionClosed(WebTransportSessionError /*error_code*/,
+                       const std::string& /*error_message*/) override {}
+
+  void OnIncomingBidirectionalStreamAvailable() override {
+    while (true) {
+      WebTransportStream* stream =
+          session_->AcceptIncomingBidirectionalStream();
+      if (stream == nullptr) {
+        return;
+      }
+      QUIC_DVLOG(1)
+          << "EchoWebTransportSessionVisitor received a bidirectional stream "
+          << stream->GetStreamId();
+      stream->SetVisitor(
+          std::make_unique<WebTransportBidirectionalEchoVisitor>(stream));
+      stream->visitor()->OnCanRead();
+    }
+  }
+
+  void OnIncomingUnidirectionalStreamAvailable() override {
+    while (true) {
+      WebTransportStream* stream =
+          session_->AcceptIncomingUnidirectionalStream();
+      if (stream == nullptr) {
+        return;
+      }
+      QUIC_DVLOG(1)
+          << "EchoWebTransportSessionVisitor received a unidirectional stream";
+      stream->SetVisitor(
+          std::make_unique<WebTransportUnidirectionalEchoReadVisitor>(
+              stream, [this](const std::string& data) {
+                streams_to_echo_back_.push_back(data);
+                TrySendingUnidirectionalStreams();
+              }));
+      stream->visitor()->OnCanRead();
+    }
+  }
+
+  void OnDatagramReceived(absl::string_view datagram) override {
+    auto buffer = MakeUniqueBuffer(&allocator_, datagram.size());
+    memcpy(buffer.get(), datagram.data(), datagram.size());
+    QuicMemSlice slice(std::move(buffer), datagram.size());
+    session_->SendOrQueueDatagram(std::move(slice));
+  }
+
+  void OnCanCreateNewOutgoingBidirectionalStream() override {
+    if (!echo_stream_opened_) {
+      WebTransportStream* stream = session_->OpenOutgoingBidirectionalStream();
+      stream->SetVisitor(
+          std::make_unique<WebTransportBidirectionalEchoVisitor>(stream));
+      echo_stream_opened_ = true;
+    }
+  }
+  void OnCanCreateNewOutgoingUnidirectionalStream() override {
+    TrySendingUnidirectionalStreams();
+  }
+
+  void TrySendingUnidirectionalStreams() {
+    while (!streams_to_echo_back_.empty() &&
+           session_->CanOpenNextOutgoingUnidirectionalStream()) {
+      QUIC_DVLOG(1)
+          << "EchoWebTransportServer echoed a unidirectional stream back";
+      WebTransportStream* stream = session_->OpenOutgoingUnidirectionalStream();
+      stream->SetVisitor(
+          std::make_unique<WebTransportUnidirectionalEchoWriteVisitor>(
+              stream, streams_to_echo_back_.front()));
+      streams_to_echo_back_.pop_front();
+      stream->visitor()->OnCanWrite();
+    }
+  }
+
+ private:
+  WebTransportSession* session_;
+  SimpleBufferAllocator allocator_;
+  bool echo_stream_opened_ = false;
+
+  quiche::QuicheCircularDeque<std::string> streams_to_echo_back_;
 };
 
 }  // namespace quic

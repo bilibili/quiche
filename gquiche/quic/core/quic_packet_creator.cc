@@ -15,10 +15,12 @@
 #include "absl/base/optimization.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "absl/types/optional.h"
 #include "gquiche/quic/core/crypto/crypto_protocol.h"
 #include "gquiche/quic/core/frames/quic_frame.h"
 #include "gquiche/quic/core/frames/quic_path_challenge_frame.h"
 #include "gquiche/quic/core/frames/quic_stream_frame.h"
+#include "gquiche/quic/core/quic_chaos_protector.h"
 #include "gquiche/quic/core/quic_connection_id.h"
 #include "gquiche/quic/core/quic_constants.h"
 #include "gquiche/quic/core/quic_data_writer.h"
@@ -32,7 +34,7 @@
 #include "gquiche/quic/platform/api/quic_flags.h"
 #include "gquiche/quic/platform/api/quic_logging.h"
 #include "gquiche/quic/platform/api/quic_server_stats.h"
-#include "gquiche/common/platform/api/quiche_text_utils.h"
+#include "gquiche/common/print_elements.h"
 
 namespace quic {
 namespace {
@@ -107,8 +109,7 @@ QuicPacketCreator::QuicPacketCreator(QuicConnectionId server_connection_id,
                         delegate) {}
 
 QuicPacketCreator::QuicPacketCreator(QuicConnectionId server_connection_id,
-                                     QuicFramer* framer,
-                                     QuicRandom* random,
+                                     QuicFramer* framer, QuicRandom* random,
                                      DelegateInterface* delegate)
     : delegate_(delegate),
       debug_delegate_(nullptr),
@@ -121,11 +122,7 @@ QuicPacketCreator::QuicPacketCreator(QuicConnectionId server_connection_id,
       packet_size_(0),
       server_connection_id_(server_connection_id),
       client_connection_id_(EmptyQuicConnectionId()),
-      packet_(QuicPacketNumber(),
-              PACKET_1BYTE_PACKET_NUMBER,
-              nullptr,
-              0,
-              false,
+      packet_(QuicPacketNumber(), PACKET_1BYTE_PACKET_NUMBER, nullptr, 0, false,
               false),
       pending_padding_bytes_(0),
       needs_full_padding_(false),
@@ -133,7 +130,10 @@ QuicPacketCreator::QuicPacketCreator(QuicConnectionId server_connection_id,
       flusher_attached_(false),
       fully_pad_crypto_handshake_packets_(true),
       latched_hard_max_packet_length_(0),
-      max_datagram_frame_size_(0) {
+      max_datagram_frame_size_(0),
+      chaos_protection_enabled_(
+          GetQuicFlag(FLAGS_quic_enable_chaos_protection) &&
+          framer->perspective() == Perspective::IS_CLIENT) {
   SetMaxPacketLength(kDefaultMaxPacketSize);
   if (!framer_->version().UsesTls()) {
     // QUIC+TLS negotiates the maximum datagram frame size via the
@@ -694,6 +694,10 @@ bool QuicPacketCreator::HasPendingFrames() const {
   return !queued_frames_.empty();
 }
 
+std::string QuicPacketCreator::GetPendingFramesInfo() const {
+  return QuicFramesToString(queued_frames_);
+}
+
 bool QuicPacketCreator::HasPendingRetransmittableFrames() const {
   return !packet_.retransmittable_frames.empty();
 }
@@ -753,6 +757,35 @@ bool QuicPacketCreator::AddPaddedSavedFrame(
   return false;
 }
 
+absl::optional<size_t>
+QuicPacketCreator::MaybeBuildDataPacketWithChaosProtection(
+    const QuicPacketHeader& header,
+    char* buffer) {
+  if (!chaos_protection_enabled_ ||
+      packet_.encryption_level != ENCRYPTION_INITIAL ||
+      !framer_->version().UsesCryptoFrames() || queued_frames_.size() != 2u ||
+      queued_frames_[0].type != CRYPTO_FRAME ||
+      queued_frames_[1].type != PADDING_FRAME ||
+      // Do not perform chaos protection if we do not have a known number of
+      // padding bytes to work with.
+      queued_frames_[1].padding_frame.num_padding_bytes <= 0 ||
+      // Chaos protection relies on the framer using a crypto data producer,
+      // which is always the case in practice.
+      framer_->data_producer() == nullptr) {
+    return absl::nullopt;
+  }
+  const QuicCryptoFrame& crypto_frame = *queued_frames_[0].crypto_frame;
+  if (packet_.encryption_level != crypto_frame.level) {
+    QUIC_BUG(chaos frame level)
+        << ENDPOINT << packet_.encryption_level << " != " << crypto_frame.level;
+    return absl::nullopt;
+  }
+  QuicChaosProtector chaos_protector(
+      crypto_frame, queued_frames_[1].padding_frame.num_padding_bytes,
+      packet_size_, framer_, random_);
+  return chaos_protector.BuildDataPacket(header, buffer);
+}
+
 bool QuicPacketCreator::SerializePacket(QuicOwnedPacketBuffer encrypted_buffer,
                                         size_t encrypted_buffer_len) {
   if (packet_.encrypted_buffer != nullptr) {
@@ -802,9 +835,18 @@ bool QuicPacketCreator::SerializePacket(QuicOwnedPacketBuffer encrypted_buffer,
   QUICHE_DCHECK_GE(max_plaintext_size_, packet_size_) << ENDPOINT;
   // Use the packet_size_ instead of the buffer size to ensure smaller
   // packet sizes are properly used.
-  size_t length =
-      framer_->BuildDataPacket(header, queued_frames_, encrypted_buffer.buffer,
-                               packet_size_, packet_.encryption_level);
+
+  size_t length;
+  absl::optional<size_t> length_with_chaos_protection =
+      MaybeBuildDataPacketWithChaosProtection(header, encrypted_buffer.buffer);
+  if (length_with_chaos_protection.has_value()) {
+    length = length_with_chaos_protection.value();
+  } else {
+    length = framer_->BuildDataPacket(header, queued_frames_,
+                                      encrypted_buffer.buffer, packet_size_,
+                                      packet_.encryption_level);
+  }
+
   if (length == 0) {
     QUIC_BUG(quic_bug_10752_16)
         << ENDPOINT << "Failed to serialize "
@@ -937,7 +979,7 @@ QuicPacketCreator::SerializePathChallengeConnectivityProbingPacket(
 
 std::unique_ptr<SerializedPacket>
 QuicPacketCreator::SerializePathResponseConnectivityProbingPacket(
-    const QuicCircularDeque<QuicPathFrameBuffer>& payloads,
+    const quiche::QuicheCircularDeque<QuicPathFrameBuffer>& payloads,
     const bool is_padded) {
   QUIC_BUG_IF(quic_bug_12398_13,
               !VersionHasIetfQuicFrames(framer_->transport_version()))
@@ -1010,7 +1052,7 @@ size_t QuicPacketCreator::BuildPathResponsePacket(
     const QuicPacketHeader& header,
     char* buffer,
     size_t packet_length,
-    const QuicCircularDeque<QuicPathFrameBuffer>& payloads,
+    const quiche::QuicheCircularDeque<QuicPathFrameBuffer>& payloads,
     const bool is_padded,
     EncryptionLevel level) {
   if (payloads.empty()) {
@@ -1412,8 +1454,14 @@ size_t QuicPacketCreator::ConsumeCryptoData(EncryptionLevel level,
       // The only pending data in the packet is non-retransmittable frames. I'm
       // assuming here that they won't occupy so much of the packet that a
       // CRYPTO frame won't fit.
-      QUIC_BUG(quic_bug_10752_26)
-          << ENDPOINT << "Failed to ConsumeCryptoData at level " << level;
+      const std::string error_message = absl::StrCat(
+          ENDPOINT, "Failed to ConsumeCryptoData at level ", level,
+          ", pending_frames: ", GetPendingFramesInfo(),
+          ", has_soft_max_packet_length: ", HasSoftMaxPacketLength(),
+          ", max_packet_length: ", max_packet_length_, ", transmission_type: ",
+          TransmissionTypeToString(next_transmission_type_),
+          ", packet_number: ", packet_number().ToString());
+      QUIC_BUG(quic_bug_10752_26) << error_message;
       return 0;
     }
     total_bytes_consumed += frame.crypto_frame->data_length;
@@ -1482,7 +1530,7 @@ bool QuicPacketCreator::FlushAckFrame(const QuicFrames& frames) {
   QUIC_BUG_IF(quic_bug_12398_18,
               GetQuicReloadableFlag(quic_single_ack_in_packet2) &&
                   !frames.empty() && has_ack())
-      << ENDPOINT << "Trying to flush " << frames
+      << ENDPOINT << "Trying to flush " << quiche::PrintElements(frames)
       << " when there is ACK queued";
   for (const auto& frame : frames) {
     QUICHE_DCHECK(frame.type == ACK_FRAME || frame.type == STOP_WAITING_FRAME)
@@ -1556,14 +1604,14 @@ void QuicPacketCreator::SetTransmissionType(TransmissionType type) {
   next_transmission_type_ = type;
 }
 
-MessageStatus QuicPacketCreator::AddMessageFrame(QuicMessageId message_id,
-                                                 QuicMemSliceSpan message) {
+MessageStatus QuicPacketCreator::AddMessageFrame(
+    QuicMessageId message_id, absl::Span<QuicMemSlice> message) {
   QUIC_BUG_IF(quic_bug_10752_33, !flusher_attached_)
       << ENDPOINT
       << "Packet flusher is not attached when "
          "generator tries to add message frame.";
   MaybeBundleAckOpportunistically();
-  const QuicByteCount message_length = message.total_length();
+  const QuicByteCount message_length = MemSliceSpanTotalSize(message);
   if (message_length > GetCurrentLargestMessagePayload()) {
     return MESSAGE_STATUS_TOO_LARGE;
   }
@@ -1578,6 +1626,8 @@ MessageStatus QuicPacketCreator::AddMessageFrame(QuicMessageId message_id,
     delete frame;
     return MESSAGE_STATUS_INTERNAL_ERROR;
   }
+  QUICHE_DCHECK_EQ(MemSliceSpanTotalSize(message),
+                   0u);  // Ensure the old slices are empty.
   return MESSAGE_STATUS_SUCCESS;
 }
 
@@ -2084,10 +2134,14 @@ QuicPacketCreator::ScopedPeerAddressContext::ScopedPeerAddressContext(
          "initialized.";
   creator_->SetDefaultPeerAddress(address);
   if (update_connection_id_) {
-    QUICHE_DCHECK(address != old_peer_address_ ||
-                  ((client_connection_id == old_client_connection_id_) &&
-                   (server_connection_id == old_server_connection_id_)))
-        << ENDPOINT2;
+    // Flush current packet if connection ID length changes.
+    if (address == old_peer_address_ &&
+        ((client_connection_id.length() !=
+          old_client_connection_id_.length()) ||
+         (server_connection_id.length() !=
+          old_server_connection_id_.length()))) {
+      creator_->FlushCurrentPacket();
+    }
     creator_->SetClientConnectionId(client_connection_id);
     creator_->SetServerConnectionId(server_connection_id);
   }

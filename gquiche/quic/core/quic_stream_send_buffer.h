@@ -5,14 +5,14 @@
 #ifndef QUICHE_QUIC_CORE_QUIC_STREAM_SEND_BUFFER_H_
 #define QUICHE_QUIC_CORE_QUIC_STREAM_SEND_BUFFER_H_
 
+#include "absl/types/span.h"
 #include "gquiche/quic/core/frames/quic_stream_frame.h"
-#include "gquiche/quic/core/quic_circular_deque.h"
 #include "gquiche/quic/core/quic_interval_deque.h"
 #include "gquiche/quic/core/quic_interval_set.h"
 #include "gquiche/quic/core/quic_types.h"
 #include "gquiche/quic/platform/api/quic_iovec.h"
 #include "gquiche/quic/platform/api/quic_mem_slice.h"
-#include "gquiche/quic/platform/api/quic_mem_slice_span.h"
+#include "gquiche/common/quiche_circular_deque.h"
 
 namespace quic {
 
@@ -79,7 +79,7 @@ class QUIC_EXPORT_PRIVATE QuicStreamSendBuffer {
   void SaveMemSlice(QuicMemSlice slice);
 
   // Save all slices in |span| to send buffer. Return total bytes saved.
-  QuicByteCount SaveMemSliceSpan(QuicMemSliceSpan span);
+  QuicByteCount SaveMemSliceSpan(absl::Span<QuicMemSlice> span);
 
   // Called when |bytes_consumed| bytes has been consumed by the stream.
   void OnStreamDataConsumed(size_t bytes_consumed);

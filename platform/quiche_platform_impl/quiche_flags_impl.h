@@ -20,7 +20,7 @@
 #define GetQuicheReloadableFlagImpl(module, flag)        FLAGS_quic_reloadable_flag_##flag
 #define SetQuicheReloadableFlagImpl(module, flag, value) ((FLAGS_quic_reloadable_flag_##flag) = (value))
 #define GetQuicheRestartFlagImpl(module, flag)           FLAGS_quic_restart_flag_##flag
-#define SetQuicheRestartFlagImpl(module, flag, value)    (FLAGS_quic_restart_flag_##flag) = (value))
+#define SetQuicheRestartFlagImpl(module, flag, value)    ((FLAGS_quic_restart_flag_##flag) = (value))
 
 // Not wired into command-line parsing.
 #define DEFINE_QUIC_COMMAND_LINE_FLAG_IMPL(type, flag, value, help)                     \

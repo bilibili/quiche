@@ -2,7 +2,6 @@
 
 #include "absl/strings/escaping.h"
 #include "gquiche/http2/platform/api/http2_logging.h"
-#include "gquiche/http2/platform/api/http2_string_utils.h"
 #include "openssl/chacha.h"
 #include "openssl/rand.h"
 

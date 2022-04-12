@@ -5,7 +5,7 @@
 #ifndef QUICHE_QUIC_PLATFORM_API_QUIC_TEST_LOOPBACK_H_
 #define QUICHE_QUIC_PLATFORM_API_QUIC_TEST_LOOPBACK_H_
 
-#include "platform/quic_test_loopback_impl.h"
+#include "platform/quic_platform_impl/quic_test_loopback_impl.h"
 
 namespace quic {
 

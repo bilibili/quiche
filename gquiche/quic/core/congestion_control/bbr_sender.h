@@ -81,6 +81,10 @@ class QUIC_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
     QuicTime::Delta min_rtt;
     QuicTime min_rtt_timestamp;
 
+    QuicTime::Delta latest_rtt;
+    QuicTime::Delta smoothed_rtt;
+    QuicTime::Delta mean_deviation;
+
     RecoveryState recovery_state;
     QuicByteCount recovery_window;
 

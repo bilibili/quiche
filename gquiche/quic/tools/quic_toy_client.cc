@@ -42,6 +42,7 @@
 
 #include "gquiche/quic/tools/quic_toy_client.h"
 
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -51,6 +52,7 @@
 #include "absl/strings/escaping.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
+#include "gquiche/quic/core/crypto/quic_client_session_cache.h"
 #include "gquiche/quic/core/quic_packets.h"
 #include "gquiche/quic/core/quic_server_id.h"
 #include "gquiche/quic/core/quic_utils.h"
@@ -61,7 +63,7 @@
 #include "gquiche/quic/platform/api/quic_system_event_loop.h"
 #include "gquiche/quic/tools/fake_proof_verifier.h"
 #include "gquiche/quic/tools/quic_url.h"
-#include "gquiche/common/platform/api/quiche_text_utils.h"
+#include "gquiche/common/quiche_text_utils.h"
 
 namespace {
 
@@ -183,6 +185,16 @@ DEFINE_QUIC_COMMAND_LINE_FLAG(bool,
                               "If true, don't verify the server certificate.");
 
 DEFINE_QUIC_COMMAND_LINE_FLAG(
+    std::string, default_client_cert, "",
+    "The path to the file containing PEM-encoded client default certificate to "
+    "be sent to the server, if server requested client certs.");
+
+DEFINE_QUIC_COMMAND_LINE_FLAG(
+    std::string, default_client_cert_key, "",
+    "The path to the file containing PEM-encoded private key of the client's "
+    "default certificate for signing, if server requested client certs.");
+
+DEFINE_QUIC_COMMAND_LINE_FLAG(
     bool,
     drop_response_body,
     false,
@@ -194,6 +206,12 @@ DEFINE_QUIC_COMMAND_LINE_FLAG(
     false,
     "If true, do not change local port after each request.");
 
+DEFINE_QUIC_COMMAND_LINE_FLAG(bool,
+                              one_connection_per_request,
+                              false,
+                              "If true, close the connection after each "
+                              "request. This allows testing 0-RTT.");
+
 DEFINE_QUIC_COMMAND_LINE_FLAG(int32_t,
                               server_connection_id_length,
                               -1,
@@ -204,7 +222,50 @@ DEFINE_QUIC_COMMAND_LINE_FLAG(int32_t,
                               -1,
                               "Length of the client connection ID used.");
 
+DEFINE_QUIC_COMMAND_LINE_FLAG(int32_t, max_time_before_crypto_handshake_ms,
+                              10000,
+                              "Max time to wait before handshake completes.");
+
+DEFINE_QUIC_COMMAND_LINE_FLAG(int32_t, max_inbound_header_list_size, 128 * 1024,
+                              "Max inbound header list size. 0 means default.");
+
 namespace quic {
+namespace {
+
+// Creates a ClientProofSource which only contains a default client certificate.
+// Return nullptr for failure.
+std::unique_ptr<ClientProofSource> CreateTestClientProofSource(
+    absl::string_view default_client_cert_file,
+    absl::string_view default_client_cert_key_file) {
+  std::ifstream cert_stream(std::string{default_client_cert_file},
+                            std::ios::binary);
+  std::vector<std::string> certs =
+      CertificateView::LoadPemFromStream(&cert_stream);
+  if (certs.empty()) {
+    std::cerr << "Failed to load client certs." << std::endl;
+    return nullptr;
+  }
+
+  std::ifstream key_stream(std::string{default_client_cert_key_file},
+                           std::ios::binary);
+  std::unique_ptr<CertificatePrivateKey> private_key =
+      CertificatePrivateKey::LoadPemFromStream(&key_stream);
+  if (private_key == nullptr) {
+    std::cerr << "Failed to load client cert key." << std::endl;
+    return nullptr;
+  }
+
+  auto proof_source = std::make_unique<DefaultClientProofSource>();
+  proof_source->AddCertAndKey(
+      {"*"},
+      QuicReferenceCountedPointer<ClientProofSource::Chain>(
+          new ClientProofSource::Chain(certs)),
+      std::move(*private_key));
+
+  return proof_source;
+}
+
+}  // namespace
 
 QuicToyClient::QuicToyClient(ClientFactory* client_factory)
     : client_factory_(client_factory) {}
@@ -260,6 +321,10 @@ int QuicToyClient::SendRequestsAndPrintResponses(
   } else {
     proof_verifier = quic::CreateDefaultProofVerifier(url.host());
   }
+  std::unique_ptr<quic::SessionCache> session_cache;
+  if (num_requests > 1 && GetQuicFlag(FLAGS_one_connection_per_request)) {
+    session_cache = std::make_unique<QuicClientSessionCache>();
+  }
 
   QuicConfig config;
   std::string connection_options_string = GetQuicFlag(FLAGS_connection_options);
@@ -282,6 +347,8 @@ int QuicToyClient::SendRequestsAndPrintResponses(
     config.custom_transport_parameters_to_send()[kCustomParameter] =
         custom_value;
   }
+  config.set_max_time_before_crypto_handshake(QuicTime::Delta::FromMilliseconds(
+      GetQuicFlag(FLAGS_max_time_before_crypto_handshake_ms)));
 
   int address_family_for_lookup = AF_UNSPEC;
   if (GetQuicFlag(FLAGS_ip_version_for_host_lookup) == "4") {
@@ -293,11 +360,23 @@ int QuicToyClient::SendRequestsAndPrintResponses(
   // Build the client, and try to connect.
   std::unique_ptr<QuicSpdyClientBase> client = client_factory_->CreateClient(
       url.host(), host, address_family_for_lookup, port, versions, config,
-      std::move(proof_verifier));
+      std::move(proof_verifier), std::move(session_cache));
 
   if (client == nullptr) {
     std::cerr << "Failed to create client." << std::endl;
     return 1;
+  }
+
+  if (!GetQuicFlag(FLAGS_default_client_cert).empty() &&
+      !GetQuicFlag(FLAGS_default_client_cert_key).empty()) {
+    std::unique_ptr<ClientProofSource> proof_source =
+        CreateTestClientProofSource(GetQuicFlag(FLAGS_default_client_cert),
+                                    GetQuicFlag(FLAGS_default_client_cert_key));
+    if (proof_source == nullptr) {
+      std::cerr << "Failed to create client proof source." << std::endl;
+      return 1;
+    }
+    client->crypto_config()->set_proof_source(std::move(proof_source));
   }
 
   int32_t initial_mtu = GetQuicFlag(FLAGS_initial_mtu);
@@ -313,6 +392,11 @@ int QuicToyClient::SendRequestsAndPrintResponses(
       GetQuicFlag(FLAGS_client_connection_id_length);
   if (client_connection_id_length >= 0) {
     client->set_client_connection_id_length(client_connection_id_length);
+  }
+  const size_t max_inbound_header_list_size =
+      GetQuicFlag(FLAGS_max_inbound_header_list_size);
+  if (max_inbound_header_list_size > 0) {
+    client->set_max_inbound_header_list_size(max_inbound_header_list_size);
   }
   if (!client->Initialize()) {
     std::cerr << "Failed to initialize client." << std::endl;
@@ -356,7 +440,8 @@ int QuicToyClient::SendRequestsAndPrintResponses(
     if (sp.empty()) {
       continue;
     }
-    std::vector<absl::string_view> kv = absl::StrSplit(sp, ':');
+    std::vector<absl::string_view> kv =
+        absl::StrSplit(sp, absl::MaxSplits(':', 1));
     QuicheTextUtils::RemoveLeadingAndTrailingWhitespace(&kv[0]);
     QuicheTextUtils::RemoveLeadingAndTrailingWhitespace(&kv[1]);
     header_block[kv[0]] = kv[1];
@@ -429,11 +514,26 @@ int QuicToyClient::SendRequestsAndPrintResponses(
       return 1;
     }
 
-    // Change the ephemeral port if there are more requests to do.
-    if (!GetQuicFlag(FLAGS_disable_port_changes) && i + 1 < num_requests) {
-      if (!client->ChangeEphemeralPort()) {
-        std::cerr << "Failed to change ephemeral port." << std::endl;
-        return 1;
+    if (i + 1 < num_requests) {  // There are more requests to perform.
+      if (GetQuicFlag(FLAGS_one_connection_per_request)) {
+        std::cout << "Disconnecting client between requests." << std::endl;
+        client->Disconnect();
+        if (!client->Initialize()) {
+          std::cerr << "Failed to reinitialize client between requests."
+                    << std::endl;
+          return 1;
+        }
+        if (!client->Connect()) {
+          std::cerr << "Failed to reconnect client between requests."
+                    << std::endl;
+          return 1;
+        }
+      } else if (!GetQuicFlag(FLAGS_disable_port_changes)) {
+        // Change the ephemeral port.
+        if (!client->ChangeEphemeralPort()) {
+          std::cerr << "Failed to change ephemeral port." << std::endl;
+          return 1;
+        }
       }
     }
   }

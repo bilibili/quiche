@@ -5,11 +5,26 @@
 #ifndef QUICHE_COMMON_PLATFORM_API_QUICHE_TEST_H_
 #define QUICHE_COMMON_PLATFORM_API_QUICHE_TEST_H_
 
-#include "platform/quiche_test_impl.h"
+#include "platform/quiche_platform_impl/quiche_test_impl.h"
 
 using QuicheTest = quiche::test::QuicheTest;
 
 template <class T>
 using QuicheTestWithParam = quiche::test::QuicheTestWithParamImpl<T>;
+
+namespace quiche {
+namespace test {
+
+// Returns the path to quiche/common directory where the test data could be
+// located.
+inline std::string QuicheGetCommonSourcePath() {
+  return QuicheGetCommonSourcePathImpl();
+}
+
+}  // namespace test
+}  // namespace quiche
+
+#define EXPECT_QUICHE_DEBUG_DEATH(condition, message) \
+  EXPECT_QUICHE_DEBUG_DEATH_IMPL(condition, message)
 
 #endif  // QUICHE_COMMON_PLATFORM_API_QUICHE_TEST_H_

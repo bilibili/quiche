@@ -34,7 +34,7 @@
 #include "gquiche/quic/core/quic_types.h"
 #include "gquiche/quic/core/quic_utils.h"
 #include "gquiche/quic/platform/api/quic_flags.h"
-#include "gquiche/common/platform/api/quiche_text_utils.h"
+#include "gquiche/common/quiche_text_utils.h"
 
 DEFINE_QUIC_COMMAND_LINE_FLAG(std::string,
                               quic_version,
