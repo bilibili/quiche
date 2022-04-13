@@ -1,5 +1,3 @@
-// Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
-
 #include "base/bvc-qlog/src/base_qlogger.h"
 #include "gquiche/quic/core/quic_types.h"
 #include "platform/quiche_platform_impl/quiche_text_utils_impl.h"
