@@ -21,7 +21,7 @@
 #include "gquiche/quic/test_tools/crypto_test_utils.h"
 #include "gquiche/quic/test_tools/quic_test_utils.h"
 #include "gquiche/quic/test_tools/quic_transport_test_tools.h"
-#include "gquiche/common/platform/api/quiche_text_utils.h"
+#include "gquiche/common/quiche_text_utils.h"
 
 namespace quic {
 namespace test {

@@ -6,10 +6,11 @@
 #define QUICHE_QUIC_TEST_TOOLS_SIMPLE_SESSION_NOTIFIER_H_
 
 #include "absl/container/flat_hash_map.h"
-#include "gquiche/quic/core/quic_circular_deque.h"
 #include "gquiche/quic/core/quic_interval_set.h"
 #include "gquiche/quic/core/session_notifier_interface.h"
 #include "gquiche/quic/platform/api/quic_test.h"
+#include "gquiche/common/quiche_circular_deque.h"
+#include "gquiche/common/quiche_linked_hash_map.h"
 
 namespace quic {
 
@@ -33,6 +34,10 @@ class SimpleSessionNotifier : public SessionNotifierInterface {
   void WriteOrBufferRstStream(QuicStreamId id,
                               QuicRstStreamErrorCode error,
                               QuicStreamOffset bytes_written);
+
+  // Tries to write WINDOW_UPDATE.
+  void WriteOrBufferWindowUpate(QuicStreamId id, QuicStreamOffset byte_offset);
+
   // Tries to write PING.
   void WriteOrBufferPing();
 
@@ -126,15 +131,17 @@ class SimpleSessionNotifier : public SessionNotifierInterface {
 
   bool WriteBufferedControlFrames();
 
+  bool WriteBufferedCryptoData();
+
   bool IsControlFrameOutstanding(const QuicFrame& frame) const;
 
   bool HasBufferedControlFrames() const;
 
   bool StreamHasBufferedData(QuicStreamId id) const;
 
-  QuicCircularDeque<QuicFrame> control_frames_;
+  quiche::QuicheCircularDeque<QuicFrame> control_frames_;
 
-  QuicLinkedHashMap<QuicControlFrameId, bool> lost_control_frames_;
+  quiche::QuicheLinkedHashMap<QuicControlFrameId, bool> lost_control_frames_;
 
   // Id of latest saved control frame. 0 if no control frame has been saved.
   QuicControlFrameId last_control_frame_id_;

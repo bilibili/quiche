@@ -14,6 +14,7 @@
 #include "absl/base/optimization.h"
 #include "absl/numeric/int128.h"
 #include "absl/strings/string_view.h"
+#include "openssl/sha.h"
 #include "gquiche/quic/core/quic_connection_id.h"
 #include "gquiche/quic/core/quic_constants.h"
 #include "gquiche/quic/core/quic_types.h"
@@ -21,8 +22,9 @@
 #include "gquiche/quic/platform/api/quic_bug_tracker.h"
 #include "gquiche/quic/platform/api/quic_flag_utils.h"
 #include "gquiche/quic/platform/api/quic_flags.h"
-#include "gquiche/quic/platform/api/quic_prefetch.h"
+#include "gquiche/quic/platform/api/quic_mem_slice.h"
 #include "gquiche/common/platform/api/quiche_logging.h"
+#include "gquiche/common/platform/api/quiche_prefetch.h"
 #include "gquiche/common/quiche_endian.h"
 
 namespace quic {
@@ -266,9 +268,9 @@ void QuicUtils::CopyToBuffer(const struct iovec* iov,
     char* next_base = static_cast<char*>(iov[iovnum + 1].iov_base);
     // Prefetch 2 cachelines worth of data to get the prefetcher started; leave
     // it to the hardware prefetcher after that.
-    QuicPrefetchT0(next_base);
+    quiche::QuichePrefetchT0(next_base);
     if (iov[iovnum + 1].iov_len >= 64) {
-      QuicPrefetchT0(next_base + ABSL_CACHELINE_SIZE);
+      quiche::QuichePrefetchT0(next_base + ABSL_CACHELINE_SIZE);
     }
   }
 
@@ -308,7 +310,6 @@ bool QuicUtils::IsRetransmittableFrame(QuicFrameType type) {
     case MTU_DISCOVERY_FRAME:
     case PATH_CHALLENGE_FRAME:
     case PATH_RESPONSE_FRAME:
-    case NEW_CONNECTION_ID_FRAME:
       return false;
     default:
       return true;
@@ -694,12 +695,54 @@ bool QuicUtils::IsProbingFrame(QuicFrameType type) {
   }
 }
 
+// static
+bool QuicUtils::IsAckElicitingFrame(QuicFrameType type) {
+  switch (type) {
+    case PADDING_FRAME:
+    case STOP_WAITING_FRAME:
+    case ACK_FRAME:
+    case CONNECTION_CLOSE_FRAME:
+      return false;
+    default:
+      return true;
+  }
+}
+
+// static
+bool QuicUtils::AreStatelessResetTokensEqual(
+    const StatelessResetToken& token1,
+    const StatelessResetToken& token2) {
+  char byte = 0;
+  for (size_t i = 0; i < kStatelessResetTokenLength; i++) {
+    // This avoids compiler optimizations that could make us stop comparing
+    // after we find a byte that doesn't match.
+    byte |= (token1[i] ^ token2[i]);
+  }
+  return byte == 0;
+}
+
 bool IsValidWebTransportSessionId(WebTransportSessionId id,
                                   ParsedQuicVersion version) {
   QUICHE_DCHECK(version.UsesHttp3());
   return (id <= std::numeric_limits<QuicStreamId>::max()) &&
          QuicUtils::IsBidirectionalStreamId(id, version) &&
          QuicUtils::IsClientInitiatedStreamId(version.transport_version, id);
+}
+
+QuicByteCount MemSliceSpanTotalSize(absl::Span<QuicMemSlice> span) {
+  QuicByteCount total = 0;
+  for (const QuicMemSlice& slice : span) {
+    total += slice.length();
+  }
+  return total;
+}
+
+std::string RawSha256(absl::string_view input) {
+  std::string raw_hash;
+  raw_hash.resize(SHA256_DIGEST_LENGTH);
+  SHA256(reinterpret_cast<const uint8_t*>(input.data()), input.size(),
+         reinterpret_cast<uint8_t*>(&raw_hash[0]));
+  return raw_hash;
 }
 
 #undef RETURN_STRING_LITERAL  // undef for jumbo builds

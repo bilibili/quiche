@@ -16,7 +16,6 @@
 #include "gquiche/quic/core/crypto/crypto_utils.h"
 #include "gquiche/quic/core/quic_socket_address_coder.h"
 #include "gquiche/quic/core/quic_utils.h"
-#include "gquiche/quic/platform/api/quic_map_util.h"
 #include "gquiche/common/quiche_endian.h"
 
 namespace quic {
@@ -171,7 +170,7 @@ bool CryptoHandshakeMessage::GetStringPiece(QuicTag tag,
 }
 
 bool CryptoHandshakeMessage::HasStringPiece(QuicTag tag) const {
-  return QuicContainsKey(tag_value_map_, tag);
+  return tag_value_map_.find(tag) != tag_value_map_.end();
 }
 
 QuicErrorCode CryptoHandshakeMessage::GetNthValue24(

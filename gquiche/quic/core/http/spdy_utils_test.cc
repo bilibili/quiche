@@ -9,7 +9,6 @@
 #include "absl/strings/string_view.h"
 #include "gquiche/quic/core/http/spdy_utils.h"
 #include "gquiche/quic/platform/api/quic_test.h"
-#include "gquiche/common/platform/api/quiche_text_utils.h"
 
 using spdy::SpdyHeaderBlock;
 using testing::Pair;
@@ -35,7 +34,7 @@ static std::unique_ptr<QuicHeaderList> FromList(
 
 static void ValidateDatagramFlowId(
     const std::string& header_value,
-    absl::optional<QuicDatagramFlowId> expected_flow_id) {
+    absl::optional<QuicDatagramStreamId> expected_flow_id) {
   SpdyHeaderBlock headers;
   headers["datagram-flow-id"] = header_value;
   ASSERT_EQ(SpdyUtils::ParseDatagramFlowIdHeader(headers), expected_flow_id);
@@ -392,7 +391,7 @@ TEST_F(DatagramFlowIdTest, DatagramFlowId) {
   SpdyHeaderBlock headers;
   EXPECT_EQ(SpdyUtils::ParseDatagramFlowIdHeader(headers), absl::nullopt);
   // Add header and verify it parses.
-  QuicDatagramFlowId flow_id = 123;
+  QuicDatagramStreamId flow_id = 123;
   SpdyUtils::AddDatagramFlowIdHeader(&headers, flow_id);
   EXPECT_EQ(SpdyUtils::ParseDatagramFlowIdHeader(headers), flow_id);
   // Test empty header.

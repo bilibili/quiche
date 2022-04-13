@@ -6,7 +6,7 @@
 #define QUICHE_QUIC_PLATFORM_API_QUIC_TEST_OUTPUT_H_
 
 #include "absl/strings/string_view.h"
-#include "platform/quic_test_output_impl.h"
+#include "platform/quic_platform_impl/quic_test_output_impl.h"
 
 namespace quic {
 

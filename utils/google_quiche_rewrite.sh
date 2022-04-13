@@ -23,26 +23,26 @@ cat <<EOF >sed_commands
 # TODO
 
 # Rewrite include directives for gquiche root dir
-/^#include/ s!common/!gquiche/common/!
-/^#include/ s!epoll_server/!gquiche/epoll_server/!
-/^#include/ s!http2/!gquiche/http2/!
-/^#include/ s!quic/!gquiche/quic/!
-/^#include/ s!spdy/!gquiche/spdy/!
+/^#include/ s!"common/!"gquiche/common/!
+/^#include/ s!"epoll_server/!"gquiche/epoll_server/!
+/^#include/ s!"http2/!"gquiche/http2/!
+/^#include/ s!"quic/!"gquiche/quic/!
+/^#include/ s!"spdy/!"gquiche/spdy/!
 
 # Rewrite include directives for platform impl files.
-/^#include/ s!net/quiche/common/platform/impl/!platform/quiche_platform_impl/!
-/^#include/ s!quiche_platform_impl/!platform/quiche_platform_impl/!
-/^#include/ s!net/tools/epoll_server/platform/impl/!platform/epoll_platform_impl/!
-/^#include/ s!net/http2/platform/impl/!platform/http2_platform_impl/!
-/^#include/ s!net/quic/platform/impl/!platform/quic_platform_impl/!
-/^#include/ s!net/spdy/platform/impl/!platform/spdy_platform_impl/!
+/^#include/ s!"net/quiche/common/platform/impl/!"platform/quiche_platform_impl/!
+/^#include/ s!"quiche_platform_impl/!"platform/quiche_platform_impl/!
+/^#include/ s!"net/tools/epoll_server/platform/impl/!"platform/epoll_platform_impl/!
+/^#include/ s!"net/http2/platform/impl/!"platform/http2_platform_impl/!
+/^#include/ s!"net/quic/platform/impl/!"platform/quic_platform_impl/!
+/^#include/ s!"net/spdy/platform/impl/!"platform/spdy_platform_impl/!
 
 # Rewrite gmock & gtest includes.
 # TODO
 
 # Rewrite third_party includes.
-/^#include/ s!third_party/boringssl/src/include/!!
-/^#include/ s!third_party/zlib/zlib!zlib!
+/^#include/ s!"third_party/boringssl/src/include/!"!
+/^#include/ s!"third_party/zlib/zlib!"zlib!
 
 # Rewrite #pragma clang
 /^#pragma/ s!clang!GCC!

@@ -8,14 +8,14 @@
 #include <utility>
 
 #include "absl/strings/str_cat.h"
+#include "gquiche/quic/core/crypto/quic_client_session_cache.h"
 #include "gquiche/quic/core/quic_types.h"
 #include "gquiche/quic/core/quic_versions.h"
 #include "gquiche/quic/platform/api/quic_epoll.h"
 #include "gquiche/quic/platform/api/quic_system_event_loop.h"
-#include "platform/quic_epoll_clock.h"
+#include "platform/quic_platform_impl/quic_epoll_clock.h"
 #include "gquiche/quic/test_tools/quic_connection_peer.h"
 #include "gquiche/quic/test_tools/quic_session_peer.h"
-#include "gquiche/quic/test_tools/simple_session_cache.h"
 #include "gquiche/quic/tools/fake_proof_verifier.h"
 #include "gquiche/quic/tools/quic_client.h"
 #include "gquiche/quic/tools/quic_url.h"
@@ -210,7 +210,7 @@ void QuicClientInteropRunner::AttemptRequest(QuicSocketAddress addr,
   }
 
   auto proof_verifier = std::make_unique<FakeProofVerifier>();
-  auto session_cache = std::make_unique<test::SimpleSessionCache>();
+  auto session_cache = std::make_unique<QuicClientSessionCache>();
   QuicEpollServer epoll_server;
   QuicEpollClock epoll_clock(&epoll_server);
   QuicConfig config;

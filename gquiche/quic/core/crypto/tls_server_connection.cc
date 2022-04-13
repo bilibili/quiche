@@ -7,20 +7,33 @@
 #include "absl/strings/string_view.h"
 #include "openssl/ssl.h"
 #include "gquiche/quic/core/crypto/proof_source.h"
+#include "gquiche/quic/core/quic_types.h"
 #include "gquiche/quic/platform/api/quic_flag_utils.h"
 #include "gquiche/quic/platform/api/quic_flags.h"
 
 namespace quic {
 
-TlsServerConnection::TlsServerConnection(SSL_CTX* ssl_ctx, Delegate* delegate)
-    : TlsConnection(ssl_ctx, delegate->ConnectionDelegate()),
-      delegate_(delegate) {}
+TlsServerConnection::TlsServerConnection(SSL_CTX* ssl_ctx, Delegate* delegate,
+                                         QuicSSLConfig ssl_config)
+    : TlsConnection(ssl_ctx, delegate->ConnectionDelegate(),
+                    std::move(ssl_config)),
+      delegate_(delegate) {
+  // By default, cert verify callback is not installed on ssl(), so only need to
+  // UpdateCertVerifyCallback() if client_cert_mode is not kNone.
+  if (TlsConnection::ssl_config().client_cert_mode != ClientCertMode::kNone) {
+    UpdateCertVerifyCallback();
+  }
+}
 
 // static
 bssl::UniquePtr<SSL_CTX> TlsServerConnection::CreateSslCtx(
     ProofSource* proof_source) {
-  bssl::UniquePtr<SSL_CTX> ssl_ctx =
-      TlsConnection::CreateSslCtx(SSL_VERIFY_NONE);
+  bssl::UniquePtr<SSL_CTX> ssl_ctx = TlsConnection::CreateSslCtx();
+
+  // Server does not request/verify client certs by default. Individual server
+  // connections may call SSL_set_custom_verify on their SSL object to request
+  // client certs.
+
   SSL_CTX_set_tlsext_servername_callback(ssl_ctx.get(),
                                          &TlsExtServernameCallback);
   SSL_CTX_set_alpn_select_cb(ssl_ctx.get(), &SelectAlpnCallback, nullptr);
@@ -30,16 +43,12 @@ bssl::UniquePtr<SSL_CTX> TlsServerConnection::CreateSslCtx(
     QUIC_CODE_COUNT(quic_session_tickets_enabled);
     SSL_CTX_set_ticket_aead_method(ssl_ctx.get(),
                                    &TlsServerConnection::kSessionTicketMethod);
-  } else if (!GetQuicRestartFlag(quic_session_tickets_always_enabled)) {
-    QUIC_CODE_COUNT(quic_session_tickets_disabled_by_flag);
-    SSL_CTX_set_options(ssl_ctx.get(), SSL_OP_NO_TICKET);
   } else {
     QUIC_CODE_COUNT(quic_session_tickets_disabled);
   }
-  if (proof_source->GetTicketCrypter() ||
-      GetQuicRestartFlag(quic_session_tickets_always_enabled)) {
-    SSL_CTX_set_early_data_enabled(ssl_ctx.get(), 1);
-  }
+
+  SSL_CTX_set_early_data_enabled(ssl_ctx.get(), 1);
+
   SSL_CTX_set_select_certificate_cb(
       ssl_ctx.get(), &TlsServerConnection::EarlySelectCertCallback);
   SSL_CTX_set_options(ssl_ctx.get(), SSL_OP_CIPHER_SERVER_PREFERENCE);
@@ -50,6 +59,31 @@ void TlsServerConnection::SetCertChain(
     const std::vector<CRYPTO_BUFFER*>& cert_chain) {
   SSL_set_chain_and_key(ssl(), cert_chain.data(), cert_chain.size(), nullptr,
                         &TlsServerConnection::kPrivateKeyMethod);
+}
+
+void TlsServerConnection::SetClientCertMode(ClientCertMode client_cert_mode) {
+  if (ssl_config().client_cert_mode == client_cert_mode) {
+    return;
+  }
+
+  mutable_ssl_config().client_cert_mode = client_cert_mode;
+  UpdateCertVerifyCallback();
+}
+
+void TlsServerConnection::UpdateCertVerifyCallback() {
+  const ClientCertMode client_cert_mode = ssl_config().client_cert_mode;
+  if (client_cert_mode == ClientCertMode::kNone) {
+    SSL_set_custom_verify(ssl(), SSL_VERIFY_NONE, nullptr);
+    return;
+  }
+
+  int mode = SSL_VERIFY_PEER;
+  if (client_cert_mode == ClientCertMode::kRequire) {
+    mode |= SSL_VERIFY_FAIL_IF_NO_PEER_CERT;
+  } else {
+    QUICHE_DCHECK_EQ(client_cert_mode, ClientCertMode::kRequest);
+  }
+  SSL_set_custom_verify(ssl(), mode, &VerifyCallback);
 }
 
 const SSL_PRIVATE_KEY_METHOD TlsServerConnection::kPrivateKeyMethod{

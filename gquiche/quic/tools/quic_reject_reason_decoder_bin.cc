@@ -11,7 +11,7 @@
 #include "gquiche/quic/core/crypto/crypto_handshake.h"
 #include "gquiche/quic/core/crypto/crypto_utils.h"
 #include "gquiche/quic/platform/api/quic_flags.h"
-#include "gquiche/common/platform/api/quiche_text_utils.h"
+#include "gquiche/common/quiche_text_utils.h"
 
 using quic::CryptoUtils;
 using quic::HandshakeFailureReason;

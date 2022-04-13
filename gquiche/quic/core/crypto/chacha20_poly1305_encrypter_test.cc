@@ -8,12 +8,12 @@
 #include <string>
 
 #include "absl/base/macros.h"
+#include "absl/strings/escaping.h"
 #include "absl/strings/string_view.h"
 #include "gquiche/quic/core/crypto/chacha20_poly1305_decrypter.h"
 #include "gquiche/quic/core/quic_utils.h"
 #include "gquiche/quic/platform/api/quic_test.h"
 #include "gquiche/quic/test_tools/quic_test_utils.h"
-#include "gquiche/common/platform/api/quiche_text_utils.h"
 #include "gquiche/common/test_tools/quiche_test_utils.h"
 
 namespace {

@@ -123,6 +123,10 @@ class QUIC_EXPORT_PRIVATE Bbr2Sender final : public SendAlgorithmInterface {
     QuicByteCount inflight_lo;
     QuicByteCount max_ack_height;
     QuicTime::Delta min_rtt = QuicTime::Delta::Zero();
+    QuicTime::Delta latest_rtt = QuicTime::Delta::Zero();
+    QuicTime::Delta smoothed_rtt = QuicTime::Delta::Zero();
+    QuicTime::Delta mean_deviation = QuicTime::Delta::Zero();
+
     QuicTime min_rtt_timestamp = QuicTime::Zero();
     QuicByteCount congestion_window;
     QuicBandwidth pacing_rate = QuicBandwidth::Zero();

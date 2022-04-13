@@ -10,8 +10,8 @@
 
 #include <map>
 
-#include "epoll_server/platform/api/epoll_export.h"
-#include "epoll_server/simple_epoll_server.h"
+#include "gquiche/epoll_server/platform/api/epoll_export.h"
+#include "gquiche/epoll_server/simple_epoll_server.h"
 
 namespace epoll_server {
 namespace test {

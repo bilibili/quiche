@@ -12,7 +12,6 @@
 #include "absl/strings/escaping.h"
 #include "gquiche/http2/decoder/decode_buffer.h"
 #include "gquiche/http2/decoder/decode_status.h"
-#include "gquiche/http2/platform/api/http2_string_utils.h"
 #include "gquiche/http2/platform/api/http2_test_helpers.h"
 #include "gquiche/http2/tools/random_decoder_test.h"
 #include "gquiche/common/platform/api/quiche_test.h"

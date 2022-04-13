@@ -13,7 +13,6 @@
 #include "absl/strings/escaping.h"
 #include "gquiche/quic/core/crypto/crypto_framer.h"
 #include "gquiche/quic/core/quic_utils.h"
-#include "gquiche/common/platform/api/quiche_text_utils.h"
 
 using std::cerr;
 using std::cout;

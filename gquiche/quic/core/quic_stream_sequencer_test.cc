@@ -43,7 +43,7 @@ class MockStream : public QuicStreamSequencer::StreamInterface {
                QuicIetfTransportErrorCodes ietf_error,
                const std::string& details),
               (override));
-  MOCK_METHOD(void, Reset, (QuicRstStreamErrorCode error), (override));
+  MOCK_METHOD(void, ResetWithError, (QuicResetStreamError error), (override));
   MOCK_METHOD(void, AddBytesConsumed, (QuicByteCount bytes), (override));
 
   QuicStreamId id() const override { return 1; }
@@ -252,8 +252,7 @@ TEST_F(QuicStreamSequencerTest, BlockedThenFullFrameAndFinConsumed) {
 }
 
 TEST_F(QuicStreamSequencerTest, EmptyFrame) {
-  if (!GetQuicReloadableFlag(quic_accept_empty_stream_frame_with_no_fin) ||
-      !stream_.version().HasIetfQuicFrames()) {
+  if (!stream_.version().HasIetfQuicFrames()) {
     EXPECT_CALL(stream_,
                 OnUnrecoverableError(QUIC_EMPTY_STREAM_FRAME_NO_FIN, _));
   }
@@ -567,7 +566,8 @@ TEST_F(QuicStreamSequencerTest, MarkConsumedError) {
 
   // Now, attempt to mark consumed more data than was readable and expect the
   // stream to be closed.
-  EXPECT_CALL(stream_, Reset(QUIC_ERROR_PROCESSING_STREAM));
+  EXPECT_CALL(stream_, ResetWithError(QuicResetStreamError::FromInternal(
+                           QUIC_ERROR_PROCESSING_STREAM)));
   EXPECT_QUIC_BUG(sequencer_->MarkConsumed(4),
                   "Invalid argument to MarkConsumed."
                   " expect to consume: 4, but not enough bytes available.");

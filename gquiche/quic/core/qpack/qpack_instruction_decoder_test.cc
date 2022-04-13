@@ -12,7 +12,6 @@
 #include "gquiche/quic/platform/api/quic_logging.h"
 #include "gquiche/quic/platform/api/quic_test.h"
 #include "gquiche/quic/test_tools/qpack/qpack_test_utils.h"
-#include "gquiche/common/platform/api/quiche_text_utils.h"
 
 using ::testing::_;
 using ::testing::Eq;

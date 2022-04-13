@@ -9,7 +9,6 @@
 #include "absl/base/macros.h"
 #include "absl/strings/escaping.h"
 #include "gquiche/quic/platform/api/quic_test.h"
-#include "gquiche/common/platform/api/quiche_text_utils.h"
 
 namespace quic {
 namespace test {

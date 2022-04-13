@@ -368,7 +368,6 @@ TEST_F(UberReceivedPacketManagerTest,
   EXPECT_FALSE(HasPendingAck());
   QuicConfig config;
   QuicTagVector connection_options;
-  connection_options.push_back(kACKD);
   // No limit on the number of packets received before sending an ack.
   connection_options.push_back(kAKDU);
   config.SetConnectionOptionsToSend(connection_options);
@@ -478,17 +477,10 @@ TEST_F(UberReceivedPacketManagerTest, AckSendingDifferentPacketNumberSpaces) {
   MaybeUpdateAckTimeout(kInstigateAck, ENCRYPTION_INITIAL, 3);
   EXPECT_TRUE(HasPendingAck());
   // Delayed ack is scheduled.
-  if (GetQuicReloadableFlag(quic_delay_initial_ack)) {
-    CheckAckTimeout(clock_.ApproximateNow() +
-                    QuicTime::Delta::FromMilliseconds(25));
-    // Send delayed handshake data ACK.
-    clock_.AdvanceTime(QuicTime::Delta::FromMilliseconds(25));
-  } else {
-    CheckAckTimeout(clock_.ApproximateNow() +
-                    QuicTime::Delta::FromMilliseconds(1));
-    // Send delayed handshake data ACK.
-    clock_.AdvanceTime(QuicTime::Delta::FromMilliseconds(1));
-  }
+  CheckAckTimeout(clock_.ApproximateNow() +
+                  QuicTime::Delta::FromMilliseconds(25));
+  // Send delayed handshake data ACK.
+  clock_.AdvanceTime(QuicTime::Delta::FromMilliseconds(25));
   CheckAckTimeout(clock_.ApproximateNow());
   EXPECT_FALSE(HasPendingAck());
 

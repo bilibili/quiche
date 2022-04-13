@@ -1,7 +1,7 @@
 #ifndef QUICHE_HTTP2_PLATFORM_API_HTTP2_LOGGING_H_
 #define QUICHE_HTTP2_PLATFORM_API_HTTP2_LOGGING_H_
 
-#include "platform/http2_platform_impl/http2_logging_impl.h"
+#include "gquiche/common/platform/api/quiche_logging.h"
 
 #define HTTP2_LOG(severity) QUICHE_LOG(severity)
 

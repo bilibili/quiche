@@ -11,7 +11,6 @@
 #include "absl/strings/str_cat.h"
 
 #include "gquiche/common/platform/api/quiche_logging.h"
-#include "gquiche/spdy/platform/api/spdy_string_utils.h"
 
 namespace spdy {
 
@@ -40,15 +39,12 @@ bool ParsePositiveIntegerImpl(absl::string_view::const_iterator c,
 SpdyAltSvcWireFormat::AlternativeService::AlternativeService() = default;
 
 SpdyAltSvcWireFormat::AlternativeService::AlternativeService(
-    const std::string& protocol_id,
-    const std::string& host,
-    uint16_t port,
-    uint32_t max_age,
-    VersionVector version)
+    const std::string& protocol_id, const std::string& host, uint16_t port,
+    uint32_t max_age_seconds, VersionVector version)
     : protocol_id(protocol_id),
       host(host),
       port(port),
-      max_age(max_age),
+      max_age_seconds(max_age_seconds),
       version(std::move(version)) {}
 
 SpdyAltSvcWireFormat::AlternativeService::~AlternativeService() = default;
@@ -114,7 +110,7 @@ bool SpdyAltSvcWireFormat::ParseHeaderFieldValue(
     }
     ++c;
     // Parse parameters.
-    uint32_t max_age = 86400;
+    uint32_t max_age_seconds = 86400;
     VersionVector version;
     absl::string_view::const_iterator parameters_end =
         std::find(c, value.end(), ',');
@@ -148,7 +144,8 @@ bool SpdyAltSvcWireFormat::ParseHeaderFieldValue(
         return false;
       }
       if (parameter_name == "ma") {
-        if (!ParsePositiveInteger32(parameter_value_begin, c, &max_age)) {
+        if (!ParsePositiveInteger32(parameter_value_begin, c,
+                                    &max_age_seconds)) {
           return false;
         }
       } else if (!is_ietf_format_quic && parameter_name == "v") {
@@ -196,16 +193,17 @@ bool SpdyAltSvcWireFormat::ParseHeaderFieldValue(
         // hq=":443";quic=51303338
         // ... will be stored in |versions| as 0x51303338.
         uint32_t quic_version;
-        if (!SpdyHexDecodeToUInt32(absl::string_view(&*parameter_value_begin,
-                                                     c - parameter_value_begin),
-                                   &quic_version) ||
+        if (!HexDecodeToUInt32(absl::string_view(&*parameter_value_begin,
+                                                 c - parameter_value_begin),
+                               &quic_version) ||
             quic_version == 0) {
           return false;
         }
         version.push_back(quic_version);
       }
     }
-    altsvc_vector->emplace_back(protocol_id, host, port, max_age, version);
+    altsvc_vector->emplace_back(protocol_id, host, port, max_age_seconds,
+                                version);
     for (; c != value.end() && (*c == ' ' || *c == '\t' || *c == ','); ++c) {
     }
   }
@@ -267,8 +265,8 @@ std::string SpdyAltSvcWireFormat::SerializeHeaderFieldValue(
       value.push_back(c);
     }
     absl::StrAppend(&value, ":", altsvc.port, "\"");
-    if (altsvc.max_age != 86400) {
-      absl::StrAppend(&value, "; ma=", altsvc.max_age);
+    if (altsvc.max_age_seconds != 86400) {
+      absl::StrAppend(&value, "; ma=", altsvc.max_age_seconds);
     }
     if (!altsvc.version.empty()) {
       if (is_ietf_format_quic) {
@@ -315,12 +313,12 @@ bool SpdyAltSvcWireFormat::PercentDecode(absl::string_view::const_iterator c,
       return false;
     }
     // Network byte order is big-endian.
-    char decoded = SpdyHexDigitToInt(*c) << 4;
+    char decoded = HexDigitToInt(*c) << 4;
     ++c;
     if (c == end || !std::isxdigit(*c)) {
       return false;
     }
-    decoded += SpdyHexDigitToInt(*c);
+    decoded += HexDigitToInt(*c);
     output->push_back(decoded);
   }
   return true;
@@ -387,6 +385,43 @@ bool SpdyAltSvcWireFormat::ParsePositiveInteger32(
     absl::string_view::const_iterator end,
     uint32_t* value) {
   return ParsePositiveIntegerImpl<uint32_t>(c, end, value);
+}
+
+// static
+char SpdyAltSvcWireFormat::HexDigitToInt(char c) {
+  QUICHE_DCHECK(std::isxdigit(c));
+
+  if (std::isdigit(c)) {
+    return c - '0';
+  }
+  if (c >= 'A' && c <= 'F') {
+    return c - 'A' + 10;
+  }
+  if (c >= 'a' && c <= 'f') {
+    return c - 'a' + 10;
+  }
+
+  return 0;
+}
+
+// static
+bool SpdyAltSvcWireFormat::HexDecodeToUInt32(absl::string_view data,
+                                             uint32_t* value) {
+  if (data.empty() || data.length() > 8u) {
+    return false;
+  }
+
+  *value = 0;
+  for (char c : data) {
+    if (!std::isxdigit(c)) {
+      return false;
+    }
+
+    *value <<= 4;
+    *value += HexDigitToInt(c);
+  }
+
+  return true;
 }
 
 }  // namespace spdy

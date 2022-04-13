@@ -17,7 +17,7 @@
 #include "gquiche/quic/core/quic_types.h"
 #include "gquiche/quic/platform/api/quic_flags.h"
 #include "gquiche/quic/platform/api/quic_hostname_utils.h"
-#include "gquiche/common/platform/api/quiche_text_utils.h"
+#include "gquiche/common/quiche_text_utils.h"
 
 namespace quic {
 
@@ -41,12 +41,25 @@ TlsClientHandshaker::TlsClientHandshaker(
       crypto_negotiated_params_(new QuicCryptoNegotiatedParameters),
       has_application_state_(has_application_state),
       crypto_config_(crypto_config),
-      tls_connection_(crypto_config->ssl_ctx(), this) {
-  if (GetQuicReloadableFlag(quic_enable_token_based_address_validation)) {
+      tls_connection_(crypto_config->ssl_ctx(), this, session->GetSSLConfig()) {
+  if (!GetQuicReloadableFlag(quic_tls_use_token_in_session_cache)) {
     std::string token =
         crypto_config->LookupOrCreate(server_id)->source_address_token();
     if (!token.empty()) {
       session->SetSourceAddressTokenToSend(token);
+    }
+  }
+  if (crypto_config->tls_signature_algorithms().has_value()) {
+    SSL_set1_sigalgs_list(ssl(),
+                          crypto_config->tls_signature_algorithms()->c_str());
+  }
+  if (crypto_config->proof_source() != nullptr) {
+    const ClientProofSource::CertAndKey* cert_and_key =
+        crypto_config->proof_source()->GetCertAndKey(server_id.host());
+    if (cert_and_key != nullptr) {
+      QUIC_DVLOG(1) << "Setting client cert and key for " << server_id.host();
+      tls_connection_.SetCertChain(cert_and_key->chain->ToCryptoBuffers().value,
+                                   cert_and_key->private_key.private_key());
     }
   }
 }
@@ -69,6 +82,17 @@ bool TlsClientHandshaker::CryptoConnect() {
     use_legacy_extension = 1;
   }
   SSL_set_quic_use_legacy_codepoint(ssl(), use_legacy_extension);
+
+  // TODO(b/193650832) Add SetFromConfig to QUIC handshakers and remove reliance
+  // on session pointer.
+  const bool permutes_tls_extensions = session()->permutes_tls_extensions();
+  if (!permutes_tls_extensions) {
+    QUIC_DLOG(INFO) << "Disabling TLS extension permutation";
+  }
+#if BORINGSSL_API_VERSION >= 16
+  // Ask BoringSSL to randomize the order of TLS extensions.
+  SSL_set_permute_extensions(ssl(), permutes_tls_extensions);
+#endif  // BORINGSSL_API_VERSION
 
   // Set the SNI to send, if any.
   SSL_set_connect_state(ssl());
@@ -98,10 +122,15 @@ bool TlsClientHandshaker::CryptoConnect() {
 
   // Set a session to resume, if there is one.
   if (session_cache_) {
-    cached_state_ = session_cache_->Lookup(server_id_, SSL_get_SSL_CTX(ssl()));
+    cached_state_ = session_cache_->Lookup(
+        server_id_, session()->GetClock()->WallNow(), SSL_get_SSL_CTX(ssl()));
   }
   if (cached_state_) {
     SSL_set_session(ssl(), cached_state_->tls_session.get());
+    if (GetQuicReloadableFlag(quic_tls_use_token_in_session_cache) &&
+        !cached_state_->token.empty()) {
+      session()->SetSourceAddressTokenToSend(cached_state_->token);
+    }
   }
 
   // Start the handshake.
@@ -179,18 +208,16 @@ bool TlsClientHandshaker::SetAlpn() {
   }
 
   // Enable ALPS only for versions that use HTTP/3 frames.
-  if (enable_alps_) {
-    for (const std::string& alpn_string : alpns) {
-      ParsedQuicVersion version = ParseQuicVersionString(alpn_string);
-      if (!version.IsKnown() || !version.UsesHttp3()) {
-        continue;
-      }
-      if (SSL_add_application_settings(
-              ssl(), reinterpret_cast<const uint8_t*>(alpn_string.data()),
-              alpn_string.size(), nullptr, /* settings_len = */ 0) != 1) {
-        QUIC_BUG(quic_bug_10576_7) << "Failed to enable ALPS.";
-        return false;
-      }
+  for (const std::string& alpn_string : alpns) {
+    ParsedQuicVersion version = ParseQuicVersionString(alpn_string);
+    if (!version.IsKnown() || !version.UsesHttp3()) {
+      continue;
+    }
+    if (SSL_add_application_settings(
+            ssl(), reinterpret_cast<const uint8_t*>(alpn_string.data()),
+            alpn_string.size(), nullptr, /* settings_len = */ 0) != 1) {
+      QUIC_BUG(quic_bug_10576_7) << "Failed to enable ALPS.";
+      return false;
     }
   }
 
@@ -201,8 +228,14 @@ bool TlsClientHandshaker::SetAlpn() {
 bool TlsClientHandshaker::SetTransportParameters() {
   TransportParameters params;
   params.perspective = Perspective::IS_CLIENT;
-  params.version =
+  params.legacy_version_information =
+      TransportParameters::LegacyVersionInformation();
+  params.legacy_version_information.value().version =
       CreateQuicVersionLabel(session()->supported_versions().front());
+  params.version_information = TransportParameters::VersionInformation();
+  const QuicVersionLabel version = CreateQuicVersionLabel(session()->version());
+  params.version_information.value().chosen_version = version;
+  params.version_information.value().other_versions.push_back(version);
 
   if (!handshaker_delegate()->FillTransportParameters(&params)) {
     return false;
@@ -246,27 +279,41 @@ bool TlsClientHandshaker::ProcessTransportParameters(
   session()->connection()->OnTransportParametersReceived(
       *received_transport_params_);
 
-  // When interoperating with non-Google implementations that do not send
-  // the version extension, set it to what we expect.
-  if (received_transport_params_->version == 0) {
-    received_transport_params_->version =
-        CreateQuicVersionLabel(session()->connection()->version());
+  if (received_transport_params_->legacy_version_information.has_value()) {
+    if (received_transport_params_->legacy_version_information.value()
+            .version !=
+        CreateQuicVersionLabel(session()->connection()->version())) {
+      *error_details = "Version mismatch detected";
+      return false;
+    }
+    if (CryptoUtils::ValidateServerHelloVersions(
+            received_transport_params_->legacy_version_information.value()
+                .supported_versions,
+            session()->connection()->server_supported_versions(),
+            error_details) != QUIC_NO_ERROR) {
+      QUICHE_DCHECK(!error_details->empty());
+      return false;
+    }
   }
-  if (received_transport_params_->supported_versions.empty()) {
-    received_transport_params_->supported_versions.push_back(
-        received_transport_params_->version);
+  if (received_transport_params_->version_information.has_value()) {
+    if (!CryptoUtils::ValidateChosenVersion(
+            received_transport_params_->version_information.value()
+                .chosen_version,
+            session()->version(), error_details)) {
+      QUICHE_DCHECK(!error_details->empty());
+      return false;
+    }
+    if (!CryptoUtils::CryptoUtils::ValidateServerVersions(
+            received_transport_params_->version_information.value()
+                .other_versions,
+            session()->version(),
+            session()->client_original_supported_versions(), error_details)) {
+      QUICHE_DCHECK(!error_details->empty());
+      return false;
+    }
   }
 
-  if (received_transport_params_->version !=
-      CreateQuicVersionLabel(session()->connection()->version())) {
-    *error_details = "Version mismatch detected";
-    return false;
-  }
-  if (CryptoUtils::ValidateServerHelloVersions(
-          received_transport_params_->supported_versions,
-          session()->connection()->server_supported_versions(),
-          error_details) != QUIC_NO_ERROR ||
-      handshaker_delegate()->ProcessTransportParameters(
+  if (handshaker_delegate()->ProcessTransportParameters(
           *received_transport_params_, /* is_resumption = */ false,
           error_details) != QUIC_NO_ERROR) {
     QUICHE_DCHECK(!error_details->empty());
@@ -313,6 +360,13 @@ int TlsClientHandshaker::num_scup_messages_received() const {
 
 std::string TlsClientHandshaker::chlo_hash() const {
   return "";
+}
+
+bool TlsClientHandshaker::ExportKeyingMaterial(absl::string_view label,
+                                               absl::string_view context,
+                                               size_t result_len,
+                                               std::string* result) {
+  return ExportKeyingMaterialForLabel(label, context, result_len, result);
 }
 
 bool TlsClientHandshaker::encryption_established() const {
@@ -386,9 +440,15 @@ void TlsClientHandshaker::OnNewTokenReceived(absl::string_view token) {
   if (token.empty()) {
     return;
   }
-  QuicCryptoClientConfig::CachedState* cached =
-      crypto_config_->LookupOrCreate(server_id_);
-  cached->set_source_address_token(token);
+  if (GetQuicReloadableFlag(quic_tls_use_token_in_session_cache)) {
+    if (session_cache_ != nullptr) {
+      session_cache_->OnNewTokenReceived(server_id_, token);
+    }
+  } else {
+    QuicCryptoClientConfig::CachedState* cached =
+        crypto_config_->LookupOrCreate(server_id_);
+    cached->set_source_address_token(token);
+  }
 }
 
 void TlsClientHandshaker::SetWriteSecret(
@@ -446,27 +506,10 @@ void TlsClientHandshaker::OnProofVerifyDetailsAvailable(
 }
 
 void TlsClientHandshaker::FinishHandshake() {
-  // Fill crypto_negotiated_params_:
-  const SSL_CIPHER* cipher = SSL_get_current_cipher(ssl());
-  if (cipher) {
-    crypto_negotiated_params_->cipher_suite =
-        SSL_CIPHER_get_protocol_id(cipher);
-  }
-  crypto_negotiated_params_->key_exchange_group = SSL_get_curve_id(ssl());
-  crypto_negotiated_params_->peer_signature_algorithm =
-      SSL_get_peer_signature_algorithm(ssl());
-  if (SSL_in_early_data(ssl())) {
-    // SSL_do_handshake returns after sending the ClientHello if the session is
-    // 0-RTT-capable, which means that FinishHandshake will get called twice -
-    // the first time after sending the ClientHello, and the second time after
-    // the handshake is complete. If we're in the first time FinishHandshake is
-    // called, we can't do any end-of-handshake processing.
+  FillNegotiatedParams();
 
-    // If we're attempting a 0-RTT handshake, then we need to let the transport
-    // and application know what state to apply to early data.
-    PrepareZeroRttConfig(cached_state_.get());
-    return;
-  }
+  QUICHE_CHECK(!SSL_in_early_data(ssl()));
+
   QUIC_LOG(INFO) << "Client: handshake finished";
 
   std::string error_details;
@@ -505,25 +548,46 @@ void TlsClientHandshaker::FinishHandshake() {
                   << "'";
 
   // Parse ALPS extension.
-  if (enable_alps_) {
-    const uint8_t* alps_data;
-    size_t alps_length;
-    SSL_get0_peer_application_settings(ssl(), &alps_data, &alps_length);
-    if (alps_length > 0) {
-      auto error = session()->OnAlpsData(alps_data, alps_length);
-      if (error) {
-        // Calling CloseConnection() is safe even in case OnAlpsData() has
-        // already closed the connection.
-        CloseConnection(
-            QUIC_HANDSHAKE_FAILED,
-            absl::StrCat("Error processing ALPS data: ", error.value()));
-        return;
-      }
+  const uint8_t* alps_data;
+  size_t alps_length;
+  SSL_get0_peer_application_settings(ssl(), &alps_data, &alps_length);
+  if (alps_length > 0) {
+    auto error = session()->OnAlpsData(alps_data, alps_length);
+    if (error) {
+      // Calling CloseConnection() is safe even in case OnAlpsData() has
+      // already closed the connection.
+      CloseConnection(
+          QUIC_HANDSHAKE_FAILED,
+          absl::StrCat("Error processing ALPS data: ", error.value()));
+      return;
     }
   }
 
   state_ = HANDSHAKE_COMPLETE;
   handshaker_delegate()->OnTlsHandshakeComplete();
+}
+
+void TlsClientHandshaker::OnEnterEarlyData() {
+  QUICHE_DCHECK(SSL_in_early_data(ssl()));
+
+  // TODO(wub): It might be unnecessary to FillNegotiatedParams() at this time,
+  // because we fill it again when handshake completes.
+  FillNegotiatedParams();
+
+  // If we're attempting a 0-RTT handshake, then we need to let the transport
+  // and application know what state to apply to early data.
+  PrepareZeroRttConfig(cached_state_.get());
+}
+
+void TlsClientHandshaker::FillNegotiatedParams() {
+  const SSL_CIPHER* cipher = SSL_get_current_cipher(ssl());
+  if (cipher) {
+    crypto_negotiated_params_->cipher_suite =
+        SSL_CIPHER_get_protocol_id(cipher);
+  }
+  crypto_negotiated_params_->key_exchange_group = SSL_get_curve_id(ssl());
+  crypto_negotiated_params_->peer_signature_algorithm =
+      SSL_get_peer_signature_algorithm(ssl());
 }
 
 void TlsClientHandshaker::ProcessPostHandshakeMessage() {

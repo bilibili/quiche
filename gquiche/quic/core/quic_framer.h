@@ -309,8 +309,15 @@ class QUIC_EXPORT_PRIVATE QuicFramer {
   QuicErrorCode error() const { return error_; }
 
   // Allows enabling or disabling of timestamp processing and serialization.
-  void set_process_timestamps(bool process_timestamps) {
+  // TODO(ianswett): Remove the const once timestamps are negotiated via
+  // transport params.
+  void set_process_timestamps(bool process_timestamps) const {
     process_timestamps_ = process_timestamps;
+  }
+
+  // Sets the exponent to use when writing/reading ACK receive timestamps.
+  void set_receive_timestamps_exponent(uint32_t exponent) {
+    receive_timestamps_exponent_ = exponent;
   }
 
   // Pass a UDP packet into the framer for parsing.
@@ -446,16 +453,12 @@ class QUIC_EXPORT_PRIVATE QuicFramer {
   static QuicErrorCode ParsePublicHeaderDispatcher(
       const QuicEncryptedPacket& packet,
       uint8_t expected_destination_connection_id_length,
-      PacketHeaderFormat* format,
-      QuicLongHeaderType* long_packet_type,
-      bool* version_present,
-      bool* has_length_prefix,
-      QuicVersionLabel* version_label,
-      ParsedQuicVersion* parsed_version,
+      PacketHeaderFormat* format, QuicLongHeaderType* long_packet_type,
+      bool* version_present, bool* has_length_prefix,
+      QuicVersionLabel* version_label, ParsedQuicVersion* parsed_version,
       QuicConnectionId* destination_connection_id,
       QuicConnectionId* source_connection_id,
-      bool* retry_token_present,
-      absl::string_view* retry_token,
+      absl::optional<absl::string_view>* retry_token,
       std::string* detailed_error);
 
   // Serializes a packet containing |frames| into |buffer|.
@@ -634,6 +637,8 @@ class QUIC_EXPORT_PRIVATE QuicFramer {
 
   Perspective perspective() const { return perspective_; }
 
+  QuicStreamFrameDataProducer* data_producer() const { return data_producer_; }
+
   void set_data_producer(QuicStreamFrameDataProducer* data_producer) {
     data_producer_ = data_producer;
   }
@@ -646,6 +651,10 @@ class QUIC_EXPORT_PRIVATE QuicFramer {
 
   uint64_t current_received_frame_type() const {
     return current_received_frame_type_;
+  }
+
+  uint64_t previously_received_frame_type() const {
+    return previously_received_frame_type_;
   }
 
   // The connection ID length the framer expects on incoming IETF short headers
@@ -712,10 +721,6 @@ class QUIC_EXPORT_PRIVATE QuicFramer {
 
   void set_drop_incoming_retry_packets(bool drop_incoming_retry_packets) {
     drop_incoming_retry_packets_ = drop_incoming_retry_packets;
-  }
-
-  bool do_not_synthesize_source_cid_for_short_header() const {
-    return do_not_synthesize_source_cid_for_short_header_;
   }
 
  private:
@@ -852,6 +857,8 @@ class QUIC_EXPORT_PRIVATE QuicFramer {
   bool ProcessIetfAckFrame(QuicDataReader* reader,
                            uint64_t frame_type,
                            QuicAckFrame* ack_frame);
+  bool ProcessIetfTimestampsInAckFrame(QuicPacketNumber largest_acked,
+                                       QuicDataReader* reader);
   bool ProcessStopWaitingFrame(QuicDataReader* reader,
                                const QuicPacketHeader& header,
                                QuicStopWaitingFrame* stop_waiting);
@@ -1115,7 +1122,10 @@ class QUIC_EXPORT_PRIVATE QuicFramer {
   // The diversification nonce from the last received packet.
   DiversificationNonce last_nonce_;
   // If true, send and process timestamps in the ACK frame.
-  bool process_timestamps_;
+  // TODO(ianswett): Remove the mutable once set_process_timestamps isn't const.
+  mutable bool process_timestamps_;
+  // The exponent to use when writing/reading ACK receive timestamps.
+  uint32_t receive_timestamps_exponent_;
   // The creation time of the connection, used to calculate timestamps.
   QuicTime creation_time_;
   // The last timestamp received if process_timestamps_ is true.
@@ -1174,14 +1184,6 @@ class QUIC_EXPORT_PRIVATE QuicFramer {
   // Indicates whether received RETRY packets should be dropped.
   bool drop_incoming_retry_packets_ = false;
 
-  bool reject_unexpected_ietf_frame_types_ =
-      GetQuicReloadableFlag(quic_reject_unexpected_ietf_frame_types);
-
-  // Indicates whether source connection ID should be synthesized when read
-  // short header packet.
-  const bool do_not_synthesize_source_cid_for_short_header_ =
-      GetQuicReloadableFlag(quic_do_not_synthesize_source_cid_for_short_header);
-
   // The length in bytes of the last packet number written to an IETF-framed
   // packet.
   size_t last_written_packet_number_length_;
@@ -1200,6 +1202,11 @@ class QUIC_EXPORT_PRIVATE QuicFramer {
   // the Transport Connection Close when there is an error during frame
   // processing.
   uint64_t current_received_frame_type_;
+
+  // TODO(haoyuewang) Remove this debug utility.
+  // The type of the IETF frame preceding the frame currently being processed. 0
+  // when not processing a frame or only 1 frame has been processed.
+  uint64_t previously_received_frame_type_;
 };
 
 // Look for and parse the error code from the "<quic_error_code>:" text that

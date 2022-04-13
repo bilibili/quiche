@@ -9,7 +9,6 @@
 #include "gquiche/quic/platform/api/quic_expect_bug.h"
 #include "gquiche/quic/platform/api/quic_test.h"
 #include "gquiche/quic/test_tools/quic_test_utils.h"
-#include "gquiche/common/platform/api/quiche_text_utils.h"
 
 namespace quic {
 namespace test {
@@ -42,15 +41,14 @@ class QuicLegacyVersionEncapsulatorTest
     QuicVersionLabel version_label;
     ParsedQuicVersion parsed_version = ParsedQuicVersion::Unsupported();
     QuicConnectionId destination_connection_id, source_connection_id;
-    bool retry_token_present;
-    absl::string_view retry_token;
+    absl::optional<absl::string_view> retry_token;
     std::string detailed_error;
     const QuicErrorCode error = QuicFramer::ParsePublicHeaderDispatcher(
         QuicEncryptedPacket(outer_buffer_, encapsulated_length_),
         kQuicDefaultConnectionIdLength, &format, &long_packet_type,
         &version_present, &has_length_prefix, &version_label, &parsed_version,
-        &destination_connection_id, &source_connection_id, &retry_token_present,
-        &retry_token, &detailed_error);
+        &destination_connection_id, &source_connection_id, &retry_token,
+        &detailed_error);
     ASSERT_THAT(error, IsQuicNoError()) << detailed_error;
     EXPECT_EQ(format, GOOGLE_QUIC_PACKET);
     EXPECT_TRUE(version_present);
@@ -58,7 +56,7 @@ class QuicLegacyVersionEncapsulatorTest
     EXPECT_EQ(parsed_version, LegacyVersionForEncapsulation());
     EXPECT_EQ(destination_connection_id, server_connection_id_);
     EXPECT_EQ(source_connection_id, EmptyQuicConnectionId());
-    EXPECT_FALSE(retry_token_present);
+    EXPECT_FALSE(retry_token.has_value());
     EXPECT_TRUE(detailed_error.empty());
   }
 

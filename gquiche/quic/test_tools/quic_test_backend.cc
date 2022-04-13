@@ -7,12 +7,14 @@
 #include <cstring>
 #include <memory>
 
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "gquiche/quic/core/quic_buffer_allocator.h"
-#include "gquiche/quic/core/quic_circular_deque.h"
 #include "gquiche/quic/core/quic_simple_buffer_allocator.h"
 #include "gquiche/quic/core/web_transport_interface.h"
 #include "gquiche/quic/platform/api/quic_mem_slice.h"
+#include "gquiche/quic/test_tools/web_transport_resets_backend.h"
 #include "gquiche/quic/tools/web_transport_test_visitors.h"
 
 namespace quic {
@@ -20,89 +22,45 @@ namespace test {
 
 namespace {
 
-class EchoWebTransportServer : public WebTransportVisitor {
+// SessionCloseVisitor implements the "/session-close" endpoint.  If the client
+// sends a unidirectional stream of format "code message" to this endpoint, it
+// will close the session with the corresponding error code and error message.
+// For instance, sending "42 test error" will cause it to be closed with code 42
+// and message "test error".
+class SessionCloseVisitor : public WebTransportVisitor {
  public:
-  EchoWebTransportServer(WebTransportSession* session) : session_(session) {}
+  SessionCloseVisitor(WebTransportSession* session) : session_(session) {}
 
-  void OnSessionReady() override {
-    if (session_->CanOpenNextOutgoingBidirectionalStream()) {
-      OnCanCreateNewOutgoingBidirectionalStream();
-    }
-  }
+  void OnSessionReady(const spdy::SpdyHeaderBlock& /*headers*/) override {}
+  void OnSessionClosed(WebTransportSessionError /*error_code*/,
+                       const std::string& /*error_message*/) override {}
 
-  void OnIncomingBidirectionalStreamAvailable() override {
-    while (true) {
-      WebTransportStream* stream =
-          session_->AcceptIncomingBidirectionalStream();
-      if (stream == nullptr) {
-        return;
-      }
-      QUIC_DVLOG(1) << "EchoWebTransportServer received a bidirectional stream "
-                    << stream->GetStreamId();
-      stream->SetVisitor(
-          std::make_unique<WebTransportBidirectionalEchoVisitor>(stream));
-      stream->visitor()->OnCanRead();
-    }
-  }
-
+  void OnIncomingBidirectionalStreamAvailable() override {}
   void OnIncomingUnidirectionalStreamAvailable() override {
-    while (true) {
-      WebTransportStream* stream =
-          session_->AcceptIncomingUnidirectionalStream();
-      if (stream == nullptr) {
-        return;
-      }
-      QUIC_DVLOG(1)
-          << "EchoWebTransportServer received a unidirectional stream";
-      stream->SetVisitor(
-          std::make_unique<WebTransportUnidirectionalEchoReadVisitor>(
-              stream, [this](const std::string& data) {
-                streams_to_echo_back_.push_back(data);
-                TrySendingUnidirectionalStreams();
-              }));
-      stream->visitor()->OnCanRead();
+    WebTransportStream* stream = session_->AcceptIncomingUnidirectionalStream();
+    if (stream == nullptr) {
+      return;
     }
+    stream->SetVisitor(
+        std::make_unique<WebTransportUnidirectionalEchoReadVisitor>(
+            stream, [this](const std::string& data) {
+              std::pair<absl::string_view, absl::string_view> parsed =
+                  absl::StrSplit(data, absl::MaxSplits(' ', 1));
+              WebTransportSessionError error_code = 0;
+              bool success = absl::SimpleAtoi(parsed.first, &error_code);
+              QUICHE_DCHECK(success) << data;
+              session_->CloseSession(error_code, parsed.second);
+            }));
+    stream->visitor()->OnCanRead();
   }
 
-  void OnDatagramReceived(absl::string_view datagram) override {
-    auto buffer = MakeUniqueBuffer(&allocator_, datagram.size());
-    memcpy(buffer.get(), datagram.data(), datagram.size());
-    QuicMemSlice slice(std::move(buffer), datagram.size());
-    session_->SendOrQueueDatagram(std::move(slice));
-  }
+  void OnDatagramReceived(absl::string_view /*datagram*/) override {}
 
-  void OnCanCreateNewOutgoingBidirectionalStream() override {
-    if (!echo_stream_opened_) {
-      WebTransportStream* stream = session_->OpenOutgoingBidirectionalStream();
-      stream->SetVisitor(
-          std::make_unique<WebTransportBidirectionalEchoVisitor>(stream));
-      echo_stream_opened_ = true;
-    }
-  }
-  void OnCanCreateNewOutgoingUnidirectionalStream() override {
-    TrySendingUnidirectionalStreams();
-  }
-
-  void TrySendingUnidirectionalStreams() {
-    while (!streams_to_echo_back_.empty() &&
-           session_->CanOpenNextOutgoingUnidirectionalStream()) {
-      QUIC_DVLOG(1)
-          << "EchoWebTransportServer echoed a unidirectional stream back";
-      WebTransportStream* stream = session_->OpenOutgoingUnidirectionalStream();
-      stream->SetVisitor(
-          std::make_unique<WebTransportUnidirectionalEchoWriteVisitor>(
-              stream, streams_to_echo_back_.front()));
-      streams_to_echo_back_.pop_front();
-      stream->visitor()->OnCanWrite();
-    }
-  }
+  void OnCanCreateNewOutgoingBidirectionalStream() override {}
+  void OnCanCreateNewOutgoingUnidirectionalStream() override {}
 
  private:
-  WebTransportSession* session_;
-  SimpleBufferAllocator allocator_;
-  bool echo_stream_opened_ = false;
-
-  QuicCircularDeque<std::string> streams_to_echo_back_;
+  WebTransportSession* session_;  // Not owned.
 };
 
 }  // namespace
@@ -123,10 +81,36 @@ QuicTestBackend::ProcessWebTransportRequest(
     return response;
   }
   absl::string_view path = path_it->second;
-  if (path == "/echo") {
+  // Match any "/echo.*" pass, e.g. "/echo_foobar"
+  if (absl::StartsWith(path, "/echo")) {
     WebTransportResponse response;
     response.response_headers[":status"] = "200";
-    response.visitor = std::make_unique<EchoWebTransportServer>(session);
+    // Add response headers if the paramer has "set-header=XXX:YYY" query.
+    GURL url = GURL(absl::StrCat("https://localhost", path));
+    const std::vector<std::string>& params = absl::StrSplit(url.query(), '&');
+    for (const auto& param : params) {
+      absl::string_view param_view = param;
+      if (absl::ConsumePrefix(&param_view, "set-header=")) {
+        const std::vector<absl::string_view> header_value =
+            absl::StrSplit(param_view, ':');
+        if (header_value.size() == 2 &&
+            !absl::StartsWith(header_value[0], ":")) {
+          response.response_headers[header_value[0]] = header_value[1];
+        }
+      }
+    }
+
+    response.visitor =
+        std::make_unique<EchoWebTransportSessionVisitor>(session);
+    return response;
+  }
+  if (path == "/resets") {
+    return WebTransportResetsBackend(request_headers, session);
+  }
+  if (path == "/session-close") {
+    WebTransportResponse response;
+    response.response_headers[":status"] = "200";
+    response.visitor = std::make_unique<SessionCloseVisitor>(session);
     return response;
   }
 

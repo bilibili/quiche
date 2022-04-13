@@ -278,10 +278,11 @@ TEST_P(QuicSpdyClientSessionTest, NoEncryptionAfterInitialEncryption) {
   EXPECT_TRUE(session_->CreateOutgoingBidirectionalStream() == nullptr);
   // Verify that no data may be send on existing streams.
   char data[] = "hello world";
-  EXPECT_QUIC_BUG(
+  QuicConsumedData consumed =
       session_->WritevData(stream->id(), ABSL_ARRAYSIZE(data), 0, NO_FIN,
-                           NOT_RETRANSMISSION, ENCRYPTION_INITIAL),
-      "Client: Try to send data of stream");
+                           NOT_RETRANSMISSION, ENCRYPTION_INITIAL);
+  EXPECT_EQ(0u, consumed.bytes_consumed);
+  EXPECT_FALSE(consumed.fin_consumed);
 }
 
 TEST_P(QuicSpdyClientSessionTest, MaxNumStreamsWithNoFinOrRst) {
@@ -981,10 +982,10 @@ TEST_P(QuicSpdyClientSessionTest, OnSettingsFrame) {
   ApplicationState expected(std::begin(application_state),
                             std::end(application_state));
   session_->OnSettingsFrame(settings);
-  EXPECT_EQ(expected,
-            *client_session_cache_
-                 ->Lookup(QuicServerId(kServerHostname, kPort, false), nullptr)
-                 ->application_state);
+  EXPECT_EQ(expected, *client_session_cache_
+                           ->Lookup(QuicServerId(kServerHostname, kPort, false),
+                                    session_->GetClock()->WallNow(), nullptr)
+                           ->application_state);
 }
 
 TEST_P(QuicSpdyClientSessionTest, IetfZeroRttSetup) {

@@ -17,7 +17,6 @@
 #include "gquiche/quic/core/quic_framer.h"
 #include "gquiche/quic/core/quic_types.h"
 #include "gquiche/quic/core/quic_utils.h"
-#include "gquiche/common/platform/api/quiche_text_utils.h"
 
 namespace quic {
 

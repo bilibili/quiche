@@ -61,6 +61,9 @@ BbrSender::DebugState::DebugState(const BbrSender& sender)
       bandwidth_at_last_round(sender.bandwidth_at_last_round_),
       rounds_without_bandwidth_gain(sender.rounds_without_bandwidth_gain_),
       min_rtt(sender.min_rtt_),
+      smoothed_rtt(sender.rtt_stats_->smoothed_rtt()),
+      latest_rtt(sender.rtt_stats_->latest_rtt()),
+      mean_deviation(sender.rtt_stats_->mean_deviation()),	
       min_rtt_timestamp(sender.min_rtt_timestamp_),
       recovery_state(sender.recovery_state_),
       recovery_window(sender.recovery_window_),
@@ -277,6 +280,15 @@ void BbrSender::ApplyConnectionOptions(
     const QuicTagVector& connection_options) {
   if (ContainsQuicTag(connection_options, kBSAO)) {
     sampler_.EnableOverestimateAvoidance();
+  }
+  if (ContainsQuicTag(connection_options, kBBRA)) {
+    sampler_.SetStartNewAggregationEpochAfterFullRound(true);
+  }
+  if (GetQuicReloadableFlag(quic_bbr_use_send_rate_in_max_ack_height_tracker) &&
+      ContainsQuicTag(connection_options, kBBRB)) {
+    QUIC_RELOADABLE_FLAG_COUNT_N(
+        quic_bbr_use_send_rate_in_max_ack_height_tracker, 1, 2);
+    sampler_.SetLimitMaxAckHeightTrackerBySendRate(true);
   }
 }
 

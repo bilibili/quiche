@@ -110,10 +110,6 @@ bool HpackDecoder::DetectError() {
   return error_ != HpackDecodingError::kOk;
 }
 
-size_t HpackDecoder::EstimateMemoryUsage() const {
-  return Http2EstimateMemoryUsage(entry_buffer_);
-}
-
 void HpackDecoder::ReportError(HpackDecodingError error,
                                std::string detailed_error) {
   HTTP2_DVLOG(3) << "HpackDecoder::ReportError is new="

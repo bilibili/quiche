@@ -6,7 +6,6 @@
 
 #include "absl/strings/escaping.h"
 #include "gquiche/quic/platform/api/quic_logging.h"
-#include "gquiche/common/platform/api/quiche_text_utils.h"
 
 namespace quic {
 

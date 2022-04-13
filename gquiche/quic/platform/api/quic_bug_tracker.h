@@ -5,11 +5,11 @@
 #ifndef QUICHE_QUIC_PLATFORM_API_QUIC_BUG_TRACKER_H_
 #define QUICHE_QUIC_PLATFORM_API_QUIC_BUG_TRACKER_H_
 
-#include "platform/quic_platform_impl/quic_bug_tracker_impl.h"
+#include "gquiche/common/platform/api/quiche_bug_tracker.h"
 
-#define QUIC_BUG(x)           QUICHE_BUG_IMPL(x)
-#define QUIC_BUG_IF(x,y)      QUICHE_BUG_IF_IMPL(x,y)
-#define QUIC_PEER_BUG(x)      QUICHE_PEER_BUG_IMPL(x)
-#define QUIC_PEER_BUG_IF(x,y) QUICHE_PEER_BUG_IF_IMPL(x,y)
+#define QUIC_BUG QUICHE_BUG
+#define QUIC_BUG_IF QUICHE_BUG_IF
+#define QUIC_PEER_BUG QUICHE_PEER_BUG
+#define QUIC_PEER_BUG_IF QUICHE_PEER_BUG_IF
 
 #endif  // QUICHE_QUIC_PLATFORM_API_QUIC_BUG_TRACKER_H_

@@ -19,6 +19,7 @@ Google quiche is used in Chromium (http://www.chromium.org/quic) project. This r
 - Easy building with cmake
 - Only support Linux platform
 - Easy to keep pace with Google quiche upgrading
+- Support Qlog: APIs to expose transport and server statistics for debuggability with qvis
 
 ### Source Layout
 - `base`: Implementation of basic platform functions

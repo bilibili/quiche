@@ -25,7 +25,6 @@
 #include "gquiche/quic/test_tools/mock_clock.h"
 #include "gquiche/quic/test_tools/quic_crypto_server_config_peer.h"
 #include "gquiche/quic/test_tools/quic_test_utils.h"
-#include "gquiche/common/platform/api/quiche_text_utils.h"
 
 namespace quic {
 namespace test {

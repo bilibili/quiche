@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 #include "gquiche/quic/tools/quic_client_base.h"
+
+#include <algorithm>
 #include <memory>
 
 #include "gquiche/quic/core/crypto/quic_random.h"
@@ -64,6 +66,7 @@ class QuicClientSocketMigrationValidationResultDelegate
       std::unique_ptr<QuicPathValidationContext> context) override {
     QUIC_LOG(WARNING) << "Fail to validate path " << *context
                       << ", stop migrating.";
+    client_->session()->connection()->OnPathValidationFailureAtClient();
   }
 
  private:
@@ -182,6 +185,9 @@ void QuicClientBase::StartConnect() {
                          server_address(), helper(), alarm_factory(), writer,
                          /* owns_writer= */ false, Perspective::IS_CLIENT,
                          client_supported_versions));
+  if (can_reconnect_with_different_version) {
+    session()->set_client_original_supported_versions(supported_versions());
+  }
   if (connection_debug_visitor_ != nullptr) {
     session()->connection()->set_debug_visitor(connection_debug_visitor_);
   }
@@ -257,6 +263,8 @@ bool QuicClientBase::MigrateSocketWithSpecifiedPort(
     const QuicIpAddress& new_host,
     int port) {
   if (!connected()) {
+    QUICHE_DVLOG(1)
+        << "MigrateSocketWithSpecifiedPort failed as connection has closed";
     return false;
   }
 
@@ -264,11 +272,17 @@ bool QuicClientBase::MigrateSocketWithSpecifiedPort(
   std::unique_ptr<QuicPacketWriter> writer =
       CreateWriterForNewNetwork(new_host, port);
   if (writer == nullptr) {
+    QUICHE_DVLOG(1)
+        << "MigrateSocketWithSpecifiedPort failed from writer creation";
     return false;
   }
-  session()->MigratePath(network_helper_->GetLatestClientAddress(),
-                         session()->connection()->peer_address(), writer.get(),
-                         false);
+  if (!session()->MigratePath(network_helper_->GetLatestClientAddress(),
+                              session()->connection()->peer_address(),
+                              writer.get(), false)) {
+    QUICHE_DVLOG(1)
+        << "MigrateSocketWithSpecifiedPort failed from session()->MigratePath";
+    return false;
+  }
   set_writer(writer.release());
   return true;
 }
@@ -433,13 +447,20 @@ QuicConnectionId QuicClientBase::GetClientConnectionId() {
 bool QuicClientBase::CanReconnectWithDifferentVersion(
     ParsedQuicVersion* version) const {
   if (session_ == nullptr || session_->connection() == nullptr ||
-      session_->error() != QUIC_INVALID_VERSION ||
-      session_->connection()->server_supported_versions().empty()) {
+      session_->error() != QUIC_INVALID_VERSION) {
     return false;
   }
+
+  const auto& server_supported_versions =
+      session_->connection()->server_supported_versions();
+  if (server_supported_versions.empty()) {
+    return false;
+  }
+
   for (const auto& client_version : supported_versions_) {
-    if (QuicContainsValue(session_->connection()->server_supported_versions(),
-                          client_version)) {
+    if (std::find(server_supported_versions.begin(),
+                  server_supported_versions.end(),
+                  client_version) != server_supported_versions.end()) {
       *version = client_version;
       return true;
     }

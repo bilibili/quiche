@@ -7,7 +7,6 @@
 #include "gquiche/quic/core/crypto/crypto_protocol.h"
 #include "gquiche/quic/core/quic_utils.h"
 #include "gquiche/quic/platform/api/quic_bug_tracker.h"
-#include "gquiche/common/platform/api/quiche_text_utils.h"
 
 namespace quic {
 

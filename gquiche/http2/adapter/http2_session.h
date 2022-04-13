@@ -5,30 +5,26 @@
 
 #include "absl/strings/string_view.h"
 #include "gquiche/http2/adapter/http2_protocol.h"
+#include "gquiche/common/platform/api/quiche_export.h"
 
 namespace http2 {
 namespace adapter {
 
-struct Http2SessionCallbacks {};
+struct QUICHE_EXPORT_PRIVATE Http2SessionCallbacks {};
 
 // A class to represent the state of a single HTTP/2 connection.
-class Http2Session {
+class QUICHE_EXPORT_PRIVATE Http2Session {
  public:
   Http2Session() = default;
   virtual ~Http2Session() {}
 
-  virtual ssize_t ProcessBytes(absl::string_view bytes) = 0;
+  virtual int64_t ProcessBytes(absl::string_view bytes) = 0;
 
   virtual int Consume(Http2StreamId stream_id, size_t num_bytes) = 0;
 
   virtual bool want_read() const = 0;
   virtual bool want_write() const = 0;
   virtual int GetRemoteWindowSize() const = 0;
-};
-
-enum class Perspective {
-  kClient,
-  kServer,
 };
 
 }  // namespace adapter

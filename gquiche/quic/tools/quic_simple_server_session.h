@@ -68,18 +68,11 @@ class QuicSimpleServerSession : public QuicServerSessionBase {
   // Override base class to detact client sending data on server push stream.
   void OnStreamFrame(const QuicStreamFrame& frame) override;
 
-  // Send out PUSH_PROMISE for all |resources| promised stream id in each frame
-  // will increase by 2 for each item in |resources|.
-  // And enqueue HEADERS block in those PUSH_PROMISED for sending push response
-  // later.
-  virtual void PromisePushResources(
-      const std::string& request_url,
-      const std::list<QuicBackendResponse::ServerPushInfo>& resources,
-      QuicStreamId original_stream_id,
-      const spdy::SpdyStreamPrecedence& original_precedence,
-      const spdy::Http2HeaderBlock& original_request_headers);
-
   void OnCanCreateNewOutgoingStream(bool unidirectional) override;
+
+  bool ShouldNegotiateDatagramContexts() override {
+    return quic_simple_server_backend_->UsesDatagramContexts();
+  }
 
  protected:
   // QuicSession methods:
@@ -107,9 +100,11 @@ class QuicSimpleServerSession : public QuicServerSessionBase {
   bool ShouldNegotiateWebTransport() override {
     return quic_simple_server_backend_->SupportsWebTransport();
   }
-  bool ShouldNegotiateHttp3Datagram() override {
-    return QuicServerSessionBase::ShouldNegotiateHttp3Datagram() ||
-           ShouldNegotiateWebTransport();
+  HttpDatagramSupport LocalHttpDatagramSupport() override {
+    if (ShouldNegotiateWebTransport()) {
+      return HttpDatagramSupport::kDraft00And04;
+    }
+    return QuicServerSessionBase::LocalHttpDatagramSupport();
   }
 
  private:
@@ -155,7 +150,7 @@ class QuicSimpleServerSession : public QuicServerSessionBase {
   // the queue also increases by 2 from previous one's. The front element's
   // stream_id is always next_outgoing_stream_id_, and the last one is always
   // highest_promised_stream_id_.
-  QuicCircularDeque<PromisedStreamInfo> promised_streams_;
+  quiche::QuicheCircularDeque<PromisedStreamInfo> promised_streams_;
 
   QuicSimpleServerBackend* quic_simple_server_backend_;  // Not owned.
 };

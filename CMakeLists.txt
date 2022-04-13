@@ -27,6 +27,7 @@ INCLUDE_DIRECTORIES(
     third_party/spdlog/include
     third_party/abseil-cpp
     third_party/boringssl/include
+    third_party/rapidjson/include
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_BINARY_DIR}
     ${CMAKE_BINARY_DIR}/quiche
@@ -43,7 +44,20 @@ SET(BASE_SRCS
     base/files/file_util.cc
     base/files/file_util_posix.cc
     base/strings/stringprintf.cc
+    base/bvc-qlog/src/qlogger_types.h
+    base/bvc-qlog/src/qlogger_types.cc
+    base/bvc-qlog/src/qlogger_constants.h
+    base/bvc-qlog/src/qlogger_constants.cc
+    base/bvc-qlog/src/qlogger.h
+    base/bvc-qlog/src/qlogger.cc
+    base/bvc-qlog/src/base_qlogger.h
+    base/bvc-qlog/src/base_qlogger.cc
+    base/bvc-qlog/src/file_qlogger.h
+    base/bvc-qlog/src/file_qlogger.cc
+    base/bvc-qlog/src/bvc_quic_connection_debug_visitor.h
+    base/bvc-qlog/src/bvc_quic_connection_debug_visitor.cc
 )
+
 
 SET(NET_SRCS
     net/base/io_buffer.cc
@@ -65,7 +79,6 @@ SET(PLATFORM_SRCS
     platform/quiche_platform_impl/quic_mutex_impl.cc
     platform/quic_platform_impl/quic_cert_utils_impl.cc
     platform/quic_platform_impl/quic_default_proof_providers_impl.cc
-    platform/quic_platform_impl/quic_file_utils_impl.cc
     platform/quic_platform_impl/quic_hostname_utils_impl.cc
     platform/quic_platform_impl/quic_mem_slice_impl.cc
     platform/quic_platform_impl/quic_mem_slice_span_impl.cc
@@ -74,6 +87,9 @@ SET(PLATFORM_SRCS
 )
 
 SET(GQUICHE_SRCS
+    gquiche/common/platform/api/quiche_file_utils.cc
+    gquiche/common/platform/default/quiche_platform_impl/quiche_file_utils_impl.cc
+    gquiche/common/quiche_text_utils.cc
     gquiche/common/quiche_data_reader.cc
     gquiche/common/quiche_data_writer.cc
     gquiche/http2/decoder/decode_buffer.cc
@@ -184,6 +200,8 @@ SET(GQUICHE_SRCS
     gquiche/quic/core/crypto/tls_connection.cc
     gquiche/quic/core/crypto/tls_server_connection.cc
     gquiche/quic/core/crypto/transport_parameters.cc
+    gquiche/quic/core/crypto/quic_client_session_cache.cc
+    gquiche/quic/core/crypto/client_proof_source.cc
     gquiche/quic/core/frames/quic_ack_frame.cc
     gquiche/quic/core/frames/quic_ack_frequency_frame.cc
     gquiche/quic/core/frames/quic_blocked_frame.cc
@@ -207,6 +225,7 @@ SET(GQUICHE_SRCS
     gquiche/quic/core/frames/quic_stream_frame.cc
     gquiche/quic/core/frames/quic_streams_blocked_frame.cc
     gquiche/quic/core/frames/quic_window_update_frame.cc
+    gquiche/quic/core/http/capsule.cc
     gquiche/quic/core/http/http_constants.cc
     gquiche/quic/core/http/http_decoder.cc
     gquiche/quic/core/http/http_encoder.cc
@@ -322,12 +341,15 @@ SET(GQUICHE_SRCS
     gquiche/quic/core/tls_server_handshaker.cc
     gquiche/quic/core/uber_quic_stream_id_manager.cc
     gquiche/quic/core/uber_received_packet_manager.cc
-    gquiche/quic/core/web_transport_stream_adapter.cc
+    gquiche/quic/core/quic_chaos_protector.cc
+    gquiche/quic/core/quic_connection_context.cc
+    gquiche/quic/core/http/web_transport_stream_adapter.cc
     gquiche/quic/platform/api/quic_file_utils.cc
     gquiche/quic/platform/api/quic_hostname_utils.cc
     gquiche/quic/platform/api/quic_ip_address.cc
     gquiche/quic/platform/api/quic_mutex.cc
     gquiche/quic/platform/api/quic_socket_address.cc
+    gquiche/quic/platform/api/quic_mem_slice_storage.cc
     gquiche/spdy/core/hpack/hpack_constants.cc
     gquiche/spdy/core/hpack/hpack_decoder_adapter.cc
     gquiche/spdy/core/hpack/hpack_encoder.cc
@@ -353,6 +375,10 @@ SET(GQUICHE_SRCS
 
 SET(QUIC_TOOLS_SRCS
     gquiche/quic/tools/simple_ticket_crypter.cc
+    gquiche/quic/tools/quic_spdy_client_base.cc
+    gquiche/quic/tools/quic_client_base.cc
+    gquiche/quic/tools/quic_client.cc
+    gquiche/quic/tools/quic_client_epoll_network_helper.cc
 )
 
 message("PROTO_SRCS = ${CoreProtoSource}")

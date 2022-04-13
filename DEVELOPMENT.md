@@ -1,12 +1,12 @@
 # Compilation
 
 **1. Prerequisite**
-
+> export  GOPROXY=https://goproxy.io
 > apt-get install git cmake build-essential protobuf-compiler libprotobuf-dev golang-go libunwind-dev libicu-dev
 
 **2. Build**  
-> git clone https://github.com/bilibili/quiche.git && cd quiche  
-> git submodule update --init  
+> git clone git@git.bilibili.co:quic/quiche.git && cd quiche  
+> git submodule update --init --recursive
 > mkdir -p build  
 > cd build && cmake ..  
 > make -j  
@@ -21,18 +21,18 @@
 > git clone https://quiche.googlesource.com/quiche google_quiche
 > git clone https://quiche.googlesource.com/googleurl
 
-**2. Select a proper tag from chromium and find out quiche version and boringssl version it depended on, then checkout it.**
+**2. Select a proper tag from chromium and find out quiche version and boringssl version and absl version it depended on, then checkout it.**
 > git checkout [commit-id]
 
 **3. Rewrite**  
-> cp -fr google_quiche/* quiche/
+> cp -fr google_quiche/* quiche/gquiche
 > cp -fr googleurl/* quiche/googleurl/
 > cd quiche && bash utils/google_quiche_rewrite.sh
 
 **4. Check if any file or dir should be checkouted**
 > git checkout README.md
 
-**5. Update VERSION, log chromium tag and quiche/boringssl version**
+**5. Update VERSION, log chromium tag and quiche/boringssl version and quiche/abseil-cpp version**
 
 **6. Compile and fix errors**  
 > Repeate Compilation steps and fix errors.

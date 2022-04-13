@@ -12,8 +12,11 @@
 #include "gquiche/quic/core/quic_crypto_stream.h"
 #include "gquiche/quic/core/tls_client_handshaker.h"
 #include "gquiche/quic/platform/api/quic_bug_tracker.h"
+#include "gquiche/quic/platform/api/quic_stack_trace.h"
 
 namespace quic {
+
+#define ENDPOINT (SSL_is_server(ssl()) ? "TlsServer: " : "TlsClient: ")
 
 TlsHandshaker::ProofVerifierCallbackImpl::ProofVerifierCallbackImpl(
     TlsHandshaker* parent)
@@ -93,15 +96,43 @@ void TlsHandshaker::AdvanceHandshake() {
     return;
   }
 
-  QUICHE_BUG_IF(quic_tls_server_async_done_no_flusher,
-                SSL_is_server(ssl()) && add_packet_flusher_on_async_op_done_ &&
-                    !handshaker_delegate_->PacketFlusherAttached())
-      << "is_server:" << SSL_is_server(ssl())
-      << ", add_packet_flusher_on_async_op_done_:"
-      << add_packet_flusher_on_async_op_done_;
+  QUICHE_BUG_IF(
+      quic_tls_server_async_done_no_flusher,
+      SSL_is_server(ssl()) && !handshaker_delegate_->PacketFlusherAttached())
+      << "is_server:" << SSL_is_server(ssl());
 
-  QUIC_VLOG(1) << "TlsHandshaker: continuing handshake";
+  QUIC_VLOG(1) << ENDPOINT << "Continuing handshake";
   int rv = SSL_do_handshake(ssl());
+
+  // If SSL_do_handshake return success(1) and we are in early data, it is
+  // possible that we have provided ServerHello to BoringSSL but it hasn't been
+  // processed. Retry SSL_do_handshake once will advance the handshake more in
+  // that case. If there are no unprocessed ServerHello, the retry will return a
+  // non-positive number.
+  if (rv == 1 && SSL_in_early_data(ssl())) {
+    OnEnterEarlyData();
+    rv = SSL_do_handshake(ssl());
+    QUIC_VLOG(1) << ENDPOINT
+                 << "SSL_do_handshake returned when entering early data. After "
+                 << "retry, rv=" << rv
+                 << ", SSL_in_early_data=" << SSL_in_early_data(ssl());
+    // The retry should either
+    // - Return <= 0 if the handshake is still pending, likely still in early
+    //   data.
+    // - Return 1 if the handshake has _actually_ finished. i.e.
+    //   SSL_in_early_data should be false.
+    //
+    // In either case, it should not both return 1 and stay in early data.
+    if (rv == 1 && SSL_in_early_data(ssl()) && !is_connection_closed_) {
+      QUIC_BUG(quic_handshaker_stay_in_early_data)
+          << "The original and the retry of SSL_do_handshake both returned "
+             "success and in early data";
+      CloseConnection(QUIC_HANDSHAKE_FAILED,
+                      "TLS handshake failed: Still in early data after retry");
+      return;
+    }
+  }
+
   if (rv == 1) {
     FinishHandshake();
     return;
@@ -176,6 +207,7 @@ enum ssl_verify_result_t TlsHandshaker::VerifyCert(uint8_t* out_alert) {
         std::string(reinterpret_cast<const char*>(CRYPTO_BUFFER_data(cert)),
                     CRYPTO_BUFFER_len(cert)));
   }
+  QUIC_DVLOG(1) << "VerifyCert: peer cert_chain length: " << certs.size();
 
   ProofVerifierCallbackImpl* proof_verify_callback =
       new ProofVerifierCallbackImpl(this);
@@ -207,7 +239,7 @@ enum ssl_verify_result_t TlsHandshaker::VerifyCert(uint8_t* out_alert) {
 void TlsHandshaker::SetWriteSecret(EncryptionLevel level,
                                    const SSL_CIPHER* cipher,
                                    const std::vector<uint8_t>& write_secret) {
-  QUIC_DVLOG(1) << "SetWriteSecret level=" << level;
+  QUIC_DVLOG(1) << ENDPOINT << "SetWriteSecret level=" << level;
   std::unique_ptr<QuicEncrypter> encrypter =
       QuicEncrypter::CreateFromCipherSuite(SSL_CIPHER_get_id(cipher));
   const EVP_MD* prf = Prf(cipher);
@@ -230,7 +262,7 @@ void TlsHandshaker::SetWriteSecret(EncryptionLevel level,
 bool TlsHandshaker::SetReadSecret(EncryptionLevel level,
                                   const SSL_CIPHER* cipher,
                                   const std::vector<uint8_t>& read_secret) {
-  QUIC_DVLOG(1) << "SetReadSecret level=" << level;
+  QUIC_DVLOG(1) << ENDPOINT << "SetReadSecret level=" << level;
   std::unique_ptr<QuicDecrypter> decrypter =
       QuicDecrypter::CreateFromCipherSuite(SSL_CIPHER_get_id(cipher));
   const EVP_MD* prf = Prf(cipher);
@@ -297,6 +329,23 @@ std::unique_ptr<QuicEncrypter> TlsHandshaker::CreateCurrentOneRttEncrypter() {
   return encrypter;
 }
 
+bool TlsHandshaker::ExportKeyingMaterialForLabel(absl::string_view label,
+                                                 absl::string_view context,
+                                                 size_t result_len,
+                                                 std::string* result) {
+  // TODO(haoyuewang) Adding support of keying material export when 0-RTT is
+  // accepted.
+  if (SSL_in_init(ssl())) {
+    return false;
+  }
+  result->resize(result_len);
+  return SSL_export_keying_material(
+             ssl(), reinterpret_cast<uint8_t*>(&*result->begin()), result_len,
+             label.data(), label.size(),
+             reinterpret_cast<const uint8_t*>(context.data()), context.size(),
+             !context.empty()) == 1;
+}
+
 void TlsHandshaker::WriteMessage(EncryptionLevel level,
                                  absl::string_view data) {
   stream_->WriteCryptoData(level, data);
@@ -309,15 +358,10 @@ void TlsHandshaker::SendAlert(EncryptionLevel level, uint8_t desc) {
       "TLS handshake failure (", EncryptionLevelToString(level), ") ",
       static_cast<int>(desc), ": ", SSL_alert_desc_string_long(desc));
   QUIC_DLOG(ERROR) << error_details;
-  if (GetQuicReloadableFlag(quic_send_tls_crypto_error_code)) {
-    QUIC_RELOADABLE_FLAG_COUNT(quic_send_tls_crypto_error_code);
-    CloseConnection(
-        TlsAlertToQuicErrorCode(desc),
-        static_cast<QuicIetfTransportErrorCodes>(CRYPTO_ERROR_FIRST + desc),
-        error_details);
-  } else {
-    CloseConnection(QUIC_HANDSHAKE_FAILED, error_details);
-  }
+  CloseConnection(
+      TlsAlertToQuicErrorCode(desc),
+      static_cast<QuicIetfTransportErrorCodes>(CRYPTO_ERROR_FIRST + desc),
+      error_details);
 }
 
 }  // namespace quic

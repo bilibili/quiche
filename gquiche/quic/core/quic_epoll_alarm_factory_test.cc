@@ -6,13 +6,13 @@
 
 #include "gquiche/quic/platform/api/quic_epoll_test_tools.h"
 #include "gquiche/quic/platform/api/quic_test.h"
-#include "platform/quic_epoll_clock.h"
+#include "platform/quic_platform_impl/quic_epoll_clock.h"
 
 namespace quic {
 namespace test {
 namespace {
 
-class TestDelegate : public QuicAlarm::Delegate {
+class TestDelegate : public QuicAlarm::DelegateWithoutContext {
  public:
   TestDelegate() : fired_(false) {}
 

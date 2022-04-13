@@ -12,7 +12,6 @@
 #include "gquiche/quic/core/quic_utils.h"
 #include "gquiche/quic/platform/api/quic_test.h"
 #include "gquiche/quic/test_tools/quic_test_utils.h"
-#include "gquiche/common/platform/api/quiche_text_utils.h"
 #include "gquiche/common/test_tools/quiche_test_utils.h"
 
 namespace {

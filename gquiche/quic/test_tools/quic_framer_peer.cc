@@ -6,7 +6,6 @@
 
 #include "gquiche/quic/core/quic_framer.h"
 #include "gquiche/quic/core/quic_packets.h"
-#include "gquiche/quic/platform/api/quic_map_util.h"
 
 namespace quic {
 namespace test {

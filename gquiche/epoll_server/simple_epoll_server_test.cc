@@ -5,7 +5,7 @@
 // Epoll tests which determine that the right things happen in the right order.
 // Also lots of testing of individual functions.
 
-#include "epoll_server/simple_epoll_server.h"
+#include "gquiche/epoll_server/simple_epoll_server.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -24,13 +24,13 @@
 #include <utility>
 #include <vector>
 
-#include "epoll_server/fake_simple_epoll_server.h"
-#include "epoll_server/platform/api/epoll_address_test_utils.h"
-#include "epoll_server/platform/api/epoll_expect_bug.h"
-#include "epoll_server/platform/api/epoll_ptr_util.h"
-#include "epoll_server/platform/api/epoll_test.h"
-#include "epoll_server/platform/api/epoll_thread.h"
-#include "epoll_server/platform/api/epoll_time.h"
+#include "gquiche/epoll_server/fake_simple_epoll_server.h"
+#include "gquiche/epoll_server/platform/api/epoll_address_test_utils.h"
+#include "gquiche/epoll_server/platform/api/epoll_expect_bug.h"
+#include "gquiche/epoll_server/platform/api/epoll_ptr_util.h"
+#include "gquiche/epoll_server/platform/api/epoll_test.h"
+#include "gquiche/epoll_server/platform/api/epoll_thread.h"
+#include "gquiche/epoll_server/platform/api/epoll_time.h"
 
 namespace epoll_server {
 

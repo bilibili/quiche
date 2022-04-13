@@ -2,7 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "gquiche/quic/core/web_transport_stream_adapter.h"
+#include "gquiche/quic/core/http/web_transport_stream_adapter.h"
+
+#include "gquiche/quic/core/http/web_transport_http3.h"
+#include "gquiche/quic/core/quic_error_codes.h"
 
 namespace quic {
 
@@ -42,13 +45,10 @@ bool WebTransportStreamAdapter::Write(absl::string_view data) {
     return false;
   }
 
-  QuicUniqueBufferPtr buffer = MakeUniqueBuffer(
-      session_->connection()->helper()->GetStreamSendBufferAllocator(),
-      data.size());
-  memcpy(buffer.get(), data.data(), data.size());
-  QuicMemSlice memslice(std::move(buffer), data.size());
+  QuicMemSlice memslice(QuicBuffer::Copy(
+      session_->connection()->helper()->GetStreamSendBufferAllocator(), data));
   QuicConsumedData consumed =
-      stream_->WriteMemSlices(QuicMemSliceSpan(&memslice), /*fin=*/false);
+      stream_->WriteMemSlices(absl::MakeSpan(&memslice, 1), /*fin=*/false);
 
   if (consumed.bytes_consumed == data.size()) {
     return true;
@@ -78,7 +78,7 @@ bool WebTransportStreamAdapter::SendFin() {
 
   QuicMemSlice empty;
   QuicConsumedData consumed =
-      stream_->WriteMemSlices(QuicMemSliceSpan(&empty), /*fin=*/true);
+      stream_->WriteMemSlices(absl::MakeSpan(&empty, 1), /*fin=*/true);
   QUICHE_DCHECK_EQ(consumed.bytes_consumed, 0u);
   return consumed.fin_consumed;
 }
@@ -111,6 +111,17 @@ void WebTransportStreamAdapter::OnCanWriteNewData() {
   if (visitor_ != nullptr) {
     visitor_->OnCanWrite();
   }
+}
+
+void WebTransportStreamAdapter::ResetWithUserCode(
+    WebTransportStreamError error) {
+  stream_->ResetWriteSide(QuicResetStreamError(
+      QUIC_STREAM_CANCELLED, WebTransportErrorToHttp3(error)));
+}
+
+void WebTransportStreamAdapter::SendStopSending(WebTransportStreamError error) {
+  stream_->SendStopSending(QuicResetStreamError(
+      QUIC_STREAM_CANCELLED, WebTransportErrorToHttp3(error)));
 }
 
 }  // namespace quic

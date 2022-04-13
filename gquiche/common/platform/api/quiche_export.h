@@ -5,7 +5,7 @@
 #ifndef THIRD_PARTY_QUICHE_PLATFORM_API_QUICHE_EXPORT_H_
 #define THIRD_PARTY_QUICHE_PLATFORM_API_QUICHE_EXPORT_H_
 
-#include "platform/quiche_platform_impl/quiche_export_impl.h"
+#include "gquiche/common/platform/default/quiche_platform_impl/quiche_export_impl.h"
 
 // QUICHE_EXPORT is not meant to be used.
 #define QUICHE_EXPORT QUICHE_EXPORT_IMPL

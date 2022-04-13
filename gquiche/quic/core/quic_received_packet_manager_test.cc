@@ -397,9 +397,6 @@ TEST_F(QuicReceivedPacketManagerTest, SendDelayedAckDecimation) {
 }
 
 TEST_F(QuicReceivedPacketManagerTest, SendDelayedAckDecimationMin1ms) {
-  if (!GetQuicReloadableFlag(quic_ack_delay_alarm_granularity)) {
-    return;
-  }
   EXPECT_FALSE(HasPendingAck());
   // Seed the min_rtt with a kAlarmGranularity signal.
   rtt_stats_.UpdateRtt(kAlarmGranularity, QuicTime::Delta::Zero(),
@@ -437,7 +434,6 @@ TEST_F(QuicReceivedPacketManagerTest,
   EXPECT_FALSE(HasPendingAck());
   QuicConfig config;
   QuicTagVector connection_options;
-  connection_options.push_back(kACKD);
   // No limit on the number of packets received before sending an ack.
   connection_options.push_back(kAKDU);
   config.SetConnectionOptionsToSend(connection_options);

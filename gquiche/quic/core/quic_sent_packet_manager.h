@@ -19,7 +19,6 @@
 #include "gquiche/quic/core/congestion_control/send_algorithm_interface.h"
 #include "gquiche/quic/core/congestion_control/uber_loss_algorithm.h"
 #include "gquiche/quic/core/proto/cached_network_parameters_proto.h"
-#include "gquiche/quic/core/quic_circular_deque.h"
 #include "gquiche/quic/core/quic_packets.h"
 #include "gquiche/quic/core/quic_sustained_bandwidth_recorder.h"
 #include "gquiche/quic/core/quic_time.h"
@@ -28,6 +27,7 @@
 #include "gquiche/quic/core/quic_unacked_packet_map.h"
 #include "gquiche/quic/platform/api/quic_containers.h"
 #include "gquiche/quic/platform/api/quic_export.h"
+#include "gquiche/common/quiche_circular_deque.h"
 
 namespace quic {
 
@@ -467,6 +467,13 @@ class QUIC_EXPORT_PRIVATE QuicSentPacketManager {
   QuicTime GetEarliestPacketSentTimeForPto(
       PacketNumberSpace* packet_number_space) const;
 
+  void set_num_ptos_for_path_degrading(int num_ptos_for_path_degrading) {
+    num_ptos_for_path_degrading_ = num_ptos_for_path_degrading;
+  }
+
+  // Sets the initial RTT of the connection.
+  void SetInitialRtt(QuicTime::Delta rtt);
+
  private:
   friend class test::QuicConnectionPeer;
   friend class test::QuicSentPacketManagerPeer;
@@ -550,9 +557,6 @@ class QUIC_EXPORT_PRIVATE QuicSentPacketManager {
   // this function.
   void RecordOneSpuriousRetransmission(const QuicTransmissionInfo& info);
 
-  // Sets the initial RTT of the connection.
-  void SetInitialRtt(QuicTime::Delta rtt);
-
   // Called when handshake is confirmed to remove the retransmittable frames
   // from all packets of HANDSHAKE_DATA packet number space to ensure they don't
   // get retransmitted and will eventually be removed from unacked packets map.
@@ -618,6 +622,7 @@ class QUIC_EXPORT_PRIVATE QuicSentPacketManager {
   // Maximum number of packets to send upon RTO.
   QuicPacketCount max_rto_packets_;
   // If true, send the TLP at 0.5 RTT.
+  // TODO(renjietang): remove it once quic_deprecate_tlpr flag is deprecated.
   bool enable_half_rtt_tail_loss_probe_;
   bool using_pacing_;
   // If true, use the new RTO with loss based CWND reduction instead of the send
@@ -673,7 +678,8 @@ class QUIC_EXPORT_PRIVATE QuicSentPacketManager {
   // The history of outstanding max_ack_delays sent to peer. Outstanding means
   // a max_ack_delay is sent as part of the last acked AckFrequencyFrame or
   // an unacked AckFrequencyFrame after that.
-  QuicCircularDeque<std::pair<QuicTime::Delta, /*sequence_number=*/uint64_t>>
+  quiche::QuicheCircularDeque<
+      std::pair<QuicTime::Delta, /*sequence_number=*/uint64_t>>
       in_use_sent_ack_delays_;
 
   // Latest received ack frame.
@@ -744,6 +750,9 @@ class QUIC_EXPORT_PRIVATE QuicSentPacketManager {
   // If true, do not use PING only packets for RTT measurement or congestion
   // control.
   bool ignore_pings_;
+
+  // Whether to ignore the ack_delay in received ACKs.
+  bool ignore_ack_delay_;
 };
 
 }  // namespace quic
