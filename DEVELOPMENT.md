@@ -5,7 +5,7 @@
 > apt-get install git cmake build-essential protobuf-compiler libprotobuf-dev golang-go libunwind-dev libicu-dev
 
 **2. Build**  
-> git clone git@git.bilibili.co:quic/quiche.git && cd quiche  
+> git clone https://github.com/bilibili/quiche.git && cd quiche  
 > git submodule update --init --recursive
 > mkdir -p build  
 > cd build && cmake ..  
