@@ -10,11 +10,10 @@
 #include "gquiche/quic/core/quic_types.h"
 #include "gquiche/quic/qbone/qbone_constants.h"
 #include "gquiche/quic/qbone/qbone_session_base.h"
+#include "gquiche/common/platform/api/quiche_command_line_flags.h"
 
-DEFINE_QUIC_COMMAND_LINE_FLAG(int,
-                              qbone_stream_ttl_secs,
-                              3,
-                              "The QBONE Stream TTL in seconds.");
+DEFINE_QUICHE_COMMAND_LINE_FLAG(int, qbone_stream_ttl_secs, 3,
+                                "The QBONE Stream TTL in seconds.");
 
 namespace quic {
 
@@ -23,8 +22,8 @@ QboneWriteOnlyStream::QboneWriteOnlyStream(QuicStreamId id,
     : QuicStream(id, session, /*is_static=*/false, WRITE_UNIDIRECTIONAL) {
   // QBONE uses a LIFO queue to try to always make progress. An individual
   // packet may persist for upto to qbone_stream_ttl_secs seconds in memory.
-  MaybeSetTtl(
-      QuicTime::Delta::FromSeconds(GetQuicFlag(FLAGS_qbone_stream_ttl_secs)));
+  MaybeSetTtl(QuicTime::Delta::FromSeconds(
+      quiche::GetQuicheCommandLineFlag(FLAGS_qbone_stream_ttl_secs)));
 }
 
 void QboneWriteOnlyStream::WritePacketToQuicStream(absl::string_view packet) {
@@ -35,15 +34,13 @@ void QboneWriteOnlyStream::WritePacketToQuicStream(absl::string_view packet) {
 
 QboneReadOnlyStream::QboneReadOnlyStream(QuicStreamId id,
                                          QboneSessionBase* session)
-    : QuicStream(id,
-                 session,
-                 /*is_static=*/false,
-                 READ_UNIDIRECTIONAL),
+    : QuicStream(id, session,
+                 /*is_static=*/false, READ_UNIDIRECTIONAL),
       session_(session) {
   // QBONE uses a LIFO queue to try to always make progress. An individual
   // packet may persist for upto to qbone_stream_ttl_secs seconds in memory.
-  MaybeSetTtl(
-      QuicTime::Delta::FromSeconds(GetQuicFlag(FLAGS_qbone_stream_ttl_secs)));
+  MaybeSetTtl(QuicTime::Delta::FromSeconds(
+      quiche::GetQuicheCommandLineFlag(FLAGS_qbone_stream_ttl_secs)));
 }
 
 void QboneReadOnlyStream::OnDataAvailable() {

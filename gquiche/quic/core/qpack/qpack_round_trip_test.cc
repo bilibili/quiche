@@ -6,11 +6,12 @@
 #include <tuple>
 
 #include "absl/strings/string_view.h"
+#include "gquiche/quic/core/qpack/qpack_decoder.h"
+#include "gquiche/quic/core/qpack/qpack_encoder.h"
 #include "gquiche/quic/platform/api/quic_test.h"
 #include "gquiche/quic/test_tools/qpack/qpack_decoder_test_utils.h"
-#include "gquiche/quic/test_tools/qpack/qpack_encoder_test_utils.h"
 #include "gquiche/quic/test_tools/qpack/qpack_test_utils.h"
-#include "gquiche/spdy/core/spdy_header_block.h"
+#include "gquiche/spdy/core/http2_header_block.h"
 
 using ::testing::Values;
 
@@ -49,8 +50,7 @@ class QpackRoundTripTest : public QuicTestWithParam<FragmentMode> {
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(All,
-                         QpackRoundTripTest,
+INSTANTIATE_TEST_SUITE_P(All, QpackRoundTripTest,
                          Values(FragmentMode::kSingleChunk,
                                 FragmentMode::kOctetByOctet));
 

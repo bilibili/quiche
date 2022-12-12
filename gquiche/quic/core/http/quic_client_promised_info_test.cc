@@ -20,7 +20,7 @@
 #include "gquiche/quic/test_tools/quic_spdy_session_peer.h"
 #include "gquiche/quic/test_tools/quic_test_utils.h"
 
-using spdy::SpdyHeaderBlock;
+using spdy::Http2HeaderBlock;
 using testing::_;
 using testing::StrictMock;
 
@@ -34,12 +34,10 @@ class MockQuicSpdyClientSession : public QuicSpdyClientSession {
       const ParsedQuicVersionVector& supported_versions,
       QuicConnection* connection,
       QuicClientPushPromiseIndex* push_promise_index)
-      : QuicSpdyClientSession(DefaultQuicConfig(),
-                              supported_versions,
+      : QuicSpdyClientSession(DefaultQuicConfig(), supported_versions,
                               connection,
                               QuicServerId("example.com", 443, false),
-                              &crypto_config_,
-                              push_promise_index),
+                              &crypto_config_, push_promise_index),
         crypto_config_(crypto_test_utils::ProofVerifierForTesting()),
         authorized_(true) {}
   MockQuicSpdyClientSession(const MockQuicSpdyClientSession&) = delete;
@@ -53,10 +51,8 @@ class MockQuicSpdyClientSession : public QuicSpdyClientSession {
 
   void set_authorized(bool authorized) { authorized_ = authorized; }
 
-  MOCK_METHOD(bool,
-              WriteControlFrame,
-              (const QuicFrame& frame, TransmissionType type),
-              (override));
+  MOCK_METHOD(bool, WriteControlFrame,
+              (const QuicFrame& frame, TransmissionType type), (override));
 
  private:
   QuicCryptoClientConfig crypto_config_;
@@ -69,11 +65,9 @@ class QuicClientPromisedInfoTest : public QuicTest {
   class StreamVisitor;
 
   QuicClientPromisedInfoTest()
-      : connection_(new StrictMock<MockQuicConnection>(&helper_,
-                                                       &alarm_factory_,
-                                                       Perspective::IS_CLIENT)),
-        session_(connection_->supported_versions(),
-                 connection_,
+      : connection_(new StrictMock<MockQuicConnection>(
+            &helper_, &alarm_factory_, Perspective::IS_CLIENT)),
+        session_(connection_->supported_versions(), connection_,
                  &push_promise_index_),
         body_("hello world"),
         promise_id_(
@@ -128,12 +122,12 @@ class QuicClientPromisedInfoTest : public QuicTest {
   std::unique_ptr<QuicSpdyClientStream> stream_;
   std::unique_ptr<StreamVisitor> stream_visitor_;
   std::unique_ptr<QuicSpdyClientStream> promised_stream_;
-  SpdyHeaderBlock headers_;
+  Http2HeaderBlock headers_;
   std::string body_;
-  SpdyHeaderBlock push_promise_;
+  Http2HeaderBlock push_promise_;
   QuicStreamId promise_id_;
   std::string promise_url_;
-  SpdyHeaderBlock client_request_;
+  Http2HeaderBlock client_request_;
 };
 
 TEST_F(QuicClientPromisedInfoTest, PushPromise) {

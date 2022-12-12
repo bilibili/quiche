@@ -137,7 +137,7 @@ class QuicIntervalDequePeer;
 //   //   cached_index -> 1
 //   //   container -> {{2, [25, 30)}, {3, [35, 50)}}
 
-template <class T, class C = QUIC_NO_EXPORT quiche::QuicheCircularDeque<T>>
+template <class T, class C = quiche::QuicheCircularDeque<T>>
 class QUIC_NO_EXPORT QuicIntervalDeque {
  public:
   class QUIC_NO_EXPORT Iterator {
@@ -253,8 +253,7 @@ class QUIC_NO_EXPORT QuicIntervalDeque {
   void PushBackUniversal(U&& item);
 
   Iterator Search(const std::size_t interval_begin,
-                  const std::size_t begin_index,
-                  const std::size_t end_index);
+                  const std::size_t begin_index, const std::size_t end_index);
 
   // For accessing the |cached_index_|
   friend class test::QuicIntervalDequePeer;
@@ -374,8 +373,7 @@ void QuicIntervalDeque<T, C>::PushBackUniversal(U&& item) {
 
 template <class T, class C>
 typename QuicIntervalDeque<T, C>::Iterator QuicIntervalDeque<T, C>::Search(
-    const std::size_t interval_begin,
-    const std::size_t begin_index,
+    const std::size_t interval_begin, const std::size_t begin_index,
     const std::size_t end_index) {
   auto begin = container_.begin() + begin_index;
   auto end = container_.begin() + end_index;

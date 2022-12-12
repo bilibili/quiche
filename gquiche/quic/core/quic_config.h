@@ -55,8 +55,7 @@ class QUIC_EXPORT_PRIVATE QuicConfigValue {
   // Selects a mutually acceptable value from those offered in |peer_hello|
   // and those defined in the subclass.
   virtual QuicErrorCode ProcessPeerHello(
-      const CryptoHandshakeMessage& peer_hello,
-      HelloType hello_type,
+      const CryptoHandshakeMessage& peer_hello, HelloType hello_type,
       std::string* error_details) = 0;
 
  protected:
@@ -67,7 +66,7 @@ class QUIC_EXPORT_PRIVATE QuicConfigValue {
 // Stores uint32_t from CHLO or SHLO messages that are not negotiated.
 class QUIC_EXPORT_PRIVATE QuicFixedUint32 : public QuicConfigValue {
  public:
-  QuicFixedUint32(QuicTag name, QuicConfigPresence presence);
+  QuicFixedUint32(QuicTag tag, QuicConfigPresence presence);
   ~QuicFixedUint32() override;
 
   bool HasSendValue() const;
@@ -384,12 +383,6 @@ class QUIC_EXPORT_PRIVATE QuicConfig {
   void SetDisableConnectionMigration();
   bool DisableConnectionMigration() const;
 
-  // Key update support.
-  void SetKeyUpdateSupportedLocally();
-  bool KeyUpdateSupportedForConnection() const;
-  bool KeyUpdateSupportedLocally() const;
-  bool KeyUpdateSupportedRemotely() const;
-
   // IPv6 alternate server address.
   void SetIPv6AlternateServerAddressToSend(
       const QuicSocketAddress& alternate_server_address_ipv6);
@@ -592,13 +585,6 @@ class QUIC_EXPORT_PRIVATE QuicConfig {
   // Whether active connection migration is allowed.
   // Uses the disable_active_migration transport parameter in IETF QUIC.
   QuicFixedUint32 connection_migration_disabled_;
-
-  // Whether key update is supported by the peer. Uses key_update_not_yet
-  // supported transport parameter in IETF QUIC.
-  bool key_update_supported_remotely_;
-
-  // Whether key update is supported locally.
-  bool key_update_supported_locally_;
 
   // Alternate server addresses the client could connect to.
   // Uses the preferred_address transport parameter in IETF QUIC.

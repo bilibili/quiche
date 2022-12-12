@@ -15,8 +15,7 @@
 namespace quic {
 
 Bbr2StartupMode::Bbr2StartupMode(const Bbr2Sender* sender,
-                                 Bbr2NetworkModel* model,
-                                 QuicTime now)
+                                 Bbr2NetworkModel* model, QuicTime now)
     : Bbr2ModeBase(sender, model) {
   // Increment, instead of reset startup stats, so we don't lose data recorded
   // before QuicConnection switched send algorithm to BBRv2.
@@ -42,8 +41,7 @@ void Bbr2StartupMode::Leave(QuicTime now,
 }
 
 Bbr2Mode Bbr2StartupMode::OnCongestionEvent(
-    QuicByteCount /*prior_in_flight*/,
-    QuicTime /*event_time*/,
+    QuicByteCount /*prior_in_flight*/, QuicTime /*event_time*/,
     const AckedPacketVector& /*acked_packets*/,
     const LostPacketVector& /*lost_packets*/,
     const Bbr2CongestionEvent& congestion_event) {
@@ -54,10 +52,10 @@ Bbr2Mode Bbr2StartupMode::OnCongestionEvent(
   if (!congestion_event.end_of_round_trip) {
     return Bbr2Mode::STARTUP;
   }
-  bool has_bandwidth_growth = model_->HasBandwidthGrowth(congestion_event);
+  bool has_bandwidth_growth = model_->HasBandwidthGrowth(congestion_event, Bbr2Mode::STARTUP);
   if (Params().exit_startup_on_persistent_queue && !has_bandwidth_growth) {
     QUIC_RELOADABLE_FLAG_COUNT(quic_bbr2_exit_startup_on_persistent_queue2);
-    model_->CheckPersistentQueue(congestion_event, Params().startup_cwnd_gain);
+    model_->CheckPersistentQueue(congestion_event, Params().startup_cwnd_gain, Bbr2Mode::STARTUP);
   }
   // TCP BBR always exits upon excessive losses. QUIC BBRv1 does not exit
   // upon excessive losses, if enough bandwidth growth is observed or if the
@@ -75,7 +73,7 @@ Bbr2Mode Bbr2StartupMode::OnCongestionEvent(
       // the pacing gain will be the full startup_pacing_gain.
       if (max_bw_at_round_beginning_ > QuicBandwidth::Zero()) {
         const float bandwidth_ratio =
-            std::max(1., model_->MaxBandwidth().ToBitsPerSecond() /
+            std::max(1., model_->MaxBandwidth(Bbr2Mode::STARTUP).ToBitsPerSecond() /
                              static_cast<double>(
                                  max_bw_at_round_beginning_.ToBitsPerSecond()));
         // Even when bandwidth isn't increasing, use a gain large enough to
@@ -91,11 +89,11 @@ Bbr2Mode Bbr2StartupMode::OnCongestionEvent(
         // This avoids a constantly app-limited flow from having it's pacing
         // gain effectively decreased below 1.25.
         if (model_->bandwidth_lo() <
-            model_->MaxBandwidth() * model_->pacing_gain()) {
+            model_->MaxBandwidth(Bbr2Mode::STARTUP) * model_->pacing_gain()) {
           model_->clear_bandwidth_lo();
         }
       }
-      max_bw_at_round_beginning_ = model_->MaxBandwidth();
+      max_bw_at_round_beginning_ = model_->MaxBandwidth(Bbr2Mode::STARTUP);
     }
   }
 
@@ -114,7 +112,7 @@ void Bbr2StartupMode::CheckExcessiveLosses(
   // At the end of a round trip. Check if loss is too high in this round.
   if (model_->IsInflightTooHigh(congestion_event,
                                 Params().startup_full_loss_count)) {
-    QuicByteCount new_inflight_hi = model_->BDP();
+    QuicByteCount new_inflight_hi = model_->BDP(Bbr2Mode::STARTUP);
     if (Params().startup_loss_exit_use_max_delivered_for_inflight_hi) {
       if (new_inflight_hi < model_->max_bytes_delivered_in_round()) {
         new_inflight_hi = model_->max_bytes_delivered_in_round();
@@ -150,8 +148,6 @@ std::ostream& operator<<(std::ostream& os,
   return os;
 }
 
-const Bbr2Params& Bbr2StartupMode::Params() const {
-  return sender_->Params();
-}
+const Bbr2Params& Bbr2StartupMode::Params() const { return sender_->Params(); }
 
 }  // namespace quic

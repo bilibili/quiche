@@ -6,7 +6,6 @@
 #define QUICHE_QUIC_TEST_TOOLS_QUIC_SERVER_SESSION_BASE_PEER_H_
 
 #include "gquiche/quic/core/http/quic_server_session_base.h"
-
 #include "gquiche/quic/core/quic_utils.h"
 
 namespace quic {

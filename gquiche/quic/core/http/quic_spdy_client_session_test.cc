@@ -39,8 +39,9 @@
 #include "gquiche/quic/test_tools/quic_stream_peer.h"
 #include "gquiche/quic/test_tools/quic_test_utils.h"
 #include "gquiche/quic/test_tools/simple_session_cache.h"
+#include "gquiche/spdy/core/http2_header_block.h"
 
-using spdy::SpdyHeaderBlock;
+using spdy::Http2HeaderBlock;
 using ::testing::_;
 using ::testing::AnyNumber;
 using ::testing::AtLeast;
@@ -61,16 +62,11 @@ class TestQuicSpdyClientSession : public QuicSpdyClientSession {
   explicit TestQuicSpdyClientSession(
       const QuicConfig& config,
       const ParsedQuicVersionVector& supported_versions,
-      QuicConnection* connection,
-      const QuicServerId& server_id,
+      QuicConnection* connection, const QuicServerId& server_id,
       QuicCryptoClientConfig* crypto_config,
       QuicClientPushPromiseIndex* push_promise_index)
-      : QuicSpdyClientSession(config,
-                              supported_versions,
-                              connection,
-                              server_id,
-                              crypto_config,
-                              push_promise_index) {}
+      : QuicSpdyClientSession(config, supported_versions, connection, server_id,
+                              crypto_config, push_promise_index) {}
 
   std::unique_ptr<QuicSpdyClientStream> CreateClientStream() override {
     return std::make_unique<MockQuicSpdyClientStream>(
@@ -220,7 +216,7 @@ class QuicSpdyClientSessionTest : public QuicTestWithParam<ParsedQuicVersion> {
   ::testing::NiceMock<PacketSavingConnection>* connection_;
   std::unique_ptr<TestQuicSpdyClientSession> session_;
   QuicClientPushPromiseIndex push_promise_index_;
-  SpdyHeaderBlock push_promise_;
+  Http2HeaderBlock push_promise_;
   std::string promise_url_;
   QuicStreamId promised_stream_id_;
   QuicStreamId associated_stream_id_;
@@ -232,14 +228,11 @@ std::string ParamNameFormatter(
   return ParsedQuicVersionToString(info.param);
 }
 
-INSTANTIATE_TEST_SUITE_P(Tests,
-                         QuicSpdyClientSessionTest,
+INSTANTIATE_TEST_SUITE_P(Tests, QuicSpdyClientSessionTest,
                          ::testing::ValuesIn(AllSupportedVersions()),
                          ParamNameFormatter);
 
-TEST_P(QuicSpdyClientSessionTest, CryptoConnect) {
-  CompleteCryptoHandshake();
-}
+TEST_P(QuicSpdyClientSessionTest, CryptoConnect) { CompleteCryptoHandshake(); }
 
 TEST_P(QuicSpdyClientSessionTest, NoEncryptionAfterInitialEncryption) {
   if (GetParam().handshake_protocol == PROTOCOL_TLS1_3) {
@@ -723,7 +716,7 @@ TEST_P(QuicSpdyClientSessionTest, PushPromiseAlreadyClosed) {
               OnStreamReset(promised_stream_id_, QUIC_REFUSED_STREAM));
 
   session_->ResetPromised(promised_stream_id_, QUIC_REFUSED_STREAM);
-  SpdyHeaderBlock promise_headers;
+  Http2HeaderBlock promise_headers;
   EXPECT_FALSE(session_->HandlePromised(associated_stream_id_,
                                         promised_stream_id_, promise_headers));
 
@@ -828,14 +821,14 @@ TEST_P(QuicSpdyClientSessionTest, OnInitialHeadersCompleteIsPush) {
   EXPECT_NE(session_->GetPromisedStream(promised_stream_id_), nullptr);
   EXPECT_NE(session_->GetPromisedByUrl(promise_url_), nullptr);
 
-  session_->OnInitialHeadersComplete(promised_stream_id_, SpdyHeaderBlock());
+  session_->OnInitialHeadersComplete(promised_stream_id_, Http2HeaderBlock());
 }
 
 TEST_P(QuicSpdyClientSessionTest, OnInitialHeadersCompleteIsNotPush) {
   // Initialize crypto before the client session will create a stream.
   CompleteCryptoHandshake();
   session_->CreateOutgoingBidirectionalStream();
-  session_->OnInitialHeadersComplete(promised_stream_id_, SpdyHeaderBlock());
+  session_->OnInitialHeadersComplete(promised_stream_id_, Http2HeaderBlock());
 }
 
 TEST_P(QuicSpdyClientSessionTest, DeletePromised) {

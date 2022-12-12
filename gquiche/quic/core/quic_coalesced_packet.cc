@@ -13,15 +13,12 @@ namespace quic {
 QuicCoalescedPacket::QuicCoalescedPacket()
     : length_(0), max_packet_length_(0) {}
 
-QuicCoalescedPacket::~QuicCoalescedPacket() {
-  Clear();
-}
+QuicCoalescedPacket::~QuicCoalescedPacket() { Clear(); }
 
 bool QuicCoalescedPacket::MaybeCoalescePacket(
-    const SerializedPacket& packet,
-    const QuicSocketAddress& self_address,
+    const SerializedPacket& packet, const QuicSocketAddress& self_address,
     const QuicSocketAddress& peer_address,
-    QuicBufferAllocator* allocator,
+    quiche::QuicheBufferAllocator* allocator,
     QuicPacketLength current_max_packet_length) {
   if (packet.encrypted_length == 0) {
     QUIC_BUG(quic_bug_10611_1) << "Trying to coalesce an empty packet";
@@ -118,8 +115,7 @@ void QuicCoalescedPacket::NeuterInitialPacket() {
   initial_packet_ = nullptr;
 }
 
-bool QuicCoalescedPacket::CopyEncryptedBuffers(char* buffer,
-                                               size_t buffer_len,
+bool QuicCoalescedPacket::CopyEncryptedBuffers(char* buffer, size_t buffer_len,
                                                size_t* length_copied) const {
   *length_copied = 0;
   for (const auto& packet : encrypted_buffers_) {
@@ -180,6 +176,19 @@ std::string QuicCoalescedPacket::ToString(size_t serialized_length) const {
   }
   absl::StrAppend(&info, "}");
   return info;
+}
+
+std::vector<size_t> QuicCoalescedPacket::packet_lengths() const {
+  std::vector<size_t> lengths;
+  for (const auto& packet : encrypted_buffers_) {
+    if (lengths.empty()) {
+      lengths.push_back(
+          initial_packet_ == nullptr ? 0 : initial_packet_->encrypted_length);
+    } else {
+      lengths.push_back(packet.length());
+    }
+  }
+  return lengths;
 }
 
 }  // namespace quic

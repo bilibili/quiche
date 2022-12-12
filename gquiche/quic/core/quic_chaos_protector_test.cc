@@ -60,8 +60,7 @@ class QuicChaosProtectorTest : public QuicTestWithParam<ParsedQuicVersion>,
   }
 
   // From QuicStreamFrameDataProducer.
-  bool WriteCryptoData(EncryptionLevel level,
-                       QuicStreamOffset offset,
+  bool WriteCryptoData(EncryptionLevel level, QuicStreamOffset offset,
                        QuicByteCount data_length,
                        QuicDataWriter* writer) override {
     EXPECT_EQ(level, level);
@@ -88,8 +87,9 @@ class QuicChaosProtectorTest : public QuicTestWithParam<ParsedQuicVersion>,
     header_.packet_number = QuicPacketNumber(1);
     header_.form = IETF_QUIC_LONG_HEADER_PACKET;
     header_.long_packet_type = INITIAL;
-    header_.retry_token_length_length = VARIABLE_LENGTH_INTEGER_LENGTH_1;
-    header_.length_length = kQuicDefaultLongHeaderLengthLength;
+    header_.retry_token_length_length =
+        quiche::VARIABLE_LENGTH_INTEGER_LENGTH_1;
+    header_.length_length = quiche::kQuicheDefaultLongHeaderLengthLength;
     // Setup validation framer.
     validation_framer_.framer()->SetInitialObfuscators(
         header_.destination_connection_id);
@@ -152,8 +152,7 @@ ParsedQuicVersionVector TestVersions() {
   return versions;
 }
 
-INSTANTIATE_TEST_SUITE_P(QuicChaosProtectorTests,
-                         QuicChaosProtectorTest,
+INSTANTIATE_TEST_SUITE_P(QuicChaosProtectorTests, QuicChaosProtectorTest,
                          ::testing::ValuesIn(TestVersions()),
                          ::testing::PrintToStringParamName());
 

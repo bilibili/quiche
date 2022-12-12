@@ -17,6 +17,7 @@
 #include "gquiche/quic/core/quic_utils.h"
 #include "gquiche/quic/platform/api/quic_bug_tracker.h"
 #include "gquiche/quic/platform/api/quic_flag_utils.h"
+#include "gquiche/quic/platform/api/quic_flags.h"
 
 namespace quic {
 
@@ -78,13 +79,14 @@ void QuicControlFrameManager::WriteOrBufferWindowUpdate(
     QuicStreamId id, QuicStreamOffset byte_offset) {
   QUIC_DVLOG(1) << "Writing WINDOW_UPDATE_FRAME";
   WriteOrBufferQuicFrame(QuicFrame(
-      new QuicWindowUpdateFrame(++last_control_frame_id_, id, byte_offset)));
+      QuicWindowUpdateFrame(++last_control_frame_id_, id, byte_offset)));
 }
 
-void QuicControlFrameManager::WriteOrBufferBlocked(QuicStreamId id) {
+void QuicControlFrameManager::WriteOrBufferBlocked(
+    QuicStreamId id, QuicStreamOffset byte_offset) {
   QUIC_DVLOG(1) << "Writing BLOCKED_FRAME";
   WriteOrBufferQuicFrame(
-      QuicFrame(new QuicBlockedFrame(++last_control_frame_id_, id)));
+      QuicFrame(QuicBlockedFrame(++last_control_frame_id_, id, byte_offset)));
 }
 
 void QuicControlFrameManager::WriteOrBufferStreamsBlocked(QuicStreamCount count,
@@ -107,7 +109,7 @@ void QuicControlFrameManager::WriteOrBufferStopSending(
     QuicResetStreamError error, QuicStreamId stream_id) {
   QUIC_DVLOG(1) << "Writing STOP_SENDING_FRAME";
   WriteOrBufferQuicFrame(QuicFrame(
-      new QuicStopSendingFrame(++last_control_frame_id_, stream_id, error)));
+      QuicStopSendingFrame(++last_control_frame_id_, stream_id, error)));
 }
 
 void QuicControlFrameManager::WriteOrBufferHandshakeDone() {
@@ -160,7 +162,7 @@ void QuicControlFrameManager::OnControlFrameSent(const QuicFrame& frame) {
     return;
   }
   if (frame.type == WINDOW_UPDATE_FRAME) {
-    QuicStreamId stream_id = frame.window_update_frame->stream_id;
+    QuicStreamId stream_id = frame.window_update_frame.stream_id;
     if (window_update_frames_.contains(stream_id) &&
         id > window_update_frames_[stream_id]) {
       // Consider the older window update of the same stream as acked.
@@ -190,7 +192,7 @@ bool QuicControlFrameManager::OnControlFrameAcked(const QuicFrame& frame) {
     return false;
   }
   if (frame.type == WINDOW_UPDATE_FRAME) {
-    QuicStreamId stream_id = frame.window_update_frame->stream_id;
+    QuicStreamId stream_id = frame.window_update_frame.stream_id;
     if (window_update_frames_.contains(stream_id) &&
         window_update_frames_[stream_id] == id) {
       window_update_frames_.erase(stream_id);
@@ -266,8 +268,7 @@ void QuicControlFrameManager::OnCanWrite() {
 
 bool QuicControlFrameManager::RetransmitControlFrame(const QuicFrame& frame,
                                                      TransmissionType type) {
-  QUICHE_DCHECK(type == PTO_RETRANSMISSION || type == RTO_RETRANSMISSION ||
-                type == TLP_RETRANSMISSION || type == PROBING_RETRANSMISSION);
+  QUICHE_DCHECK(type == PTO_RETRANSMISSION);
   QuicControlFrameId id = GetControlFrameId(frame);
   if (id == kInvalidControlFrameId) {
     // Frame does not have a valid control frame ID, ignore it. Returns true

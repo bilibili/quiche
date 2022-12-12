@@ -22,9 +22,8 @@
 #include "gquiche/quic/platform/api/quic_bug_tracker.h"
 #include "gquiche/quic/platform/api/quic_flag_utils.h"
 #include "gquiche/quic/platform/api/quic_flags.h"
-#include "gquiche/quic/platform/api/quic_mem_slice.h"
 #include "gquiche/common/platform/api/quiche_logging.h"
-#include "gquiche/common/platform/api/quiche_prefetch.h"
+#include "gquiche/common/platform/api/quiche_mem_slice.h"
 #include "gquiche/common/quiche_endian.h"
 
 namespace quic {
@@ -171,10 +170,7 @@ const char* QuicUtils::SentPacketStateToString(SentPacketState state) {
     RETURN_STRING_LITERAL(NEUTERED);
     RETURN_STRING_LITERAL(HANDSHAKE_RETRANSMITTED);
     RETURN_STRING_LITERAL(LOST);
-    RETURN_STRING_LITERAL(TLP_RETRANSMITTED);
-    RETURN_STRING_LITERAL(RTO_RETRANSMITTED);
     RETURN_STRING_LITERAL(PTO_RETRANSMITTED);
-    RETURN_STRING_LITERAL(PROBE_RETRANSMITTED);
     RETURN_STRING_LITERAL(NOT_CONTRIBUTING_RTT);
   }
   return "INVALID_SENT_PACKET_STATE";
@@ -239,64 +235,6 @@ AddressChangeType QuicUtils::DetermineAddressChangeType(
 }
 
 // static
-void QuicUtils::CopyToBuffer(const struct iovec* iov,
-                             int iov_count,
-                             size_t iov_offset,
-                             size_t buffer_length,
-                             char* buffer) {
-  int iovnum = 0;
-  while (iovnum < iov_count && iov_offset >= iov[iovnum].iov_len) {
-    iov_offset -= iov[iovnum].iov_len;
-    ++iovnum;
-  }
-  QUICHE_DCHECK_LE(iovnum, iov_count);
-  QUICHE_DCHECK_LE(iov_offset, iov[iovnum].iov_len);
-  if (iovnum >= iov_count || buffer_length == 0) {
-    return;
-  }
-
-  // Unroll the first iteration that handles iov_offset.
-  const size_t iov_available = iov[iovnum].iov_len - iov_offset;
-  size_t copy_len = std::min(buffer_length, iov_available);
-
-  // Try to prefetch the next iov if there is at least one more after the
-  // current. Otherwise, it looks like an irregular access that the hardware
-  // prefetcher won't speculatively prefetch. Only prefetch one iov because
-  // generally, the iov_offset is not 0, input iov consists of 2K buffers and
-  // the output buffer is ~1.4K.
-  if (copy_len == iov_available && iovnum + 1 < iov_count) {
-    char* next_base = static_cast<char*>(iov[iovnum + 1].iov_base);
-    // Prefetch 2 cachelines worth of data to get the prefetcher started; leave
-    // it to the hardware prefetcher after that.
-    quiche::QuichePrefetchT0(next_base);
-    if (iov[iovnum + 1].iov_len >= 64) {
-      quiche::QuichePrefetchT0(next_base + ABSL_CACHELINE_SIZE);
-    }
-  }
-
-  const char* src = static_cast<char*>(iov[iovnum].iov_base) + iov_offset;
-  while (true) {
-    memcpy(buffer, src, copy_len);
-    buffer_length -= copy_len;
-    buffer += copy_len;
-    if (buffer_length == 0 || ++iovnum >= iov_count) {
-      break;
-    }
-    src = static_cast<char*>(iov[iovnum].iov_base);
-    copy_len = std::min(buffer_length, iov[iovnum].iov_len);
-  }
-  QUIC_BUG_IF(quic_bug_10839_1, buffer_length > 0)
-      << "Failed to copy entire length to buffer.";
-}
-
-// static
-struct iovec QuicUtils::MakeIovec(absl::string_view data) {
-  struct iovec iov = {const_cast<char*>(data.data()),
-                      static_cast<size_t>(data.size())};
-  return iov;
-}
-
-// static
 bool QuicUtils::IsAckable(SentPacketState state) {
   return state != NEVER_SENT && state != ACKED && state != UNACKABLE;
 }
@@ -348,14 +286,8 @@ SentPacketState QuicUtils::RetransmissionTypeToPacketState(
       return HANDSHAKE_RETRANSMITTED;
     case LOSS_RETRANSMISSION:
       return LOST;
-    case TLP_RETRANSMISSION:
-      return TLP_RETRANSMITTED;
-    case RTO_RETRANSMISSION:
-      return RTO_RETRANSMITTED;
     case PTO_RETRANSMISSION:
       return PTO_RETRANSMITTED;
-    case PROBING_RETRANSMISSION:
-      return PROBE_RETRANSMITTED;
     case PATH_RETRANSMISSION:
       return NOT_CONTRIBUTING_RTT;
     case ALL_INITIAL_RETRANSMISSION:
@@ -426,8 +358,7 @@ bool QuicUtils::IsServerInitiatedStreamId(QuicTransportVersion version,
 }
 
 // static
-bool QuicUtils::IsOutgoingStreamId(ParsedQuicVersion version,
-                                   QuicStreamId id,
+bool QuicUtils::IsOutgoingStreamId(ParsedQuicVersion version, QuicStreamId id,
                                    Perspective perspective) {
   // Streams are outgoing streams, iff:
   // - we are the server and the stream is server-initiated
@@ -446,8 +377,7 @@ bool QuicUtils::IsBidirectionalStreamId(QuicStreamId id,
 }
 
 // static
-StreamType QuicUtils::GetStreamType(QuicStreamId id,
-                                    Perspective perspective,
+StreamType QuicUtils::GetStreamType(QuicStreamId id, Perspective perspective,
                                     bool peer_initiated,
                                     ParsedQuicVersion version) {
   QUICHE_DCHECK(version.HasIetfQuicFrames());
@@ -481,8 +411,7 @@ QuicStreamId QuicUtils::StreamIdDelta(QuicTransportVersion version) {
 
 // static
 QuicStreamId QuicUtils::GetFirstBidirectionalStreamId(
-    QuicTransportVersion version,
-    Perspective perspective) {
+    QuicTransportVersion version, Perspective perspective) {
   if (VersionHasIetfQuicFrames(version)) {
     return perspective == Perspective::IS_CLIENT ? 0 : 1;
   } else if (QuicVersionUsesCryptoFrames(version)) {
@@ -493,8 +422,7 @@ QuicStreamId QuicUtils::GetFirstBidirectionalStreamId(
 
 // static
 QuicStreamId QuicUtils::GetFirstUnidirectionalStreamId(
-    QuicTransportVersion version,
-    Perspective perspective) {
+    QuicTransportVersion version, Perspective perspective) {
   if (VersionHasIetfQuicFrames(version)) {
     return perspective == Perspective::IS_CLIENT ? 2 : 3;
   } else if (QuicVersionUsesCryptoFrames(version)) {
@@ -569,8 +497,7 @@ QuicConnectionId QuicUtils::CreateRandomConnectionId(
 
 // static
 QuicConnectionId QuicUtils::CreateRandomConnectionId(
-    uint8_t connection_id_length,
-    QuicRandom* random) {
+    uint8_t connection_id_length, QuicRandom* random) {
   QuicConnectionId connection_id;
   connection_id.set_length(connection_id_length);
   if (connection_id.length() > 0) {
@@ -592,8 +519,7 @@ QuicConnectionId QuicUtils::CreateZeroConnectionId(
 
 // static
 bool QuicUtils::IsConnectionIdLengthValidForVersion(
-    size_t connection_id_length,
-    QuicTransportVersion transport_version) {
+    size_t connection_id_length, QuicTransportVersion transport_version) {
   // No version of QUIC can support lengths that do not fit in an uint8_t.
   if (connection_id_length >
       static_cast<size_t>(std::numeric_limits<uint8_t>::max())) {
@@ -625,8 +551,7 @@ bool QuicUtils::IsConnectionIdLengthValidForVersion(
 
 // static
 bool QuicUtils::IsConnectionIdValidForVersion(
-    QuicConnectionId connection_id,
-    QuicTransportVersion transport_version) {
+    QuicConnectionId connection_id, QuicTransportVersion transport_version) {
   return IsConnectionIdLengthValidForVersion(connection_id.length(),
                                              transport_version);
 }
@@ -667,7 +592,7 @@ PacketNumberSpace QuicUtils::GetPacketNumberSpace(
 }
 
 // static
-EncryptionLevel QuicUtils::GetEncryptionLevel(
+EncryptionLevel QuicUtils::GetEncryptionLevelToSendAckofSpace(
     PacketNumberSpace packet_number_space) {
   switch (packet_number_space) {
     case INITIAL_DATA:
@@ -710,8 +635,7 @@ bool QuicUtils::IsAckElicitingFrame(QuicFrameType type) {
 
 // static
 bool QuicUtils::AreStatelessResetTokensEqual(
-    const StatelessResetToken& token1,
-    const StatelessResetToken& token2) {
+    const StatelessResetToken& token1, const StatelessResetToken& token2) {
   char byte = 0;
   for (size_t i = 0; i < kStatelessResetTokenLength; i++) {
     // This avoids compiler optimizations that could make us stop comparing
@@ -729,9 +653,9 @@ bool IsValidWebTransportSessionId(WebTransportSessionId id,
          QuicUtils::IsClientInitiatedStreamId(version.transport_version, id);
 }
 
-QuicByteCount MemSliceSpanTotalSize(absl::Span<QuicMemSlice> span) {
+QuicByteCount MemSliceSpanTotalSize(absl::Span<quiche::QuicheMemSlice> span) {
   QuicByteCount total = 0;
-  for (const QuicMemSlice& slice : span) {
+  for (const quiche::QuicheMemSlice& slice : span) {
     total += slice.length();
   }
   return total;

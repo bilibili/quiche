@@ -10,7 +10,6 @@
 #include "gquiche/quic/core/quic_interval.h"
 #include "gquiche/quic/core/quic_interval_set.h"
 #include "gquiche/quic/core/quic_types.h"
-#include "gquiche/quic/platform/api/quic_containers.h"
 #include "gquiche/quic/platform/api/quic_export.h"
 #include "gquiche/quic/platform/api/quic_flags.h"
 
@@ -83,8 +82,7 @@ class QUIC_EXPORT_PRIVATE PacketNumberQueue {
   const_reverse_iterator rend() const;
 
   friend QUIC_EXPORT_PRIVATE std::ostream& operator<<(
-      std::ostream& os,
-      const PacketNumberQueue& q);
+      std::ostream& os, const PacketNumberQueue& q);
 
  private:
   QuicIntervalSet<QuicPacketNumber> packet_number_intervals_;
@@ -98,8 +96,7 @@ struct QUIC_EXPORT_PRIVATE QuicAckFrame {
   void Clear();
 
   friend QUIC_EXPORT_PRIVATE std::ostream& operator<<(
-      std::ostream& os,
-      const QuicAckFrame& ack_frame);
+      std::ostream& os, const QuicAckFrame& ack_frame);
 
   // The highest packet number we've observed from the peer. When |packets| is
   // not empty, it should always be equal to packets.Max(). The |LargestAcked|
@@ -111,6 +108,8 @@ struct QUIC_EXPORT_PRIVATE QuicAckFrame {
   QuicTime::Delta ack_delay_time = QuicTime::Delta::Infinite();
 
   // Vector of <packet_number, time> for when packets arrived.
+  // For IETF versions, packet numbers and timestamps in this vector are both in
+  // ascending orders. Packets received out of order are not saved here.
   PacketTimeVector received_packet_times;
 
   // Set of packets.
@@ -137,8 +136,7 @@ LargestAcked(const QuicAckFrame& frame) {
 // as missing.
 // Always returns false for packet numbers less than least_unacked.
 QUIC_EXPORT_PRIVATE bool IsAwaitingPacket(
-    const QuicAckFrame& ack_frame,
-    QuicPacketNumber packet_number,
+    const QuicAckFrame& ack_frame, QuicPacketNumber packet_number,
     QuicPacketNumber peer_least_packet_awaiting_ack);
 
 }  // namespace quic

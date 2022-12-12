@@ -20,10 +20,8 @@
 namespace quic {
 
 QuicReceiveControlStream::QuicReceiveControlStream(
-    PendingStream* pending,
-    QuicSpdySession* spdy_session)
-    : QuicStream(pending,
-                 spdy_session,
+    PendingStream* pending, QuicSpdySession* spdy_session)
+    : QuicStream(pending, spdy_session,
                  /*is_static=*/true),
       settings_frame_received_(false),
       decoder_(this),
@@ -64,16 +62,8 @@ void QuicReceiveControlStream::OnError(HttpDecoder* decoder) {
   stream_delegate()->OnStreamError(decoder->error(), decoder->error_detail());
 }
 
-bool QuicReceiveControlStream::OnMaxPushIdFrame(const MaxPushIdFrame& frame) {
-  if (spdy_session()->debug_visitor()) {
-    spdy_session()->debug_visitor()->OnMaxPushIdFrameReceived(frame);
-  }
-
-  if (!ValidateFrameType(HttpFrameType::MAX_PUSH_ID)) {
-    return false;
-  }
-
-  return spdy_session()->OnMaxPushIdFrame(frame.push_id);
+bool QuicReceiveControlStream::OnMaxPushIdFrame() {
+  return ValidateFrameType(HttpFrameType::MAX_PUSH_ID);
 }
 
 bool QuicReceiveControlStream::OnGoAwayFrame(const GoAwayFrame& frame) {
@@ -118,8 +108,7 @@ bool QuicReceiveControlStream::OnDataFrameEnd() {
 }
 
 bool QuicReceiveControlStream::OnHeadersFrameStart(
-    QuicByteCount /*header_length*/,
-    QuicByteCount
+    QuicByteCount /*header_length*/, QuicByteCount
     /*payload_length*/) {
   return ValidateFrameType(HttpFrameType::HEADERS);
 }
@@ -200,15 +189,13 @@ bool QuicReceiveControlStream::OnAcceptChFrame(const AcceptChFrame& frame) {
 }
 
 void QuicReceiveControlStream::OnWebTransportStreamFrameType(
-    QuicByteCount /*header_length*/,
-    WebTransportSessionId /*session_id*/) {
+    QuicByteCount /*header_length*/, WebTransportSessionId /*session_id*/) {
   QUIC_BUG(WEBTRANSPORT_STREAM on Control Stream)
       << "Parsed WEBTRANSPORT_STREAM on a control stream.";
 }
 
 bool QuicReceiveControlStream::OnUnknownFrameStart(
-    uint64_t frame_type,
-    QuicByteCount /*header_length*/,
+    uint64_t frame_type, QuicByteCount /*header_length*/,
     QuicByteCount payload_length) {
   if (spdy_session()->debug_visitor()) {
     spdy_session()->debug_visitor()->OnUnknownFrameReceived(id(), frame_type,

@@ -11,13 +11,12 @@
 #include <new>
 #include <utility>
 
+#include "absl/base/macros.h"
 #include "absl/memory/memory.h"
-#include "gquiche/http2/platform/api/http2_macros.h"
 #include "gquiche/common/platform/api/quiche_bug_tracker.h"
 #include "gquiche/common/platform/api/quiche_logging.h"
 #include "gquiche/spdy/core/spdy_bitmasks.h"
 #include "gquiche/spdy/core/spdy_frame_builder.h"
-#include "gquiche/spdy/core/spdy_frame_reader.h"
 
 namespace spdy {
 
@@ -91,7 +90,7 @@ uint8_t SerializePushPromiseFrameFlags(const SpdyPushPromiseIR& push_promise_ir,
 }
 
 // Serializes a HEADERS frame from the given SpdyHeadersIR and encoded header
-// block. Does not need or use the SpdyHeaderBlock inside SpdyHeadersIR.
+// block. Does not need or use the Http2HeaderBlock inside SpdyHeadersIR.
 // Return false if the serialization fails. |encoding| should not be empty.
 bool SerializeHeadersGivenEncoding(const SpdyHeadersIR& headers,
                                    const std::string& encoding,
@@ -134,7 +133,7 @@ bool SerializeHeadersGivenEncoding(const SpdyHeadersIR& headers,
 }
 
 // Serializes a PUSH_PROMISE frame from the given SpdyPushPromiseIR and
-// encoded header block. Does not need or use the SpdyHeaderBlock inside
+// encoded header block. Does not need or use the Http2HeaderBlock inside
 // SpdyPushPromiseIR.
 bool SerializePushPromiseGivenEncoding(const SpdyPushPromiseIR& push_promise,
                                        const std::string& encoding,
@@ -166,8 +165,7 @@ bool SerializePushPromiseGivenEncoding(const SpdyPushPromiseIR& push_promise,
 
 bool WritePayloadWithContinuation(SpdyFrameBuilder* builder,
                                   const std::string& hpack_encoding,
-                                  SpdyStreamId stream_id,
-                                  SpdyFrameType type,
+                                  SpdyStreamId stream_id, SpdyFrameType type,
                                   int padding_payload_len) {
   uint8_t end_flag = 0;
   uint8_t flags = 0;
@@ -214,8 +212,7 @@ bool WritePayloadWithContinuation(SpdyFrameBuilder* builder,
   return ret;
 }
 
-void SerializeDataBuilderHelper(const SpdyDataIR& data_ir,
-                                uint8_t* flags,
+void SerializeDataBuilderHelper(const SpdyDataIR& data_ir, uint8_t* flags,
                                 int* num_padding_fields,
                                 size_t* size_with_padding) {
   if (data_ir.fin()) {
@@ -232,9 +229,7 @@ void SerializeDataBuilderHelper(const SpdyDataIR& data_ir,
 }
 
 void SerializeDataFrameHeaderWithPaddingLengthFieldBuilderHelper(
-    const SpdyDataIR& data_ir,
-    uint8_t* flags,
-    size_t* frame_size,
+    const SpdyDataIR& data_ir, uint8_t* flags, size_t* frame_size,
     size_t* num_padding_fields) {
   *flags = DATA_FLAG_NONE;
   if (data_ir.fin()) {
@@ -250,8 +245,7 @@ void SerializeDataFrameHeaderWithPaddingLengthFieldBuilderHelper(
 }
 
 void SerializeSettingsBuilderHelper(const SpdySettingsIR& settings,
-                                    uint8_t* flags,
-                                    const SettingsMap* values,
+                                    uint8_t* flags, const SettingsMap* values,
                                     size_t* size) {
   if (settings.is_ack()) {
     *flags = *flags | SETTINGS_FLAG_ACK;
@@ -261,8 +255,7 @@ void SerializeSettingsBuilderHelper(const SpdySettingsIR& settings,
 }
 
 void SerializeAltSvcBuilderHelper(const SpdyAltSvcIR& altsvc_ir,
-                                  std::string* value,
-                                  size_t* size) {
+                                  std::string* value, size_t* size) {
   *size = kGetAltSvcFrameMinimumSize;
   *size = *size + altsvc_ir.origin().length();
   *value = SpdyAltSvcWireFormat::SerializeHeaderFieldValue(
@@ -335,8 +328,7 @@ bool SpdyFramer::SpdyFrameIterator::HasNextFrame() const {
 }
 
 SpdyFramer::SpdyHeaderFrameIterator::SpdyHeaderFrameIterator(
-    SpdyFramer* framer,
-    std::unique_ptr<const SpdyHeadersIR> headers_ir)
+    SpdyFramer* framer, std::unique_ptr<const SpdyHeadersIR> headers_ir)
     : SpdyFrameIterator(framer), headers_ir_(std::move(headers_ir)) {
   SetEncoder(headers_ir_.get());
 }
@@ -352,8 +344,7 @@ size_t SpdyFramer::SpdyHeaderFrameIterator::GetFrameSizeSansBlock() const {
 }
 
 bool SpdyFramer::SpdyHeaderFrameIterator::SerializeGivenEncoding(
-    const std::string& encoding,
-    ZeroCopyOutputBuffer* output) const {
+    const std::string& encoding, ZeroCopyOutputBuffer* output) const {
   return SerializeHeadersGivenEncoding(*headers_ir_, encoding,
                                        !has_next_frame(), output);
 }
@@ -377,15 +368,13 @@ size_t SpdyFramer::SpdyPushPromiseFrameIterator::GetFrameSizeSansBlock() const {
 }
 
 bool SpdyFramer::SpdyPushPromiseFrameIterator::SerializeGivenEncoding(
-    const std::string& encoding,
-    ZeroCopyOutputBuffer* output) const {
+    const std::string& encoding, ZeroCopyOutputBuffer* output) const {
   return SerializePushPromiseGivenEncoding(*push_promise_ir_, encoding,
                                            !has_next_frame(), output);
 }
 
 SpdyFramer::SpdyControlFrameIterator::SpdyControlFrameIterator(
-    SpdyFramer* framer,
-    std::unique_ptr<const SpdyFrameIR> frame_ir)
+    SpdyFramer* framer, std::unique_ptr<const SpdyFrameIR> frame_ir)
     : framer_(framer), frame_ir_(std::move(frame_ir)) {}
 
 SpdyFramer::SpdyControlFrameIterator::~SpdyControlFrameIterator() = default;
@@ -406,8 +395,7 @@ const SpdyFrameIR& SpdyFramer::SpdyControlFrameIterator::GetIR() const {
 }
 
 std::unique_ptr<SpdyFrameSequence> SpdyFramer::CreateIterator(
-    SpdyFramer* framer,
-    std::unique_ptr<const SpdyFrameIR> frame_ir) {
+    SpdyFramer* framer, std::unique_ptr<const SpdyFrameIR> frame_ir) {
   switch (frame_ir->frame_type()) {
     case SpdyFrameType::HEADERS: {
       return std::make_unique<SpdyHeaderFrameIterator>(
@@ -421,7 +409,7 @@ std::unique_ptr<SpdyFrameSequence> SpdyFramer::CreateIterator(
     }
     case SpdyFrameType::DATA: {
       QUICHE_DVLOG(1) << "Serialize a stream end DATA frame for VTL";
-      HTTP2_FALLTHROUGH;
+      ABSL_FALLTHROUGH_INTENDED;
     }
     default: {
       return std::make_unique<SpdyControlFrameIterator>(framer,
@@ -548,8 +536,7 @@ SpdySerializedFrame SpdyFramer::SerializeGoAway(
 }
 
 void SpdyFramer::SerializeHeadersBuilderHelper(const SpdyHeadersIR& headers,
-                                               uint8_t* flags,
-                                               size_t* size,
+                                               uint8_t* flags, size_t* size,
                                                std::string* hpack_encoding,
                                                int* weight,
                                                size_t* length_field) {
@@ -655,10 +642,8 @@ SpdySerializedFrame SpdyFramer::SerializeWindowUpdate(
 }
 
 void SpdyFramer::SerializePushPromiseBuilderHelper(
-    const SpdyPushPromiseIR& push_promise,
-    uint8_t* flags,
-    std::string* hpack_encoding,
-    size_t* size) {
+    const SpdyPushPromiseIR& push_promise, uint8_t* flags,
+    std::string* hpack_encoding, size_t* size) {
   *flags = 0;
   // This will get overwritten if we overflow into a CONTINUATION frame.
   *flags = *flags | PUSH_PROMISE_FLAG_END_PUSH_PROMISE;
@@ -999,8 +984,7 @@ bool SpdyFramer::SerializeData(const SpdyDataIR& data_ir,
 }
 
 bool SpdyFramer::SerializeDataFrameHeaderWithPaddingLengthField(
-    const SpdyDataIR& data_ir,
-    ZeroCopyOutputBuffer* output) const {
+    const SpdyDataIR& data_ir, ZeroCopyOutputBuffer* output) const {
   uint8_t flags = DATA_FLAG_NONE;
   size_t frame_size = 0;
   size_t num_padding_fields = 0;

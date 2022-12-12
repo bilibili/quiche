@@ -30,6 +30,8 @@
 #include "gquiche/quic/core/quic_packets.h"
 #include "gquiche/quic/core/quic_types.h"
 #include "gquiche/quic/platform/api/quic_export.h"
+#include "gquiche/quic/platform/api/quic_flags.h"
+#include "gquiche/common/platform/api/quiche_mem_slice.h"
 #include "gquiche/common/quiche_circular_deque.h"
 
 namespace quic {
@@ -66,8 +68,7 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
     // to delegate via OnSerializedPacket(). Called when a packet is about to be
     // serialized.
     virtual SerializedPacketFate GetSerializedPacketFate(
-        bool is_mtu_discovery,
-        EncryptionLevel encryption_level) = 0;
+        bool is_mtu_discovery, EncryptionLevel encryption_level) = 0;
   };
 
   // Interface which gets callbacks from the QuicPacketCreator at interesting
@@ -109,13 +110,10 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
     bool update_connection_id_;
   };
 
-  QuicPacketCreator(QuicConnectionId server_connection_id,
-                    QuicFramer* framer,
+  QuicPacketCreator(QuicConnectionId server_connection_id, QuicFramer* framer,
                     DelegateInterface* delegate);
-  QuicPacketCreator(QuicConnectionId server_connection_id,
-                    QuicFramer* framer,
-                    QuicRandom* random,
-                    DelegateInterface* delegate);
+  QuicPacketCreator(QuicConnectionId server_connection_id, QuicFramer* framer,
+                    QuicRandom* random, DelegateInterface* delegate);
   QuicPacketCreator(const QuicPacketCreator&) = delete;
   QuicPacketCreator& operator=(const QuicPacketCreator&) = delete;
 
@@ -145,22 +143,19 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
   static size_t StreamFramePacketOverhead(
       QuicTransportVersion version,
       QuicConnectionIdLength destination_connection_id_length,
-      QuicConnectionIdLength source_connection_id_length,
-      bool include_version,
+      QuicConnectionIdLength source_connection_id_length, bool include_version,
       bool include_diversification_nonce,
       QuicPacketNumberLength packet_number_length,
-      QuicVariableLengthIntegerLength retry_token_length_length,
-      QuicVariableLengthIntegerLength length_length,
+      quiche::QuicheVariableLengthIntegerLength retry_token_length_length,
+      quiche::QuicheVariableLengthIntegerLength length_length,
       QuicStreamOffset offset);
 
   // Returns false and flushes all pending frames if current open packet is
   // full.
   // If current packet is not full, creates a stream frame that fits into the
   // open packet and adds it to the packet.
-  bool ConsumeDataToFillCurrentPacket(QuicStreamId id,
-                                      size_t data_size,
-                                      QuicStreamOffset offset,
-                                      bool fin,
+  bool ConsumeDataToFillCurrentPacket(QuicStreamId id, size_t data_size,
+                                      QuicStreamOffset offset, bool fin,
                                       bool needs_full_padding,
                                       TransmissionType transmission_type,
                                       QuicFrame* frame);
@@ -177,8 +172,7 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
   // Returns true if current open packet can accommodate more stream frames of
   // stream |id| at |offset| and data length |data_size|, false otherwise.
   // TODO(fayang): mark this const by moving RemoveSoftMaxPacketLength out.
-  bool HasRoomForStreamFrame(QuicStreamId id,
-                             QuicStreamOffset offset,
+  bool HasRoomForStreamFrame(QuicStreamId id, QuicStreamOffset offset,
                              size_t data_size);
 
   // Returns true if current open packet can accommodate a message frame of
@@ -194,11 +188,9 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
   // QuicStreamFrame to the returned SerializedPacket.  Sets
   // |num_bytes_consumed| to the number of bytes consumed to create the
   // QuicStreamFrame.
-  void CreateAndSerializeStreamFrame(QuicStreamId id,
-                                     size_t write_length,
+  void CreateAndSerializeStreamFrame(QuicStreamId id, size_t write_length,
                                      QuicStreamOffset iov_offset,
-                                     QuicStreamOffset stream_offset,
-                                     bool fin,
+                                     QuicStreamOffset stream_offset, bool fin,
                                      TransmissionType transmission_type,
                                      size_t* num_bytes_consumed);
 
@@ -313,11 +305,6 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
   void set_encryption_level(EncryptionLevel level);
   EncryptionLevel encryption_level() { return packet_.encryption_level; }
 
-  // Sets whether initial packets are protected with chaos.
-  void set_chaos_protection_enabled(bool chaos_protection_enabled) {
-    chaos_protection_enabled_ = chaos_protection_enabled;
-  }
-
   // packet number of the last created packet, or 0 if no packets have been
   // created.
   QuicPacketNumber packet_number() const { return packet_.packet_number; }
@@ -365,8 +352,7 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
   // When |state| is FIN_AND_PADDING, random padding of size [1, 256] will be
   // added after stream frames. If current constructed packet cannot
   // accommodate, the padding will overflow to the next packet(s).
-  QuicConsumedData ConsumeData(QuicStreamId id,
-                               size_t write_length,
+  QuicConsumedData ConsumeData(QuicStreamId id, size_t write_length,
                                QuicStreamOffset offset,
                                StreamSendingState state);
 
@@ -375,18 +361,15 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
   // This path does not support padding, or bundling pending frames.
   // In case we access this method from ConsumeData, total_bytes_consumed
   // keeps track of how many bytes have already been consumed.
-  QuicConsumedData ConsumeDataFastPath(QuicStreamId id,
-                                       size_t write_length,
-                                       QuicStreamOffset offset,
-                                       bool fin,
+  QuicConsumedData ConsumeDataFastPath(QuicStreamId id, size_t write_length,
+                                       QuicStreamOffset offset, bool fin,
                                        size_t total_bytes_consumed);
 
   // Consumes data for CRYPTO frames sent at |level| starting at |offset| for a
   // total of |write_length| bytes, and returns the number of bytes consumed.
   // The data is passed into the packet creator and serialized into one or more
   // packets.
-  size_t ConsumeCryptoData(EncryptionLevel level,
-                           size_t write_length,
+  size_t ConsumeCryptoData(EncryptionLevel level, size_t write_length,
                            QuicStreamOffset offset);
 
   // Generates an MTU discovery packet of specified size.
@@ -421,7 +404,7 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
 
   // Tries to add a message frame containing |message| and returns the status.
   MessageStatus AddMessageFrame(QuicMessageId message_id,
-                                absl::Span<QuicMemSlice> message);
+                                absl::Span<quiche::QuicheMemSlice> message);
 
   // Returns the largest payload that will fit into a single MESSAGE frame.
   QuicPacketLength GetCurrentLargestMessagePayload() const;
@@ -462,8 +445,7 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
   // Serialize a probing packet that uses IETF QUIC's PATH CHALLENGE frame. Also
   // fills the packet with padding.
   size_t BuildPaddedPathChallengePacket(const QuicPacketHeader& header,
-                                        char* buffer,
-                                        size_t packet_length,
+                                        char* buffer, size_t packet_length,
                                         const QuicPathFrameBuffer& payload,
                                         EncryptionLevel level);
 
@@ -472,25 +454,20 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
   // true. |payloads| is always emptied, even if the packet can not be
   // successfully built.
   size_t BuildPathResponsePacket(
-      const QuicPacketHeader& header,
-      char* buffer,
-      size_t packet_length,
+      const QuicPacketHeader& header, char* buffer, size_t packet_length,
       const quiche::QuicheCircularDeque<QuicPathFrameBuffer>& payloads,
-      const bool is_padded,
-      EncryptionLevel level);
+      const bool is_padded, EncryptionLevel level);
 
   // Serializes a probing packet, which is a padded PING packet. Returns the
   // length of the packet. Returns 0 if it fails to serialize.
   size_t BuildConnectivityProbingPacket(const QuicPacketHeader& header,
-                                        char* buffer,
-                                        size_t packet_length,
+                                        char* buffer, size_t packet_length,
                                         EncryptionLevel level);
 
   // Serializes |coalesced| to provided |buffer|, returns coalesced packet
   // length if serialization succeeds. Otherwise, returns 0.
   size_t SerializeCoalescedPacket(const QuicCoalescedPacket& coalesced,
-                                  char* buffer,
-                                  size_t buffer_len);
+                                  char* buffer, size_t buffer_len);
 
   // Returns true if max_packet_length_ is currently a soft value.
   bool HasSoftMaxPacketLength() const;
@@ -522,25 +499,19 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
   // supposed to be protected or if serialization fails then absl::nullopt is
   // returned. Otherwise returns the serialized length.
   absl::optional<size_t> MaybeBuildDataPacketWithChaosProtection(
-      const QuicPacketHeader& header,
-      char* buffer);
+      const QuicPacketHeader& header, char* buffer);
 
   // Creates a stream frame which fits into the current open packet. If
   // |data_size| is 0 and fin is true, the expected behavior is to consume
   // the fin.
-  void CreateStreamFrame(QuicStreamId id,
-                         size_t data_size,
-                         QuicStreamOffset offset,
-                         bool fin,
-                         QuicFrame* frame);
+  void CreateStreamFrame(QuicStreamId id, size_t data_size,
+                         QuicStreamOffset offset, bool fin, QuicFrame* frame);
 
   // Creates a CRYPTO frame which fits into the current open packet. Returns
   // false if there isn't enough room in the current open packet for a CRYPTO
   // frame, and true if there is.
-  bool CreateCryptoFrame(EncryptionLevel level,
-                         size_t write_length,
-                         QuicStreamOffset offset,
-                         QuicFrame* frame);
+  bool CreateCryptoFrame(EncryptionLevel level, size_t write_length,
+                         QuicStreamOffset offset, QuicFrame* frame);
 
   void FillPacketHeader(QuicPacketHeader* header);
 
@@ -552,9 +523,12 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
   // retransmitted to packet_.retransmittable_frames. All frames must fit into
   // a single packet. Returns true on success, otherwise, returns false.
   // Fails if |encrypted_buffer| is not large enough for the encrypted packet.
+  //
+  // Padding may be added if |allow_padding|. Currently, the only case where it
+  // is disallowed is reserializing a coalesced initial packet.
   ABSL_MUST_USE_RESULT bool SerializePacket(
-      QuicOwnedPacketBuffer encrypted_buffer,
-      size_t encrypted_buffer_len);
+      QuicOwnedPacketBuffer encrypted_buffer, size_t encrypted_buffer_len,
+      bool allow_padding);
 
   // Called after a new SerialiedPacket is created to call the delegate's
   // OnSerializedPacket and reset state.
@@ -568,9 +542,7 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
   // |padding_size| indicates the size of necessary padding. Returns 0 if
   // serialization fails.
   size_t ReserializeInitialPacketInCoalescedPacket(
-      const SerializedPacket& packet,
-      size_t padding_size,
-      char* buffer,
+      const SerializedPacket& packet, size_t padding_size, char* buffer,
       size_t buffer_len);
 
   // Tries to coalesce |frame| with the back of |queued_frames_|.
@@ -607,7 +579,7 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
 
   // Returns length of the retry token variable length integer to send over the
   // wire. Is non-zero for v99 IETF Initial packets.
-  QuicVariableLengthIntegerLength GetRetryTokenLengthLength() const;
+  quiche::QuicheVariableLengthIntegerLength GetRetryTokenLengthLength() const;
 
   // Returns the retry token to send over the wire, only sent in
   // v99 IETF Initial packets.
@@ -615,7 +587,7 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
 
   // Returns length of the length variable length integer to send over the
   // wire. Is non-zero for v99 IETF Initial, 0-RTT or Handshake packets.
-  QuicVariableLengthIntegerLength GetLengthLength() const;
+  quiche::QuicheVariableLengthIntegerLength GetLengthLength() const;
 
   // Returns true if |frame| is a ClientHello.
   bool StreamFrameIsClientHello(const QuicStreamFrame& frame) const;
@@ -709,9 +681,6 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
   // accept. There is no limit for QUIC_CRYPTO connections, but QUIC+TLS
   // negotiates this during the handshake.
   QuicByteCount max_datagram_frame_size_;
-
-  // Whether to attempt protecting initial packets with chaos.
-  bool chaos_protection_enabled_;
 };
 
 }  // namespace quic

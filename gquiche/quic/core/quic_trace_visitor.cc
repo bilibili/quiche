@@ -45,14 +45,10 @@ QuicTraceVisitor::QuicTraceVisitor(const QuicConnection* connection)
 }
 
 void QuicTraceVisitor::OnPacketSent(
-    QuicPacketNumber packet_number,
-    QuicPacketLength packet_length,
-    bool /*has_crypto_handshake*/,
-    TransmissionType /*transmission_type*/,
-    EncryptionLevel encryption_level,
-    const QuicFrames& retransmittable_frames,
-    const QuicFrames& /*nonretransmittable_frames*/,
-    QuicTime sent_time) {
+    QuicPacketNumber packet_number, QuicPacketLength packet_length,
+    bool /*has_crypto_handshake*/, TransmissionType /*transmission_type*/,
+    EncryptionLevel encryption_level, const QuicFrames& retransmittable_frames,
+    const QuicFrames& /*nonretransmittable_frames*/, QuicTime sent_time) {
   quic_trace::Event* event = trace_.add_events();
   event->set_event_type(quic_trace::PACKET_SENT);
   event->set_time_us(ConvertTimestampToRecordedFormat(sent_time));
@@ -173,28 +169,28 @@ void QuicTraceVisitor::PopulateFrameInfo(const QuicFrame& frame,
       break;
 
     case WINDOW_UPDATE_FRAME: {
-      bool is_connection = frame.window_update_frame->stream_id == 0;
+      bool is_connection = frame.window_update_frame.stream_id == 0;
       frame_record->set_frame_type(is_connection ? quic_trace::MAX_DATA
                                                  : quic_trace::MAX_STREAM_DATA);
 
       quic_trace::FlowControlInfo* info =
           frame_record->mutable_flow_control_info();
-      info->set_max_data(frame.window_update_frame->max_data);
+      info->set_max_data(frame.window_update_frame.max_data);
       if (!is_connection) {
-        info->set_stream_id(frame.window_update_frame->stream_id);
+        info->set_stream_id(frame.window_update_frame.stream_id);
       }
       break;
     }
 
     case BLOCKED_FRAME: {
-      bool is_connection = frame.blocked_frame->stream_id == 0;
+      bool is_connection = frame.blocked_frame.stream_id == 0;
       frame_record->set_frame_type(is_connection ? quic_trace::BLOCKED
                                                  : quic_trace::STREAM_BLOCKED);
 
       quic_trace::FlowControlInfo* info =
           frame_record->mutable_flow_control_info();
       if (!is_connection) {
-        info->set_stream_id(frame.window_update_frame->stream_id);
+        info->set_stream_id(frame.window_update_frame.stream_id);
       }
       break;
     }
@@ -234,12 +230,9 @@ void QuicTraceVisitor::PopulateFrameInfo(const QuicFrame& frame,
 }
 
 void QuicTraceVisitor::OnIncomingAck(
-    QuicPacketNumber /*ack_packet_number*/,
-    EncryptionLevel ack_decrypted_level,
-    const QuicAckFrame& ack_frame,
-    QuicTime ack_receive_time,
-    QuicPacketNumber /*largest_observed*/,
-    bool /*rtt_updated*/,
+    QuicPacketNumber /*ack_packet_number*/, EncryptionLevel ack_decrypted_level,
+    const QuicAckFrame& ack_frame, QuicTime ack_receive_time,
+    QuicPacketNumber /*largest_observed*/, bool /*rtt_updated*/,
     QuicPacketNumber /*least_unacked_sent_packet*/) {
   quic_trace::Event* event = trace_.add_events();
   event->set_time_us(ConvertTimestampToRecordedFormat(ack_receive_time));
@@ -272,9 +265,7 @@ void QuicTraceVisitor::OnWindowUpdateFrame(const QuicWindowUpdateFrame& frame,
   event->set_event_type(quic_trace::PACKET_RECEIVED);
   event->set_packet_number(connection_->GetLargestReceivedPacket().ToUint64());
 
-  // TODO(vasilvv): consider removing this copy.
-  QuicWindowUpdateFrame copy_of_update = frame;
-  PopulateFrameInfo(QuicFrame(&copy_of_update), event->add_frames());
+  PopulateFrameInfo(QuicFrame(frame), event->add_frames());
 }
 
 void QuicTraceVisitor::OnSuccessfulVersionNegotiation(

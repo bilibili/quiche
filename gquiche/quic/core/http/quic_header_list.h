@@ -14,7 +14,6 @@
 #include "gquiche/quic/platform/api/quic_bug_tracker.h"
 #include "gquiche/quic/platform/api/quic_export.h"
 #include "gquiche/common/quiche_circular_deque.h"
-#include "gquiche/spdy/core/spdy_header_block.h"
 #include "gquiche/spdy/core/spdy_headers_handler_interface.h"
 
 namespace quic {

@@ -2,17 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "gquiche/quic/core/quic_stream_send_buffer.h"
+
 #include <algorithm>
 
 #include "gquiche/quic/core/quic_data_writer.h"
 #include "gquiche/quic/core/quic_interval.h"
-#include "gquiche/quic/core/quic_stream_send_buffer.h"
 #include "gquiche/quic/core/quic_utils.h"
 #include "gquiche/quic/platform/api/quic_bug_tracker.h"
 #include "gquiche/quic/platform/api/quic_flag_utils.h"
 #include "gquiche/quic/platform/api/quic_flags.h"
 #include "gquiche/quic/platform/api/quic_logging.h"
-#include "gquiche/quic/platform/api/quic_mem_slice.h"
+#include "gquiche/common/platform/api/quiche_mem_slice.h"
 
 namespace quic {
 
@@ -26,7 +27,8 @@ struct CompareOffset {
 
 }  // namespace
 
-BufferedSlice::BufferedSlice(QuicMemSlice mem_slice, QuicStreamOffset offset)
+BufferedSlice::BufferedSlice(quiche::QuicheMemSlice mem_slice,
+                             QuicStreamOffset offset)
     : slice(std::move(mem_slice)), offset(offset) {}
 
 BufferedSlice::BufferedSlice(BufferedSlice&& other) = default;
@@ -45,7 +47,8 @@ bool StreamPendingRetransmission::operator==(
   return offset == other.offset && length == other.length;
 }
 
-QuicStreamSendBuffer::QuicStreamSendBuffer(QuicBufferAllocator* allocator)
+QuicStreamSendBuffer::QuicStreamSendBuffer(
+    quiche::QuicheBufferAllocator* allocator)
     : current_end_offset_(0),
       stream_offset_(0),
       allocator_(allocator),
@@ -55,26 +58,24 @@ QuicStreamSendBuffer::QuicStreamSendBuffer(QuicBufferAllocator* allocator)
 
 QuicStreamSendBuffer::~QuicStreamSendBuffer() {}
 
-void QuicStreamSendBuffer::SaveStreamData(const struct iovec* iov,
-                                          int iov_count,
-                                          size_t iov_offset,
-                                          QuicByteCount data_length) {
-  QUICHE_DCHECK_LT(0u, data_length);
+void QuicStreamSendBuffer::SaveStreamData(absl::string_view data) {
+  QUICHE_DCHECK(!data.empty());
+
   // Latch the maximum data slice size.
   const QuicByteCount max_data_slice_size =
       GetQuicFlag(FLAGS_quic_send_buffer_max_data_slice_size);
-  while (data_length > 0) {
-    size_t slice_len = std::min(data_length, max_data_slice_size);
-    QuicUniqueBufferPtr buffer = MakeUniqueBuffer(allocator_, slice_len);
-    QuicUtils::CopyToBuffer(iov, iov_count, iov_offset, slice_len,
-                            buffer.get());
-    SaveMemSlice(QuicMemSlice(std::move(buffer), slice_len));
-    data_length -= slice_len;
-    iov_offset += slice_len;
+  while (!data.empty()) {
+    auto slice_len = std::min<absl::string_view::size_type>(
+        data.length(), max_data_slice_size);
+    auto buffer =
+        quiche::QuicheBuffer::Copy(allocator_, data.substr(0, slice_len));
+    SaveMemSlice(quiche::QuicheMemSlice(std::move(buffer)));
+
+    data = data.substr(slice_len);
   }
 }
 
-void QuicStreamSendBuffer::SaveMemSlice(QuicMemSlice slice) {
+void QuicStreamSendBuffer::SaveMemSlice(quiche::QuicheMemSlice slice) {
   QUIC_DVLOG(2) << "Save slice offset " << stream_offset_ << " length "
                 << slice.length();
   if (slice.empty()) {
@@ -93,9 +94,9 @@ void QuicStreamSendBuffer::SaveMemSlice(QuicMemSlice slice) {
 }
 
 QuicByteCount QuicStreamSendBuffer::SaveMemSliceSpan(
-    absl::Span<QuicMemSlice> span) {
+    absl::Span<quiche::QuicheMemSlice> span) {
   QuicByteCount total = 0;
-  for (QuicMemSlice& slice : span) {
+  for (quiche::QuicheMemSlice& slice : span) {
     if (slice.length() == 0) {
       // Skip empty slices.
       continue;
@@ -145,8 +146,7 @@ bool QuicStreamSendBuffer::WriteStreamData(QuicStreamOffset offset,
 }
 
 bool QuicStreamSendBuffer::OnStreamDataAcked(
-    QuicStreamOffset offset,
-    QuicByteCount data_length,
+    QuicStreamOffset offset, QuicByteCount data_length,
     QuicByteCount* newly_acked_length) {
   *newly_acked_length = 0;
   if (data_length == 0) {
@@ -211,8 +211,7 @@ void QuicStreamSendBuffer::OnStreamDataLost(QuicStreamOffset offset,
 }
 
 void QuicStreamSendBuffer::OnStreamDataRetransmitted(
-    QuicStreamOffset offset,
-    QuicByteCount data_length) {
+    QuicStreamOffset offset, QuicByteCount data_length) {
   if (data_length == 0) {
     return;
   }
@@ -284,14 +283,11 @@ void QuicStreamSendBuffer::CleanUpBufferedSlices() {
 }
 
 bool QuicStreamSendBuffer::IsStreamDataOutstanding(
-    QuicStreamOffset offset,
-    QuicByteCount data_length) const {
+    QuicStreamOffset offset, QuicByteCount data_length) const {
   return data_length > 0 &&
          !bytes_acked_.Contains(offset, offset + data_length);
 }
 
-size_t QuicStreamSendBuffer::size() const {
-  return interval_deque_.Size();
-}
+size_t QuicStreamSendBuffer::size() const { return interval_deque_.Size(); }
 
 }  // namespace quic

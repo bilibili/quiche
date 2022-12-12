@@ -17,8 +17,7 @@
 namespace quic {
 
 bool FindMutualQuicTag(const QuicTagVector& our_tags,
-                       const QuicTagVector& their_tags,
-                       QuicTag* out_result,
+                       const QuicTagVector& their_tags, QuicTag* out_result,
                        size_t* out_index) {
   const size_t num_our_tags = our_tags.size();
   const size_t num_their_tags = their_tags.size();
@@ -66,7 +65,7 @@ std::string QuicTagToString(QuicTag tag) {
       reinterpret_cast<const char*>(&orig_tag), sizeof(orig_tag)));
 }
 
-uint32_t MakeQuicTag(char a, char b, char c, char d) {
+uint32_t MakeQuicTag(uint8_t a, uint8_t b, uint8_t c, uint8_t d) {
   return static_cast<uint32_t>(a) | static_cast<uint32_t>(b) << 8 |
          static_cast<uint32_t>(c) << 16 | static_cast<uint32_t>(d) << 24;
 }

@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
@@ -18,6 +19,9 @@ namespace adapter {
 // data" pointer, and invokes the callbacks according to HTTP/2 events received.
 class QUICHE_EXPORT_PRIVATE CallbackVisitor : public Http2VisitorInterface {
  public:
+  // Called when the visitor receives a close event for `stream_id`.
+  using StreamCloseListener = std::function<void(Http2StreamId stream_id)>;
+
   explicit CallbackVisitor(Perspective perspective,
                            const nghttp2_session_callbacks& callbacks,
                            void* user_data);
@@ -35,17 +39,18 @@ class QUICHE_EXPORT_PRIVATE CallbackVisitor : public Http2VisitorInterface {
                                    absl::string_view name,
                                    absl::string_view value) override;
   bool OnEndHeadersForStream(Http2StreamId stream_id) override;
+  bool OnDataPaddingLength(Http2StreamId stream_id,
+                           size_t padding_length) override;
   bool OnBeginDataForStream(Http2StreamId stream_id,
                             size_t payload_length) override;
   bool OnDataForStream(Http2StreamId stream_id,
                        absl::string_view data) override;
   void OnEndStream(Http2StreamId stream_id) override;
   void OnRstStream(Http2StreamId stream_id, Http2ErrorCode error_code) override;
-  void OnCloseStream(Http2StreamId stream_id,
+  bool OnCloseStream(Http2StreamId stream_id,
                      Http2ErrorCode error_code) override;
   void OnPriorityForStream(Http2StreamId stream_id,
-                           Http2StreamId parent_stream_id,
-                           int weight,
+                           Http2StreamId parent_stream_id, int weight,
                            bool exclusive) override;
   void OnPing(Http2PingId ping_id, bool is_ack) override;
   void OnPushPromiseForStream(Http2StreamId stream_id,
@@ -67,6 +72,12 @@ class QUICHE_EXPORT_PRIVATE CallbackVisitor : public Http2VisitorInterface {
   bool OnMetadataEndForStream(Http2StreamId stream_id) override;
   void OnErrorDebug(absl::string_view message) override;
 
+  size_t stream_map_size() const { return stream_map_.size(); }
+
+  void set_stream_close_listener(StreamCloseListener stream_close_listener) {
+    stream_close_listener_ = std::move(stream_close_listener);
+  }
+
  private:
   struct QUICHE_EXPORT_PRIVATE StreamInfo {
     bool before_sent_headers = false;
@@ -74,14 +85,18 @@ class QUICHE_EXPORT_PRIVATE CallbackVisitor : public Http2VisitorInterface {
     bool received_headers = false;
   };
 
-  using StreamInfoMap =
-      absl::flat_hash_map<Http2StreamId, std::unique_ptr<StreamInfo>>;
+  using StreamInfoMap = absl::flat_hash_map<Http2StreamId, StreamInfo>;
 
   void PopulateFrame(nghttp2_frame& frame, uint8_t frame_type,
                      Http2StreamId stream_id, size_t length, uint8_t flags,
                      uint32_t error_code, bool sent_headers);
+
   // Creates the StreamInfoMap entry if it doesn't exist.
   StreamInfoMap::iterator GetStreamInfo(Http2StreamId stream_id);
+
+  StreamInfoMap stream_map_;
+
+  StreamCloseListener stream_close_listener_;
 
   Perspective perspective_;
   nghttp2_session_callbacks_unique_ptr callbacks_;
@@ -90,8 +105,6 @@ class QUICHE_EXPORT_PRIVATE CallbackVisitor : public Http2VisitorInterface {
   nghttp2_frame current_frame_;
   std::vector<nghttp2_settings_entry> settings_;
   size_t remaining_data_ = 0;
-
-  StreamInfoMap stream_map_;
 };
 
 }  // namespace adapter

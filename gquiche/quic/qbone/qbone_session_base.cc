@@ -10,7 +10,6 @@
 #include <utility>
 
 #include "absl/strings/string_view.h"
-#include "gquiche/quic/core/quic_buffer_allocator.h"
 #include "gquiche/quic/core/quic_data_reader.h"
 #include "gquiche/quic/core/quic_types.h"
 #include "gquiche/quic/platform/api/quic_exported_stats.h"
@@ -18,11 +17,13 @@
 #include "gquiche/quic/platform/api/quic_testvalue.h"
 #include "gquiche/quic/qbone/platform/icmp_packet.h"
 #include "gquiche/quic/qbone/qbone_constants.h"
+#include "gquiche/common/platform/api/quiche_command_line_flags.h"
+#include "gquiche/common/platform/api/quiche_logging.h"
+#include "gquiche/common/platform/api/quiche_mem_slice.h"
+#include "gquiche/common/quiche_buffer_allocator.h"
 
-DEFINE_QUIC_COMMAND_LINE_FLAG(
-    bool,
-    qbone_close_ephemeral_frames,
-    true,
+DEFINE_QUICHE_COMMAND_LINE_FLAG(
+    bool, qbone_close_ephemeral_frames, true,
     "If true, we'll call CloseStream even when we receive ephemeral frames.");
 
 namespace quic {
@@ -31,15 +32,10 @@ namespace quic {
   (perspective() == Perspective::IS_SERVER ? "Server: " : "Client: ")
 
 QboneSessionBase::QboneSessionBase(
-    QuicConnection* connection,
-    Visitor* owner,
-    const QuicConfig& config,
+    QuicConnection* connection, Visitor* owner, const QuicConfig& config,
     const ParsedQuicVersionVector& supported_versions,
     QbonePacketWriter* writer)
-    : QuicSession(connection,
-                  owner,
-                  config,
-                  supported_versions,
+    : QuicSession(connection, owner, config, supported_versions,
                   /*num_expected_unidirectional_static_streams = */ 0) {
   set_writer(writer);
   const uint32_t max_streams =
@@ -79,7 +75,7 @@ void QboneSessionBase::OnStreamFrame(const QuicStreamFrame& frame) {
     flow_controller()->AddBytesConsumed(frame.data_length);
     // TODO(b/147817422): Add a counter for how many streams were actually
     // closed here.
-    if (GetQuicFlag(FLAGS_qbone_close_ephemeral_frames)) {
+    if (quiche::GetQuicheCommandLineFlag(FLAGS_qbone_close_ephemeral_frames)) {
       ResetStream(frame.stream_id, QUIC_STREAM_CANCELLED);
     }
     return;
@@ -97,7 +93,7 @@ QuicStream* QboneSessionBase::CreateIncomingStream(QuicStreamId id) {
 }
 
 QuicStream* QboneSessionBase::CreateIncomingStream(PendingStream* /*pending*/) {
-  QUIC_NOTREACHED();
+  QUICHE_NOTREACHED();
   return nullptr;
 }
 
@@ -108,7 +104,7 @@ bool QboneSessionBase::ShouldKeepConnectionAlive() const {
 
 std::unique_ptr<QuicStream> QboneSessionBase::CreateDataStream(
     QuicStreamId id) {
-  if (crypto_stream_ == nullptr || !crypto_stream_->encryption_established()) {
+  if (!IsEncryptionEstablished()) {
     // Encryption not active so no stream created
     return nullptr;
   }
@@ -140,7 +136,7 @@ void QboneSessionBase::SendPacketToPeer(absl::string_view packet) {
   }
 
   if (send_packets_as_messages_) {
-    QuicMemSlice slice(QuicBuffer::Copy(
+    quiche::QuicheMemSlice slice(quiche::QuicheBuffer::Copy(
         connection()->helper()->GetStreamSendBufferAllocator(), packet));
     switch (SendMessage(absl::MakeSpan(&slice, 1), /*flush=*/true).status) {
       case MESSAGE_STATUS_SUCCESS:

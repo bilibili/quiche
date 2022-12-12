@@ -4,16 +4,16 @@
 
 #include "gquiche/epoll_server/simple_epoll_server.h"
 
-#include <errno.h>   // for errno and strerror_r
+#include <errno.h>   // for errno
 #include <stdlib.h>  // for abort
+#include <string.h>  // for strerror_r
 #include <unistd.h>  // For read, pipe, close and write.
 
 #include <algorithm>
 #include <utility>
-#include <cstring>
 
+#include "absl/time/clock.h"
 #include "gquiche/epoll_server/platform/api/epoll_bug.h"
-#include "gquiche/epoll_server/platform/api/epoll_time.h"
 
 // Design notes: An efficient implementation of ready list has the following
 // desirable properties:
@@ -485,7 +485,9 @@ void SimpleEpollServer::Wake() {
   QUICHE_DCHECK_EQ(rv, 1);
 }
 
-int64_t SimpleEpollServer::NowInUsec() const { return WallTimeNowInUsec(); }
+int64_t SimpleEpollServer::NowInUsec() const {
+  return absl::GetCurrentTimeNanos() / 1000;
+}
 
 int64_t SimpleEpollServer::ApproximateNowInUsec() const {
   if (recorded_now_in_us_ != 0) {

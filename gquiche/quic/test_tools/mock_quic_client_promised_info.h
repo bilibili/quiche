@@ -10,6 +10,7 @@
 #include "gquiche/quic/core/http/quic_client_promised_info.h"
 #include "gquiche/quic/core/quic_packets.h"
 #include "gquiche/quic/platform/api/quic_test.h"
+#include "gquiche/spdy/core/http2_header_block.h"
 
 namespace quic {
 namespace test {
@@ -17,13 +18,11 @@ namespace test {
 class MockQuicClientPromisedInfo : public QuicClientPromisedInfo {
  public:
   MockQuicClientPromisedInfo(QuicSpdyClientSessionBase* session,
-                             QuicStreamId id,
-                             std::string url);
+                             QuicStreamId id, std::string url);
   ~MockQuicClientPromisedInfo() override;
 
-  MOCK_METHOD(QuicAsyncStatus,
-              HandleClientRequest,
-              (const spdy::SpdyHeaderBlock& headers,
+  MOCK_METHOD(QuicAsyncStatus, HandleClientRequest,
+              (const spdy::Http2HeaderBlock& headers,
                QuicClientPushPromiseIndex::Delegate*),
               (override));
 };

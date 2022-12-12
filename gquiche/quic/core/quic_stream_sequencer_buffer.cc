@@ -50,9 +50,7 @@ QuicStreamSequencerBuffer::QuicStreamSequencerBuffer(size_t max_capacity_bytes)
   Clear();
 }
 
-QuicStreamSequencerBuffer::~QuicStreamSequencerBuffer() {
-  Clear();
-}
+QuicStreamSequencerBuffer::~QuicStreamSequencerBuffer() { Clear(); }
 
 void QuicStreamSequencerBuffer::Clear() {
   if (blocks_ != nullptr) {
@@ -109,10 +107,8 @@ void QuicStreamSequencerBuffer::MaybeAddMoreBlocks(
 }
 
 QuicErrorCode QuicStreamSequencerBuffer::OnStreamData(
-    QuicStreamOffset starting_offset,
-    absl::string_view data,
-    size_t* const bytes_buffered,
-    std::string* error_details) {
+    QuicStreamOffset starting_offset, absl::string_view data,
+    size_t* const bytes_buffered, std::string* error_details) {
   *bytes_buffered = 0;
   size_t size = data.size();
   if (size == 0) {
@@ -124,9 +120,6 @@ QuicErrorCode QuicStreamSequencerBuffer::OnStreamData(
       starting_offset + size < starting_offset) {
     *error_details = "Received data beyond available range.";
     return QUIC_INTERNAL_ERROR;
-  }
-  if (!delay_allocation_until_new_data_) {
-    MaybeAddMoreBlocks(starting_offset + size);
   }
 
   if (bytes_received_.Empty() ||
@@ -142,11 +135,7 @@ QuicErrorCode QuicStreamSequencerBuffer::OnStreamData(
       *error_details = "Too many data intervals received for this stream.";
       return QUIC_TOO_MANY_STREAM_DATA_INTERVALS;
     }
-    if (delay_allocation_until_new_data_) {
-      QUIC_RELOADABLE_FLAG_COUNT_N(
-          quic_delay_sequencer_buffer_allocation_until_new_data, 1, 2);
-      MaybeAddMoreBlocks(starting_offset + size);
-    }
+    MaybeAddMoreBlocks(starting_offset + size);
 
     size_t bytes_copy = 0;
     if (!CopyStreamData(starting_offset, data, &bytes_copy, error_details)) {
@@ -170,11 +159,7 @@ QuicErrorCode QuicStreamSequencerBuffer::OnStreamData(
     *error_details = "Too many data intervals received for this stream.";
     return QUIC_TOO_MANY_STREAM_DATA_INTERVALS;
   }
-  if (delay_allocation_until_new_data_) {
-    QUIC_RELOADABLE_FLAG_COUNT_N(
-        quic_delay_sequencer_buffer_allocation_until_new_data, 2, 2);
-    MaybeAddMoreBlocks(starting_offset + size);
-  }
+  MaybeAddMoreBlocks(starting_offset + size);
   for (const auto& interval : newly_received) {
     const QuicStreamOffset copy_offset = interval.min();
     const QuicByteCount copy_length = interval.max() - interval.min();

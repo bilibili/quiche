@@ -15,12 +15,12 @@
 #include <cstdint>
 #include <string>
 
+#include "absl/base/macros.h"
 #include "gquiche/http2/decoder/decode_buffer.h"
 #include "gquiche/http2/decoder/decode_status.h"
 #include "gquiche/http2/hpack/varint/hpack_varint_decoder.h"
-#include "gquiche/http2/platform/api/http2_logging.h"
-#include "gquiche/http2/platform/api/http2_macros.h"
 #include "gquiche/common/platform/api/quiche_export.h"
+#include "gquiche/common/platform/api/quiche_logging.h"
 
 namespace http2 {
 
@@ -81,8 +81,8 @@ class QUICHE_EXPORT_PRIVATE HpackStringDecoder {
     while (true) {
       switch (state_) {
         case kStartDecodingLength:
-          HTTP2_DVLOG(2) << "kStartDecodingLength: db->Remaining="
-                         << db->Remaining();
+          QUICHE_DVLOG(2) << "kStartDecodingLength: db->Remaining="
+                          << db->Remaining();
           if (!StartDecodingLength(db, cb, &status)) {
             // The length is split across decode buffers.
             return status;
@@ -96,16 +96,16 @@ class QUICHE_EXPORT_PRIVATE HpackStringDecoder {
           // buffer, and hence this fall through skips another trip through the
           // switch above and more importantly skips setting the state_ variable
           // again in those cases where we don't need it.
-          HTTP2_FALLTHROUGH;
+          ABSL_FALLTHROUGH_INTENDED;
 
         case kDecodingString:
-          HTTP2_DVLOG(2) << "kDecodingString: db->Remaining=" << db->Remaining()
-                         << "    remaining_=" << remaining_;
+          QUICHE_DVLOG(2) << "kDecodingString: db->Remaining="
+                          << db->Remaining() << "    remaining_=" << remaining_;
           return DecodeString(db, cb);
 
         case kResumeDecodingLength:
-          HTTP2_DVLOG(2) << "kResumeDecodingLength: db->Remaining="
-                         << db->Remaining();
+          QUICHE_DVLOG(2) << "kResumeDecodingLength: db->Remaining="
+                          << db->Remaining();
           if (!ResumeDecodingLength(db, cb, &status)) {
             return status;
           }
@@ -124,8 +124,7 @@ class QUICHE_EXPORT_PRIVATE HpackStringDecoder {
   // If the length is not fully decoded, case state_ is set appropriately
   // for the next call to Resume.
   template <class Listener>
-  bool StartDecodingLength(DecodeBuffer* db,
-                           Listener* cb,
+  bool StartDecodingLength(DecodeBuffer* db, Listener* cb,
                            DecodeStatus* status) {
     if (db->Empty()) {
       *status = DecodeStatus::kDecodeInProgress;
@@ -151,8 +150,7 @@ class QUICHE_EXPORT_PRIVATE HpackStringDecoder {
   // If the length is not fully decoded, case state_ is set appropriately
   // for the next call to Resume.
   template <class Listener>
-  bool ResumeDecodingLength(DecodeBuffer* db,
-                            Listener* cb,
+  bool ResumeDecodingLength(DecodeBuffer* db, Listener* cb,
                             DecodeStatus* status) {
     QUICHE_DCHECK_EQ(state_, kResumeDecodingLength);
     *status = length_decoder_.Resume(db);

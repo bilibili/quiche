@@ -16,6 +16,7 @@
 #include "gquiche/quic/core/quic_connection_context.h"
 #include "gquiche/quic/core/quic_one_block_arena.h"
 #include "gquiche/quic/core/quic_packet_writer.h"
+#include "gquiche/quic/core/quic_time.h"
 #include "gquiche/quic/core/quic_types.h"
 #include "gquiche/quic/platform/api/quic_export.h"
 #include "gquiche/quic/platform/api/quic_socket_address.h"
@@ -56,8 +57,7 @@ class QUIC_EXPORT_PRIVATE QuicPathValidationContext {
 
  private:
   QUIC_EXPORT_PRIVATE friend std::ostream& operator<<(
-      std::ostream& os,
-      const QuicPathValidationContext& context);
+      std::ostream& os, const QuicPathValidationContext& context);
 
   QuicSocketAddress self_address_;
   // The address to send PATH_CHALLENGE.
@@ -101,8 +101,11 @@ class QUIC_EXPORT_PRIVATE QuicPathValidator {
    public:
     virtual ~ResultDelegate() = default;
 
+    // Called when a PATH_RESPONSE is received with a matching PATH_CHALLANGE.
+    // |start_time| is the time when the matching PATH_CHALLANGE was sent.
     virtual void OnPathValidationSuccess(
-        std::unique_ptr<QuicPathValidationContext> context) = 0;
+        std::unique_ptr<QuicPathValidationContext> context,
+        QuicTime start_time) = 0;
 
     virtual void OnPathValidationFailure(
         std::unique_ptr<QuicPathValidationContext> context) = 0;
@@ -110,7 +113,7 @@ class QUIC_EXPORT_PRIVATE QuicPathValidator {
 
   QuicPathValidator(QuicAlarmFactory* alarm_factory, QuicConnectionArena* arena,
                     SendDelegate* delegate, QuicRandom* random,
-                    QuicConnectionContext* context);
+                    const QuicClock* clock, QuicConnectionContext* context);
 
   // Send PATH_CHALLENGE and start the retry timer.
   void StartPathValidation(std::unique_ptr<QuicPathValidationContext> context,
@@ -145,10 +148,17 @@ class QUIC_EXPORT_PRIVATE QuicPathValidator {
 
   void ResetPathValidation();
 
+  struct QUIC_NO_EXPORT ProbingData {
+    explicit ProbingData(QuicTime send_time) : send_time(send_time) {}
+    QuicPathFrameBuffer frame_buffer;
+    QuicTime send_time;
+  };
+
   // Has at most 3 entries due to validation timeout.
-  absl::InlinedVector<QuicPathFrameBuffer, 3> probing_data_;
+  absl::InlinedVector<ProbingData, 3> probing_data_;
   SendDelegate* send_delegate_;
   QuicRandom* random_;
+  const QuicClock* clock_;
   std::unique_ptr<QuicPathValidationContext> path_context_;
   std::unique_ptr<ResultDelegate> result_delegate_;
   QuicArenaScopedPtr<QuicAlarm> retry_timer_;

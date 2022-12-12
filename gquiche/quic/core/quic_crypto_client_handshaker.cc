@@ -11,9 +11,11 @@
 #include "gquiche/quic/core/crypto/crypto_protocol.h"
 #include "gquiche/quic/core/crypto/crypto_utils.h"
 #include "gquiche/quic/core/quic_session.h"
+#include "gquiche/quic/core/quic_types.h"
 #include "gquiche/quic/platform/api/quic_client_stats.h"
 #include "gquiche/quic/platform/api/quic_flags.h"
 #include "gquiche/quic/platform/api/quic_logging.h"
+#include "gquiche/common/platform/api/quiche_logging.h"
 
 namespace quic {
 
@@ -25,8 +27,7 @@ QuicCryptoClientHandshaker::ProofVerifierCallbackImpl::
     ~ProofVerifierCallbackImpl() {}
 
 void QuicCryptoClientHandshaker::ProofVerifierCallbackImpl::Run(
-    bool ok,
-    const std::string& error_details,
+    bool ok, const std::string& error_details,
     std::unique_ptr<ProofVerifyDetails>* details) {
   if (parent_ == nullptr) {
     return;
@@ -47,10 +48,8 @@ void QuicCryptoClientHandshaker::ProofVerifierCallbackImpl::Cancel() {
 }
 
 QuicCryptoClientHandshaker::QuicCryptoClientHandshaker(
-    const QuicServerId& server_id,
-    QuicCryptoClientStream* stream,
-    QuicSession* session,
-    std::unique_ptr<ProofVerifyContext> verify_context,
+    const QuicServerId& server_id, QuicCryptoClientStream* stream,
+    QuicSession* session, std::unique_ptr<ProofVerifyContext> verify_context,
     QuicCryptoClientConfig* crypto_config,
     QuicCryptoClientStream::ProofHandler* proof_handler)
     : QuicCryptoHandshaker(stream, session),
@@ -141,12 +140,25 @@ int QuicCryptoClientHandshaker::num_scup_messages_received() const {
   return num_scup_messages_received_;
 }
 
-std::string QuicCryptoClientHandshaker::chlo_hash() const {
-  return chlo_hash_;
-}
+std::string QuicCryptoClientHandshaker::chlo_hash() const { return chlo_hash_; }
 
 bool QuicCryptoClientHandshaker::encryption_established() const {
   return encryption_established_;
+}
+
+bool QuicCryptoClientHandshaker::IsCryptoFrameExpectedForEncryptionLevel(
+    EncryptionLevel /*level*/) const {
+  return true;
+}
+
+EncryptionLevel
+QuicCryptoClientHandshaker::GetEncryptionLevelToSendCryptoDataOfSpace(
+    PacketNumberSpace space) const {
+  if (space == INITIAL_DATA) {
+    return ENCRYPTION_INITIAL;
+  }
+  QUICHE_DCHECK(false);
+  return NUM_ENCRYPTION_LEVELS;
 }
 
 bool QuicCryptoClientHandshaker::one_rtt_keys_available() const {
@@ -180,10 +192,6 @@ size_t QuicCryptoClientHandshaker::BufferSizeLimitForLevel(
   return QuicCryptoHandshaker::BufferSizeLimitForLevel(level);
 }
 
-bool QuicCryptoClientHandshaker::KeyUpdateSupportedLocally() const {
-  return false;
-}
-
 std::unique_ptr<QuicDecrypter>
 QuicCryptoClientHandshaker::AdvanceKeysAndCreateCurrentOneRttDecrypter() {
   // Key update is only defined in QUIC+TLS.
@@ -199,8 +207,7 @@ QuicCryptoClientHandshaker::CreateCurrentOneRttEncrypter() {
 }
 
 void QuicCryptoClientHandshaker::OnConnectionClosed(
-    QuicErrorCode /*error*/,
-    ConnectionCloseSource /*source*/) {
+    QuicErrorCode /*error*/, ConnectionCloseSource /*source*/) {
   next_state_ = STATE_CONNECTION_CLOSED;
 }
 
@@ -268,7 +275,7 @@ void QuicCryptoClientHandshaker::DoHandshakeLoop(
         DoInitializeServerConfigUpdate(cached);
         break;
       case STATE_NONE:
-        QUIC_NOTREACHED();
+        QUICHE_NOTREACHED();
         return;
       case STATE_CONNECTION_CLOSED:
         rv = QUIC_FAILURE;

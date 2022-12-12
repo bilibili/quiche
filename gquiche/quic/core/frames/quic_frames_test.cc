@@ -92,16 +92,15 @@ TEST_F(QuicFramesTest, RstStreamFrameToString) {
 }
 
 TEST_F(QuicFramesTest, StopSendingFrameToString) {
-  QuicStopSendingFrame stop_sending;
-  QuicFrame frame(&stop_sending);
+  QuicFrame frame((QuicStopSendingFrame()));
   SetControlFrameId(1, &frame);
   EXPECT_EQ(1u, GetControlFrameId(frame));
-  stop_sending.stream_id = 321;
-  stop_sending.error_code = QUIC_STREAM_CANCELLED;
-  stop_sending.ietf_error_code =
+  frame.stop_sending_frame.stream_id = 321;
+  frame.stop_sending_frame.error_code = QUIC_STREAM_CANCELLED;
+  frame.stop_sending_frame.ietf_error_code =
       static_cast<uint64_t>(QuicHttp3ErrorCode::REQUEST_CANCELLED);
   std::ostringstream stream;
-  stream << stop_sending;
+  stream << frame.stop_sending_frame;
   EXPECT_EQ(
       "{ control_frame_id: 1, stream_id: 321, error_code: 6, ietf_error_code: "
       "268 }\n",
@@ -236,28 +235,27 @@ TEST_F(QuicFramesTest, GoAwayFrameToString) {
 }
 
 TEST_F(QuicFramesTest, WindowUpdateFrameToString) {
-  QuicWindowUpdateFrame window_update;
-  QuicFrame frame(&window_update);
+  QuicFrame frame((QuicWindowUpdateFrame()));
   SetControlFrameId(3, &frame);
   EXPECT_EQ(3u, GetControlFrameId(frame));
   std::ostringstream stream;
-  window_update.stream_id = 1;
-  window_update.max_data = 2;
-  stream << window_update;
+  frame.window_update_frame.stream_id = 1;
+  frame.window_update_frame.max_data = 2;
+  stream << frame.window_update_frame;
   EXPECT_EQ("{ control_frame_id: 3, stream_id: 1, max_data: 2 }\n",
             stream.str());
   EXPECT_TRUE(IsControlFrame(frame.type));
 }
 
 TEST_F(QuicFramesTest, BlockedFrameToString) {
-  QuicBlockedFrame blocked;
-  QuicFrame frame(&blocked);
+  QuicFrame frame((QuicBlockedFrame()));
   SetControlFrameId(4, &frame);
   EXPECT_EQ(4u, GetControlFrameId(frame));
-  blocked.stream_id = 1;
+  frame.blocked_frame.stream_id = 1;
+  frame.blocked_frame.offset = 2;
   std::ostringstream stream;
-  stream << blocked;
-  EXPECT_EQ("{ control_frame_id: 4, stream_id: 1 }\n", stream.str());
+  stream << frame.blocked_frame;
+  EXPECT_EQ("{ control_frame_id: 4, stream_id: 1, offset: 2 }\n", stream.str());
   EXPECT_TRUE(IsControlFrame(frame.type));
 }
 
@@ -562,10 +560,10 @@ TEST_F(QuicFramesTest, CopyQuicFrames) {
         frames.push_back(QuicFrame(new QuicGoAwayFrame()));
         break;
       case WINDOW_UPDATE_FRAME:
-        frames.push_back(QuicFrame(new QuicWindowUpdateFrame()));
+        frames.push_back(QuicFrame(QuicWindowUpdateFrame()));
         break;
       case BLOCKED_FRAME:
-        frames.push_back(QuicFrame(new QuicBlockedFrame()));
+        frames.push_back(QuicFrame(QuicBlockedFrame()));
         break;
       case STOP_WAITING_FRAME:
         frames.push_back(QuicFrame(QuicStopWaitingFrame()));
@@ -595,13 +593,13 @@ TEST_F(QuicFramesTest, CopyQuicFrames) {
         frames.push_back(QuicFrame(QuicStreamsBlockedFrame()));
         break;
       case PATH_RESPONSE_FRAME:
-        frames.push_back(QuicFrame(new QuicPathResponseFrame()));
+        frames.push_back(QuicFrame(QuicPathResponseFrame()));
         break;
       case PATH_CHALLENGE_FRAME:
-        frames.push_back(QuicFrame(new QuicPathChallengeFrame()));
+        frames.push_back(QuicFrame(QuicPathChallengeFrame()));
         break;
       case STOP_SENDING_FRAME:
-        frames.push_back(QuicFrame(new QuicStopSendingFrame()));
+        frames.push_back(QuicFrame(QuicStopSendingFrame()));
         break;
       case MESSAGE_FRAME:
         frames.push_back(QuicFrame(message_frame));
@@ -625,20 +623,34 @@ TEST_F(QuicFramesTest, CopyQuicFrames) {
     }
   }
 
-  QuicFrames copy = CopyQuicFrames(SimpleBufferAllocator::Get(), frames);
+  QuicFrames copy =
+      CopyQuicFrames(quiche::SimpleBufferAllocator::Get(), frames);
   ASSERT_EQ(NUM_FRAME_TYPES, copy.size());
   for (uint8_t i = 0; i < NUM_FRAME_TYPES; ++i) {
     EXPECT_EQ(i, copy[i].type);
-    if (i != MESSAGE_FRAME) {
-      continue;
+    if (i == MESSAGE_FRAME) {
+      // Verify message frame is correctly copied.
+      EXPECT_EQ(1u, copy[i].message_frame->message_id);
+      EXPECT_EQ(nullptr, copy[i].message_frame->data);
+      EXPECT_EQ(7u, copy[i].message_frame->message_length);
+      ASSERT_EQ(1u, copy[i].message_frame->message_data.size());
+      EXPECT_EQ(0, memcmp(copy[i].message_frame->message_data[0].data(),
+                          frames[i].message_frame->message_data[0].data(), 7));
+    } else if (i == PATH_CHALLENGE_FRAME) {
+      EXPECT_EQ(copy[i].path_challenge_frame.control_frame_id,
+                frames[i].path_challenge_frame.control_frame_id);
+      EXPECT_EQ(memcmp(&copy[i].path_challenge_frame.data_buffer,
+                       &frames[i].path_challenge_frame.data_buffer,
+                       copy[i].path_challenge_frame.data_buffer.size()),
+                0);
+    } else if (i == PATH_RESPONSE_FRAME) {
+      EXPECT_EQ(copy[i].path_response_frame.control_frame_id,
+                frames[i].path_response_frame.control_frame_id);
+      EXPECT_EQ(memcmp(&copy[i].path_response_frame.data_buffer,
+                       &frames[i].path_response_frame.data_buffer,
+                       copy[i].path_response_frame.data_buffer.size()),
+                0);
     }
-    // Verify message frame is correctly copied.
-    EXPECT_EQ(1u, copy[i].message_frame->message_id);
-    EXPECT_EQ(nullptr, copy[i].message_frame->data);
-    EXPECT_EQ(7u, copy[i].message_frame->message_length);
-    ASSERT_EQ(1u, copy[i].message_frame->message_data.size());
-    EXPECT_EQ(0, memcmp(copy[i].message_frame->message_data[0].data(),
-                        frames[i].message_frame->message_data[0].data(), 7));
   }
   DeleteFrames(&frames);
   DeleteFrames(&copy);

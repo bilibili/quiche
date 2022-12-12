@@ -7,13 +7,13 @@
 #include "absl/strings/string_view.h"
 #include "gquiche/quic/core/qpack/qpack_decoder.h"
 #include "gquiche/quic/core/qpack/qpack_header_table.h"
+#include "gquiche/quic/platform/api/quic_bug_tracker.h"
+#include "gquiche/quic/platform/api/quic_flags.h"
 
 namespace quic {
 
 QpackDecodedHeadersAccumulator::QpackDecodedHeadersAccumulator(
-    QuicStreamId id,
-    QpackDecoder* qpack_decoder,
-    Visitor* visitor,
+    QuicStreamId id, QpackDecoder* qpack_decoder, Visitor* visitor,
     size_t max_header_list_size)
     : decoder_(qpack_decoder->CreateProgressiveDecoder(id, this)),
       visitor_(visitor),
@@ -87,6 +87,11 @@ void QpackDecodedHeadersAccumulator::Decode(absl::string_view data) {
 void QpackDecodedHeadersAccumulator::EndHeaderBlock() {
   QUICHE_DCHECK(!error_detected_);
   QUICHE_DCHECK(!headers_decoded_);
+
+  if (!decoder_) {
+    QUIC_BUG(b215142466_EndHeaderBlock);
+    return;
+  }
 
   // Might destroy |this|.
   decoder_->EndHeaderBlock();

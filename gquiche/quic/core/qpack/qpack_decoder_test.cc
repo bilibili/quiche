@@ -13,7 +13,6 @@
 #include "gquiche/quic/platform/api/quic_test.h"
 #include "gquiche/quic/test_tools/qpack/qpack_decoder_test_utils.h"
 #include "gquiche/quic/test_tools/qpack/qpack_test_utils.h"
-#include "gquiche/spdy/core/spdy_header_block.h"
 
 using ::testing::_;
 using ::testing::Eq;
@@ -36,8 +35,7 @@ const uint64_t kMaximumBlockedStreams = 1;
 class QpackDecoderTest : public QuicTestWithParam<FragmentMode> {
  protected:
   QpackDecoderTest()
-      : qpack_decoder_(kMaximumDynamicTableCapacity,
-                       kMaximumBlockedStreams,
+      : qpack_decoder_(kMaximumDynamicTableCapacity, kMaximumBlockedStreams,
                        &encoder_stream_error_delegate_),
         fragment_mode_(GetParam()) {
     qpack_decoder_.set_qpack_stream_sender_delegate(
@@ -108,8 +106,7 @@ class QpackDecoderTest : public QuicTestWithParam<FragmentMode> {
   std::unique_ptr<QpackProgressiveDecoder> progressive_decoder_;
 };
 
-INSTANTIATE_TEST_SUITE_P(All,
-                         QpackDecoderTest,
+INSTANTIATE_TEST_SUITE_P(All, QpackDecoderTest,
                          Values(FragmentMode::kSingleChunk,
                                 FragmentMode::kOctetByOctet));
 
@@ -226,9 +223,14 @@ TEST_P(QpackDecoderTest, ValueLenExceedsLimit) {
 }
 
 TEST_P(QpackDecoderTest, LineFeedInValue) {
-  EXPECT_CALL(handler_,
-              OnDecodingErrorDetected(QUIC_INVALID_CHARACTER_IN_FIELD_VALUE,
-                                      "Invalid character in field value."));
+  if (!GetQuicReloadableFlag(quic_validate_header_field_value_at_spdy_stream)) {
+    EXPECT_CALL(handler_,
+                OnDecodingErrorDetected(QUIC_INVALID_CHARACTER_IN_FIELD_VALUE,
+                                        "Invalid character in field value."));
+  } else {
+    EXPECT_CALL(handler_, OnHeaderDecoded(Eq("foo"), Eq("ba\nr")));
+    EXPECT_CALL(handler_, OnDecodingCompleted());
+  }
 
   DecodeHeaderBlock(absl::HexStringToBytes("000023666f6f0462610a72"));
 }

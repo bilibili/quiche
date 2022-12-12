@@ -15,10 +15,12 @@
 #include "gquiche/quic/core/quic_connection_id.h"
 #include "gquiche/quic/core/quic_packet_writer.h"
 #include "gquiche/quic/core/quic_packets.h"
+#include "gquiche/quic/core/quic_types.h"
 #include "gquiche/quic/core/quic_versions.h"
 #include "gquiche/quic/platform/api/quic_ip_address.h"
 #include "gquiche/quic/platform/api/quic_socket_address.h"
 #include "gquiche/quic/test_tools/crypto_test_utils.h"
+#include "gquiche/quic/test_tools/mock_connection_id_generator.h"
 #include "gquiche/quic/test_tools/quic_test_utils.h"
 
 namespace quic {
@@ -54,13 +56,13 @@ class FirstFlightExtractor : public DelegatedPacketWriter::Delegate {
 
   void GenerateFirstFlight() {
     crypto_config_->set_alpn(AlpnForVersion(version_));
-    connection_ =
-        new QuicConnection(server_connection_id_,
-                           /*initial_self_address=*/QuicSocketAddress(),
-                           QuicSocketAddress(TestPeerIPAddress(), kTestPort),
-                           &connection_helper_, &alarm_factory_, &writer_,
-                           /*owns_writer=*/false, Perspective::IS_CLIENT,
-                           ParsedQuicVersionVector{version_});
+    connection_ = new QuicConnection(
+        server_connection_id_,
+        /*initial_self_address=*/QuicSocketAddress(),
+        QuicSocketAddress(TestPeerIPAddress(), kTestPort), &connection_helper_,
+        &alarm_factory_, &writer_,
+        /*owns_writer=*/false, Perspective::IS_CLIENT,
+        ParsedQuicVersionVector{version_}, connection_id_generator_);
     connection_->set_client_connection_id(client_connection_id_);
     session_ = std::make_unique<QuicSpdyClientSession>(
         config_, ParsedQuicVersionVector{version_},
@@ -70,8 +72,7 @@ class FirstFlightExtractor : public DelegatedPacketWriter::Delegate {
     session_->CryptoConnect();
   }
 
-  void OnDelegatedPacket(const char* buffer,
-                         size_t buf_len,
+  void OnDelegatedPacket(const char* buffer, size_t buf_len,
                          const QuicIpAddress& /*self_client_address*/,
                          const QuicSocketAddress& /*peer_client_address*/,
                          PerPacketOptions* /*options*/) override {
@@ -84,6 +85,13 @@ class FirstFlightExtractor : public DelegatedPacketWriter::Delegate {
 
   std::vector<std::unique_ptr<QuicReceivedPacket>>&& ConsumePackets() {
     return std::move(packets_);
+  }
+
+  uint64_t GetCryptoStreamBytesWritten() const {
+    QUICHE_DCHECK(session_);
+    QUICHE_DCHECK(session_->GetCryptoStream());
+    return session_->GetCryptoStream()->BytesSentOnLevel(
+        EncryptionLevel::ENCRYPTION_INITIAL);
   }
 
  private:
@@ -99,6 +107,7 @@ class FirstFlightExtractor : public DelegatedPacketWriter::Delegate {
   QuicConnection* connection_;  // Owned by session_.
   std::unique_ptr<QuicSpdyClientSession> session_;
   std::vector<std::unique_ptr<QuicReceivedPacket>> packets_;
+  MockConnectionIdGenerator connection_id_generator_;
 };
 
 std::vector<std::unique_ptr<QuicReceivedPacket>> GetFirstFlightOfPackets(
@@ -114,8 +123,7 @@ std::vector<std::unique_ptr<QuicReceivedPacket>> GetFirstFlightOfPackets(
 }
 
 std::vector<std::unique_ptr<QuicReceivedPacket>> GetFirstFlightOfPackets(
-    const ParsedQuicVersion& version,
-    const QuicConfig& config,
+    const ParsedQuicVersion& version, const QuicConfig& config,
     const QuicConnectionId& server_connection_id,
     const QuicConnectionId& client_connection_id) {
   FirstFlightExtractor first_flight_extractor(
@@ -125,16 +133,14 @@ std::vector<std::unique_ptr<QuicReceivedPacket>> GetFirstFlightOfPackets(
 }
 
 std::vector<std::unique_ptr<QuicReceivedPacket>> GetFirstFlightOfPackets(
-    const ParsedQuicVersion& version,
-    const QuicConfig& config,
+    const ParsedQuicVersion& version, const QuicConfig& config,
     const QuicConnectionId& server_connection_id) {
   return GetFirstFlightOfPackets(version, config, server_connection_id,
                                  EmptyQuicConnectionId());
 }
 
 std::vector<std::unique_ptr<QuicReceivedPacket>> GetFirstFlightOfPackets(
-    const ParsedQuicVersion& version,
-    const QuicConfig& config) {
+    const ParsedQuicVersion& version, const QuicConfig& config) {
   return GetFirstFlightOfPackets(version, config, TestConnectionId());
 }
 
@@ -157,6 +163,28 @@ std::vector<std::unique_ptr<QuicReceivedPacket>> GetFirstFlightOfPackets(
     const ParsedQuicVersion& version) {
   return GetFirstFlightOfPackets(version, DefaultQuicConfig(),
                                  TestConnectionId());
+}
+
+AnnotatedPackets GetAnnotatedFirstFlightOfPackets(
+    const ParsedQuicVersion& version, const QuicConfig& config,
+    const QuicConnectionId& server_connection_id,
+    const QuicConnectionId& client_connection_id,
+    std::unique_ptr<QuicCryptoClientConfig> crypto_config) {
+  FirstFlightExtractor first_flight_extractor(
+      version, config, server_connection_id, client_connection_id,
+      std::move(crypto_config));
+  first_flight_extractor.GenerateFirstFlight();
+  return AnnotatedPackets{first_flight_extractor.ConsumePackets(),
+                          first_flight_extractor.GetCryptoStreamBytesWritten()};
+}
+
+AnnotatedPackets GetAnnotatedFirstFlightOfPackets(
+    const ParsedQuicVersion& version, const QuicConfig& config) {
+  FirstFlightExtractor first_flight_extractor(
+      version, config, TestConnectionId(), EmptyQuicConnectionId());
+  first_flight_extractor.GenerateFirstFlight();
+  return AnnotatedPackets{first_flight_extractor.ConsumePackets(),
+                          first_flight_extractor.GetCryptoStreamBytesWritten()};
 }
 
 }  // namespace test

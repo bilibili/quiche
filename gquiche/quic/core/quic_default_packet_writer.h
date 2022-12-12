@@ -24,13 +24,13 @@ class QUIC_EXPORT_PRIVATE QuicDefaultPacketWriter : public QuicPacketWriter {
   ~QuicDefaultPacketWriter() override;
 
   // QuicPacketWriter
-  WriteResult WritePacket(const char* buffer,
-                          size_t buf_len,
+  WriteResult WritePacket(const char* buffer, size_t buf_len,
                           const QuicIpAddress& self_address,
                           const QuicSocketAddress& peer_address,
                           PerPacketOptions* options) override;
   bool IsWriteBlocked() const override;
   void SetWritable() override;
+  absl::optional<int> MessageTooBigErrorCode() const override;
   QuicByteCount GetMaxPacketSize(
       const QuicSocketAddress& peer_address) const override;
   bool SupportsReleaseTime() const override;

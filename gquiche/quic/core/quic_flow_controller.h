@@ -37,8 +37,7 @@ class QUIC_EXPORT_PRIVATE QuicFlowControllerInterface {
 class QUIC_EXPORT_PRIVATE QuicFlowController
     : public QuicFlowControllerInterface {
  public:
-  QuicFlowController(QuicSession* session,
-                     QuicStreamId id,
+  QuicFlowController(QuicSession* session, QuicStreamId id,
                      bool is_connection_flow_controller,
                      QuicStreamOffset send_window_offset,
                      QuicStreamOffset receive_window_offset,
@@ -79,8 +78,8 @@ class QUIC_EXPORT_PRIVATE QuicFlowController
 
   QuicByteCount receive_window_size() const { return receive_window_size_; }
 
-  // Returns whether a BLOCKED frame should be sent.
-  bool ShouldSendBlocked();
+  // Sends a BLOCKED frame if needed.
+  void MaybeSendBlocked();
 
   // Returns true if flow control send limits have been reached.
   bool IsBlocked() const;

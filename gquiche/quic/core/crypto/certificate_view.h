@@ -34,6 +34,23 @@ struct QUIC_EXPORT_PRIVATE PemReadResult {
 // Reads |input| line-by-line and returns the next available PEM message.
 QUIC_EXPORT_PRIVATE PemReadResult ReadNextPemMessage(std::istream* input);
 
+// Cryptograhpic algorithms recognized in X.509.
+enum class PublicKeyType {
+  kRsa,
+  kP256,
+  kP384,
+  kEd25519,
+  kUnknown,
+};
+QUIC_EXPORT_PRIVATE std::string PublicKeyTypeToString(PublicKeyType type);
+QUIC_EXPORT_PRIVATE PublicKeyType
+PublicKeyTypeFromSignatureAlgorithm(uint16_t signature_algorithm);
+
+// Returns the list of the signature algorithms that can be processed by
+// CertificateView::VerifySignature() and CertificatePrivateKey::Sign().
+QUIC_EXPORT_PRIVATE QuicSignatureAlgorithmVector
+SupportedSignatureAlgorithmsForQuic();
+
 // CertificateView represents a parsed version of a single X.509 certificate. As
 // the word "view" implies, it does not take ownership of the underlying strings
 // and consists primarily of pointers into the certificate that is passed into
@@ -65,9 +82,11 @@ class QUIC_EXPORT_PRIVATE CertificateView {
   absl::optional<std::string> GetHumanReadableSubject() const;
 
   // |signature_algorithm| is a TLS signature algorithm ID.
-  bool VerifySignature(absl::string_view data,
-                       absl::string_view signature,
+  bool VerifySignature(absl::string_view data, absl::string_view signature,
                        uint16_t signature_algorithm) const;
+
+  // Returns the type of the key used in the certificate's SPKI.
+  PublicKeyType public_key_type() const;
 
  private:
   CertificateView() = default;
@@ -130,8 +149,7 @@ QUIC_EXPORT_PRIVATE absl::optional<std::string> X509NameAttributeToString(
 // Parses a DER time based on the specified ASN.1 tag.  Exposed primarily for
 // testing.
 QUIC_EXPORT_PRIVATE absl::optional<quic::QuicWallTime> ParseDerTime(
-    unsigned tag,
-    absl::string_view payload);
+    unsigned tag, absl::string_view payload);
 
 }  // namespace quic
 

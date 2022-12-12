@@ -2,10 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "gquiche/quic/core/crypto/crypto_secret_boxer.h"
+
 #include <cstdint>
 #include <string>
-
-#include "gquiche/quic/core/crypto/crypto_secret_boxer.h"
 
 #include "absl/strings/string_view.h"
 #include "openssl/aead.h"
@@ -37,15 +37,16 @@ CryptoSecretBoxer::CryptoSecretBoxer() {}
 CryptoSecretBoxer::~CryptoSecretBoxer() {}
 
 // static
-size_t CryptoSecretBoxer::GetKeySize() {
-  return kBoxKeySize;
-}
+size_t CryptoSecretBoxer::GetKeySize() { return kBoxKeySize; }
 
 // kAEAD is the AEAD used for boxing: AES-256-GCM-SIV.
 static const EVP_AEAD* (*const kAEAD)() = EVP_aead_aes_256_gcm_siv;
 
-void CryptoSecretBoxer::SetKeys(const std::vector<std::string>& keys) {
-  QUICHE_DCHECK(!keys.empty());
+bool CryptoSecretBoxer::SetKeys(const std::vector<std::string>& keys) {
+  if (keys.empty()) {
+    QUIC_LOG(DFATAL) << "No keys supplied!";
+    return false;
+  }
   const EVP_AEAD* const aead = kAEAD();
   std::unique_ptr<State> new_state(new State);
 
@@ -57,7 +58,7 @@ void CryptoSecretBoxer::SetKeys(const std::vector<std::string>& keys) {
     if (!ctx) {
       ERR_clear_error();
       QUIC_LOG(DFATAL) << "EVP_AEAD_CTX_init failed";
-      return;
+      return false;
     }
 
     new_state->ctxs.push_back(std::move(ctx));
@@ -65,6 +66,7 @@ void CryptoSecretBoxer::SetKeys(const std::vector<std::string>& keys) {
 
   QuicWriterMutexLock l(&lock_);
   state_ = std::move(new_state);
+  return true;
 }
 
 std::string CryptoSecretBoxer::Box(QuicRandom* rand,

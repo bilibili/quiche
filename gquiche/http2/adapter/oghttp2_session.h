@@ -9,9 +9,11 @@
 
 #include "absl/strings/string_view.h"
 #include "absl/types/optional.h"
+#include "absl/types/variant.h"
 #include "gquiche/http2/adapter/data_source.h"
 #include "gquiche/http2/adapter/event_forwarder.h"
 #include "gquiche/http2/adapter/header_validator.h"
+#include "gquiche/http2/adapter/header_validator_base.h"
 #include "gquiche/http2/adapter/http2_protocol.h"
 #include "gquiche/http2/adapter/http2_session.h"
 #include "gquiche/http2/adapter/http2_util.h"
@@ -21,10 +23,12 @@
 #include "gquiche/http2/core/priority_write_scheduler.h"
 #include "gquiche/common/platform/api/quiche_bug_tracker.h"
 #include "gquiche/common/platform/api/quiche_export.h"
+#include "gquiche/common/platform/api/quiche_flags.h"
+#include "gquiche/common/quiche_linked_hash_map.h"
 #include "gquiche/spdy/core/http2_frame_decoder_adapter.h"
+#include "gquiche/spdy/core/http2_header_block.h"
 #include "gquiche/spdy/core/no_op_headers_handler.h"
 #include "gquiche/spdy/core/spdy_framer.h"
-#include "gquiche/spdy/core/spdy_header_block.h"
 #include "gquiche/spdy/core/spdy_protocol.h"
 
 namespace http2 {
@@ -33,13 +37,21 @@ namespace adapter {
 // This class manages state associated with a single multiplexed HTTP/2 session.
 class QUICHE_EXPORT_PRIVATE OgHttp2Session
     : public Http2Session,
-      public spdy::SpdyFramerVisitorInterface,
-      public spdy::ExtensionVisitorInterface {
+      public spdy::SpdyFramerVisitorInterface {
  public:
   struct QUICHE_EXPORT_PRIVATE Options {
+    // Returns whether to send a WINDOW_UPDATE based on the window limit, window
+    // size, and delta that would be sent in the WINDOW_UPDATE.
+    WindowManager::ShouldWindowUpdateFn should_window_update_fn =
+        DeltaAtLeastHalfLimit;
+    // The perspective of this session.
     Perspective perspective = Perspective::kClient;
     // The maximum HPACK table size to use.
     absl::optional<size_t> max_hpack_encoding_table_capacity = absl::nullopt;
+    // The maximum number of decoded header bytes that a stream can receive.
+    absl::optional<uint32_t> max_header_list_bytes = absl::nullopt;
+    // The maximum size of an individual header field, including name and value.
+    absl::optional<uint32_t> max_header_field_size = absl::nullopt;
     // Whether to automatically send PING acks when receiving a PING.
     bool auto_ping_ack = true;
     // Whether (as server) to send a RST_STREAM NO_ERROR when sending a fin on
@@ -49,6 +61,20 @@ class QUICHE_EXPORT_PRIVATE OgHttp2Session
     // has indicated the end of data. If false, the server will assume that
     // submitting trailers indicates the end of data.
     bool trailers_require_end_data = false;
+    // Whether to mark all input data as consumed upon encountering a connection
+    // error while processing bytes. If true, subsequent processing will also
+    // mark all input data as consumed.
+    bool blackhole_data_on_connection_error = true;
+    // Whether to advertise support for the extended CONNECT semantics described
+    // in RFC 8441. If true, this endpoint will send the appropriate setting in
+    // initial SETTINGS.
+    bool allow_extended_connect = true;
+    // Whether to allow `obs-text` (characters from hexadecimal 0x80 to 0xff) in
+    // header field values.
+    bool allow_obs_text = true;
+    // If true, validates header field names and values according to RFC 7230
+    // and RFC 7540.
+    bool validate_http_headers = true;
   };
 
   OgHttp2Session(Http2VisitorInterface& visitor, Options options);
@@ -122,23 +148,23 @@ class QUICHE_EXPORT_PRIVATE OgHttp2Session
     return !received_goaway_ && !decoder_.HasError();
   }
   bool want_write() const override {
-    return !frames_.empty() || !buffered_data_.empty() ||
-           write_scheduler_.HasReadyStreams() || !connection_metadata_.empty();
+    return !fatal_send_error_ &&
+           (!frames_.empty() || !buffered_data_.empty() || HasReadyStream() ||
+            !goaway_rejected_streams_.empty());
   }
   int GetRemoteWindowSize() const override { return connection_send_window_; }
+  bool peer_enables_connect_protocol() {
+    return peer_enables_connect_protocol_;
+  }
 
   // From SpdyFramerVisitorInterface
   void OnError(http2::Http2DecoderAdapter::SpdyFramerError error,
                std::string detailed_error) override;
-  void OnCommonHeader(spdy::SpdyStreamId /*stream_id*/,
-                      size_t /*length*/,
-                      uint8_t /*type*/,
-                      uint8_t /*flags*/) override;
-  void OnDataFrameHeader(spdy::SpdyStreamId stream_id,
-                         size_t length,
+  void OnCommonHeader(spdy::SpdyStreamId /*stream_id*/, size_t /*length*/,
+                      uint8_t /*type*/, uint8_t /*flags*/) override;
+  void OnDataFrameHeader(spdy::SpdyStreamId stream_id, size_t length,
                          bool fin) override;
-  void OnStreamFrameData(spdy::SpdyStreamId stream_id,
-                         const char* data,
+  void OnStreamFrameData(spdy::SpdyStreamId stream_id, const char* data,
                          size_t len) override;
   void OnStreamEnd(spdy::SpdyStreamId stream_id) override;
   void OnStreamPadLength(spdy::SpdyStreamId /*stream_id*/,
@@ -157,68 +183,63 @@ class QUICHE_EXPORT_PRIVATE OgHttp2Session
   void OnGoAway(spdy::SpdyStreamId last_accepted_stream_id,
                 spdy::SpdyErrorCode error_code) override;
   bool OnGoAwayFrameData(const char* goaway_data, size_t len) override;
-  void OnHeaders(spdy::SpdyStreamId stream_id,
-                 bool has_priority,
-                 int weight,
-                 spdy::SpdyStreamId parent_stream_id,
-                 bool exclusive,
-                 bool fin,
+  void OnHeaders(spdy::SpdyStreamId stream_id, size_t payload_length,
+                 bool has_priority, int weight,
+                 spdy::SpdyStreamId parent_stream_id, bool exclusive, bool fin,
                  bool end) override;
   void OnWindowUpdate(spdy::SpdyStreamId stream_id,
                       int delta_window_size) override;
   void OnPushPromise(spdy::SpdyStreamId stream_id,
-                     spdy::SpdyStreamId promised_stream_id,
-                     bool end) override;
-  void OnContinuation(spdy::SpdyStreamId stream_id, bool end) override;
+                     spdy::SpdyStreamId promised_stream_id, bool end) override;
+  void OnContinuation(spdy::SpdyStreamId stream_id, size_t payload_length,
+                      bool end) override;
   void OnAltSvc(spdy::SpdyStreamId /*stream_id*/, absl::string_view /*origin*/,
                 const spdy::SpdyAltSvcWireFormat::
                     AlternativeServiceVector& /*altsvc_vector*/) override;
   void OnPriority(spdy::SpdyStreamId stream_id,
-                  spdy::SpdyStreamId parent_stream_id,
-                  int weight,
+                  spdy::SpdyStreamId parent_stream_id, int weight,
                   bool exclusive) override;
   void OnPriorityUpdate(spdy::SpdyStreamId prioritized_stream_id,
                         absl::string_view priority_field_value) override;
   bool OnUnknownFrame(spdy::SpdyStreamId stream_id,
                       uint8_t frame_type) override;
+  void OnUnknownFrameStart(spdy::SpdyStreamId stream_id, size_t length,
+                           uint8_t type, uint8_t flags) override;
+  void OnUnknownFramePayload(spdy::SpdyStreamId stream_id,
+                             absl::string_view payload) override;
 
   // Invoked when header processing encounters an invalid or otherwise
   // problematic header.
   void OnHeaderStatus(Http2StreamId stream_id,
                       Http2VisitorInterface::OnHeaderResult result);
 
-  // Returns true if a recognized extension frame is received.
-  bool OnFrameHeader(spdy::SpdyStreamId stream_id, size_t length, uint8_t type,
-                     uint8_t flags) override;
-
-  // Handles the payload for a recognized extension frame.
-  void OnFramePayload(const char* data, size_t len) override;
-
  private:
-  using MetadataSequence = std::vector<std::unique_ptr<MetadataSource>>;
-
   struct QUICHE_EXPORT_PRIVATE StreamState {
-    StreamState(int32_t stream_receive_window,
-                WindowManager::WindowUpdateListener listener)
-        : window_manager(stream_receive_window, std::move(listener)) {}
+    StreamState(int32_t stream_receive_window, int32_t stream_send_window,
+                WindowManager::WindowUpdateListener listener,
+                WindowManager::ShouldWindowUpdateFn should_window_update_fn)
+        : window_manager(stream_receive_window, std::move(listener),
+                         std::move(should_window_update_fn),
+                         /*update_window_on_notify=*/false),
+          send_window(stream_send_window) {}
 
     WindowManager window_manager;
     std::unique_ptr<DataFrameSource> outbound_body;
-    MetadataSequence outbound_metadata;
-    std::unique_ptr<spdy::SpdyHeaderBlock> trailers;
+    std::unique_ptr<spdy::Http2HeaderBlock> trailers;
     void* user_data = nullptr;
-    int32_t send_window = kInitialFlowControlWindowSize;
+    int32_t send_window;
     absl::optional<HeaderType> received_header_type;
+    absl::optional<size_t> remaining_content_length;
     bool half_closed_local = false;
     bool half_closed_remote = false;
     // Indicates that `outbound_body` temporarily cannot produce data.
     bool data_deferred = false;
+    bool can_receive_body = true;
   };
   using StreamStateMap = absl::flat_hash_map<Http2StreamId, StreamState>;
 
   struct QUICHE_EXPORT_PRIVATE PendingStreamState {
-    Http2StreamId stream_id;
-    spdy::SpdyHeaderBlock headers;
+    spdy::Http2HeaderBlock headers;
     std::unique_ptr<DataFrameSource> data_source;
     void* user_data = nullptr;
   };
@@ -226,9 +247,8 @@ class QUICHE_EXPORT_PRIVATE OgHttp2Session
   class QUICHE_EXPORT_PRIVATE PassthroughHeadersHandler
       : public spdy::SpdyHeadersHandlerInterface {
    public:
-    explicit PassthroughHeadersHandler(OgHttp2Session& session,
-                                       Http2VisitorInterface& visitor)
-        : session_(session), visitor_(visitor) {}
+    PassthroughHeadersHandler(OgHttp2Session& session,
+                              Http2VisitorInterface& visitor);
 
     void set_stream_id(Http2StreamId stream_id) {
       stream_id_ = stream_id;
@@ -243,11 +263,23 @@ class QUICHE_EXPORT_PRIVATE OgHttp2Session
     void OnHeader(absl::string_view key, absl::string_view value) override;
     void OnHeaderBlockEnd(size_t /* uncompressed_header_bytes */,
                           size_t /* compressed_header_bytes */) override;
-    absl::string_view status_header() {
+    absl::string_view status_header() const {
       QUICHE_DCHECK(type_ == HeaderType::RESPONSE ||
                     type_ == HeaderType::RESPONSE_100);
-      return validator_.status_header();
+      return validator_->status_header();
     }
+    absl::optional<size_t> content_length() const {
+      return validator_->content_length();
+    }
+    void SetAllowExtendedConnect() { validator_->SetAllowExtendedConnect(); }
+    void SetMaxFieldSize(uint32_t field_size) {
+      validator_->SetMaxFieldSize(field_size);
+    }
+    void SetAllowObsText(bool allow) {
+      validator_->SetObsTextOption(allow ? ObsTextOption::kAllow
+                                         : ObsTextOption::kDisallow);
+    }
+    bool CanReceiveBody() const;
 
    private:
     OgHttp2Session& session_;
@@ -256,13 +288,17 @@ class QUICHE_EXPORT_PRIVATE OgHttp2Session
     Http2VisitorInterface::OnHeaderResult result_ =
         Http2VisitorInterface::HEADER_OK;
     // Validates header blocks according to the HTTP/2 specification.
-    HeaderValidator validator_;
+    std::unique_ptr<HeaderValidatorBase> validator_;
     HeaderType type_ = HeaderType::RESPONSE;
     bool frame_contains_fin_ = false;
   };
 
-  // Queues the connection preface, if not already done.
-  void MaybeSetupPreface();
+  struct QUICHE_EXPORT_PRIVATE ProcessBytesResultVisitor;
+
+  // Queues the connection preface, if not already done. If not
+  // `sending_outbound_settings` and the preface has not yet been queued, this
+  // method will generate and enqueue initial SETTINGS.
+  void MaybeSetupPreface(bool sending_outbound_settings);
 
   // Gets the settings to be sent in the initial SETTINGS frame sent as part of
   // the connection preface.
@@ -271,6 +307,9 @@ class QUICHE_EXPORT_PRIVATE OgHttp2Session
   // Prepares and returns a SETTINGS frame with the given `settings`.
   std::unique_ptr<spdy::SpdySettingsIR> PrepareSettingsFrame(
       absl::Span<const Http2Setting> settings);
+
+  // Updates internal state to match the SETTINGS advertised to the peer.
+  void HandleOutboundSettings(const spdy::SpdySettingsIR& settings_frame);
 
   void SendWindowUpdate(Http2StreamId stream_id, size_t update_delta);
 
@@ -283,25 +322,51 @@ class QUICHE_EXPORT_PRIVATE OgHttp2Session
     SEND_ERROR,
   };
 
+  // Returns the int corresponding to the `result`, updating state as needed.
+  int InterpretSendResult(SendResult result);
+
+  enum class ProcessBytesError {
+    // A general, unspecified error.
+    kUnspecified,
+    // The (server-side) session received an invalid client connection preface.
+    kInvalidConnectionPreface,
+    // A user/visitor callback failed with a fatal error.
+    kVisitorCallbackFailed,
+  };
+  using ProcessBytesResult = absl::variant<int64_t, ProcessBytesError>;
+
+  // Attempts to process `bytes` and returns the number of bytes proccessed on
+  // success or the processing error on failure.
+  ProcessBytesResult ProcessBytesImpl(absl::string_view bytes);
+
+  // Returns true if at least one stream has data or control frames to write.
+  bool HasReadyStream() const;
+
+  // Returns the next stream that has something to write. If there are no such
+  // streams, returns zero.
+  Http2StreamId GetNextReadyStream();
+
   // Sends the buffered connection preface or serialized frame data, if any.
   SendResult MaybeSendBufferedData();
 
   // Serializes and sends queued frames.
   SendResult SendQueuedFrames();
 
-  void AfterFrameSent(uint8_t frame_type, uint32_t stream_id,
+  // Returns false if a fatal connection error occurred.
+  bool AfterFrameSent(uint8_t frame_type_int, uint32_t stream_id,
                       size_t payload_length, uint8_t flags,
                       uint32_t error_code);
 
   // Writes DATA frames for stream `stream_id`.
   SendResult WriteForStream(Http2StreamId stream_id);
 
-  SendResult SendMetadata(Http2StreamId stream_id, MetadataSequence& sequence);
+  void SerializeMetadata(Http2StreamId stream_id,
+                         std::unique_ptr<MetadataSource> source);
 
-  void SendHeaders(Http2StreamId stream_id, spdy::SpdyHeaderBlock headers,
+  void SendHeaders(Http2StreamId stream_id, spdy::Http2HeaderBlock headers,
                    bool end_stream);
 
-  void SendTrailers(Http2StreamId stream_id, spdy::SpdyHeaderBlock trailers);
+  void SendTrailers(Http2StreamId stream_id, spdy::Http2HeaderBlock trailers);
 
   // Encapsulates the RST_STREAM NO_ERROR behavior described in RFC 7540
   // Section 8.1.
@@ -316,9 +381,12 @@ class QUICHE_EXPORT_PRIVATE OgHttp2Session
 
   // Creates a stream for `stream_id`, stores the `data_source` and `user_data`
   // in the stream state, and sends the `headers`.
-  void StartRequest(Http2StreamId stream_id, spdy::SpdyHeaderBlock headers,
+  void StartRequest(Http2StreamId stream_id, spdy::Http2HeaderBlock headers,
                     std::unique_ptr<DataFrameSource> data_source,
                     void* user_data);
+
+  // Sends headers for pending streams as long as the stream limit allows.
+  void StartPendingStreams();
 
   // Closes the given `stream_id` with the given `error_code`.
   void CloseStream(Http2StreamId stream_id, Http2ErrorCode error_code);
@@ -336,8 +404,34 @@ class QUICHE_EXPORT_PRIVATE OgHttp2Session
 
   void CloseStreamIfReady(uint8_t frame_type, uint32_t stream_id);
 
+  // Informs the visitor of rejected, non-active streams due to GOAWAY receipt.
+  void CloseGoAwayRejectedStreams();
+
+  // Updates internal state to prepare for sending an immediate GOAWAY.
+  void PrepareForImmediateGoAway();
+
+  // Handles the potential end of received metadata for the given `stream_id`.
+  void MaybeHandleMetadataEndForStream(Http2StreamId stream_id);
+
+  void DecrementQueuedFrameCount(uint32_t stream_id, uint8_t frame_type);
+
+  void HandleContentLengthError(Http2StreamId stream_id);
+
+  // Invoked when sending a flow control window update to the peer.
+  void UpdateReceiveWindow(Http2StreamId stream_id, int32_t delta);
+
+  // Updates stream send window accounting to respect the peer's advertised
+  // initial window setting.
+  void UpdateStreamSendWindowSizes(uint32_t new_value);
+
+  // Updates stream receive window managers to use the newly advertised stream
+  // initial window.
+  void UpdateStreamReceiveWindowSizes(uint32_t new_value);
+
   // Receives events when inbound frames are parsed.
   Http2VisitorInterface& visitor_;
+
+  const Options options_;
 
   // Forwards received events to the session if it can accept them.
   EventForwarder event_forwarder_;
@@ -359,7 +453,8 @@ class QUICHE_EXPORT_PRIVATE OgHttp2Session
   // Maintains the state of pending streams known to this session. A pending
   // stream is kept in this list until it can be created while complying with
   // `max_outbound_concurrent_streams_`.
-  std::list<PendingStreamState> pending_streams_;
+  quiche::QuicheLinkedHashMap<Http2StreamId, PendingStreamState>
+      pending_streams_;
 
   // The queue of outbound frames.
   std::list<std::unique_ptr<spdy::SpdyFrameIR>> frames_;
@@ -388,10 +483,16 @@ class QUICHE_EXPORT_PRIVATE OgHttp2Session
 
   WindowManager connection_window_manager_;
 
+  // Tracks the streams that have been marked for reset. A stream is removed
+  // from this set once it is closed.
   absl::flat_hash_set<Http2StreamId> streams_reset_;
-  absl::flat_hash_map<Http2StreamId, int> queued_frames_;
 
-  MetadataSequence connection_metadata_;
+  // The number of frames currently queued per stream.
+  absl::flat_hash_map<Http2StreamId, int> queued_frames_;
+  // Includes streams that are currently ready to write trailers.
+  absl::flat_hash_set<Http2StreamId> trailers_ready_;
+  // Includes streams that will not be written due to receipt of GOAWAY.
+  absl::flat_hash_set<Http2StreamId> goaway_rejected_streams_;
 
   Http2StreamId next_stream_id_ = 1;
   // The highest received stream ID is the highest stream ID in any frame read
@@ -399,12 +500,14 @@ class QUICHE_EXPORT_PRIVATE OgHttp2Session
   // which this endpoint created a stream in the stream map.
   Http2StreamId highest_received_stream_id_ = 0;
   Http2StreamId highest_processed_stream_id_ = 0;
-  Http2StreamId metadata_stream_id_ = 0;
+  Http2StreamId received_goaway_stream_id_ = 0;
   size_t metadata_length_ = 0;
   int32_t connection_send_window_ = kInitialFlowControlWindowSize;
   // The initial flow control receive window size for any newly created streams.
-  int32_t stream_receive_window_limit_ = kInitialFlowControlWindowSize;
-  uint32_t max_frame_payload_ = 16384u;
+  int32_t initial_stream_receive_window_ = kInitialFlowControlWindowSize;
+  // The initial flow control send window size for any newly created streams.
+  int32_t initial_stream_send_window_ = kInitialFlowControlWindowSize;
+  uint32_t max_frame_payload_ = kDefaultFramePayloadSizeLimit;
   // The maximum number of concurrent streams that this connection can open to
   // its peer and allow from its peer, respectively. Although the initial value
   // is unlimited, the spec encourages a value of at least 100. We limit
@@ -415,7 +518,6 @@ class QUICHE_EXPORT_PRIVATE OgHttp2Session
       std::numeric_limits<uint32_t>::max();
   uint32_t max_inbound_concurrent_streams_ =
       std::numeric_limits<uint32_t>::max();
-  Options options_;
 
   // The HPACK encoder header table capacity that will be applied when
   // acking SETTINGS from the peer. Only contains a value if the peer advertises
@@ -427,15 +529,26 @@ class QUICHE_EXPORT_PRIVATE OgHttp2Session
   bool queued_preface_ = false;
   bool peer_supports_metadata_ = false;
   bool end_metadata_ = false;
+  bool process_metadata_ = false;
+  bool sent_non_ack_settings_ = false;
 
   // Recursion guard for ProcessBytes().
   bool processing_bytes_ = false;
   // Recursion guard for Send().
   bool sending_ = false;
 
+  bool peer_enables_connect_protocol_ = false;
+
   // Replace this with a stream ID, for multiple GOAWAY support.
   bool queued_goaway_ = false;
+  bool queued_immediate_goaway_ = false;
   bool latched_error_ = false;
+
+  // True if a fatal sending error has occurred.
+  bool fatal_send_error_ = false;
+
+  // True if a fatal processing visitor callback failed.
+  bool fatal_visitor_callback_failure_ = false;
 };
 
 }  // namespace adapter

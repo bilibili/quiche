@@ -35,8 +35,9 @@
 #include "gquiche/quic/platform/api/quic_export.h"
 #include "gquiche/quic/platform/api/quic_flags.h"
 #include "gquiche/quic/platform/api/quic_socket_address.h"
+#include "gquiche/common/platform/api/quiche_mem_slice.h"
+#include "gquiche/spdy/core/http2_header_block.h"
 #include "gquiche/spdy/core/spdy_framer.h"
-#include "gquiche/spdy/core/spdy_header_block.h"
 
 namespace quic {
 
@@ -123,19 +124,21 @@ class QUIC_EXPORT_PRIVATE QuicSpdyStream
   // number of bytes sent, including data sent on the encoder stream when using
   // QPACK.
   virtual size_t WriteHeaders(
-      spdy::SpdyHeaderBlock header_block, bool fin,
-      QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener);
+      spdy::Http2HeaderBlock header_block, bool fin,
+      quiche::QuicheReferenceCountedPointer<QuicAckListenerInterface>
+          ack_listener);
 
   // Sends |data| to the peer, or buffers if it can't be sent immediately.
-  void WriteOrBufferBody(absl::string_view data, bool fin);
+  virtual void WriteOrBufferBody(absl::string_view data, bool fin);
 
   // Writes the trailers contained in |trailer_block| on the dedicated headers
   // stream or on this stream, depending on VersionUsesHttp3().  Trailers will
   // always have the FIN flag set.  Returns the number of bytes sent, including
   // data sent on the encoder stream when using QPACK.
   virtual size_t WriteTrailers(
-      spdy::SpdyHeaderBlock trailer_block,
-      QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener);
+      spdy::Http2HeaderBlock trailer_block,
+      quiche::QuicheReferenceCountedPointer<QuicAckListenerInterface>
+          ack_listener);
 
   // Override to report newly acked bytes via ack_listener_.
   bool OnStreamFrameAcked(QuicStreamOffset offset, QuicByteCount data_length,
@@ -154,7 +157,8 @@ class QUIC_EXPORT_PRIVATE QuicSpdyStream
 
   // Does the same thing as WriteOrBufferBody except this method takes
   // memslicespan as the data input. Right now it only calls WriteMemSlices.
-  QuicConsumedData WriteBodySlices(absl::Span<QuicMemSlice> slices, bool fin);
+  QuicConsumedData WriteBodySlices(absl::Span<quiche::QuicheMemSlice> slices,
+                                   bool fin);
 
   // Marks the trailers as consumed. This applies to the case where this object
   // receives headers and trailers as QuicHeaderLists via calls to
@@ -174,7 +178,7 @@ class QUIC_EXPORT_PRIVATE QuicSpdyStream
 
   // Returns true if header contains a valid 3-digit status and parse the status
   // code to |status_code|.
-  static bool ParseHeaderStatusCode(const spdy::SpdyHeaderBlock& header,
+  static bool ParseHeaderStatusCode(const spdy::Http2HeaderBlock& header,
                                     int* status_code);
 
   // Returns true when all data from the peer has been read and consumed,
@@ -194,7 +198,7 @@ class QUIC_EXPORT_PRIVATE QuicSpdyStream
   bool trailers_decompressed() const { return trailers_decompressed_; }
 
   // Returns whatever trailers have been received for this stream.
-  const spdy::SpdyHeaderBlock& received_trailers() const {
+  const spdy::Http2HeaderBlock& received_trailers() const {
     return received_trailers_;
   }
 
@@ -250,98 +254,37 @@ class QUIC_EXPORT_PRIVATE QuicSpdyStream
   bool OnCapsule(const Capsule& capsule) override;
   void OnCapsuleParseFailure(const std::string& error_message) override;
 
-  // Sends an HTTP/3 datagram. The stream and context IDs are not part of
-  // |payload|.
-  MessageStatus SendHttp3Datagram(
-      absl::optional<QuicDatagramContextId> context_id,
-      absl::string_view payload);
+  // Sends an HTTP/3 datagram. The stream ID is not part of |payload|.
+  MessageStatus SendHttp3Datagram(absl::string_view payload);
 
   class QUIC_EXPORT_PRIVATE Http3DatagramVisitor {
    public:
     virtual ~Http3DatagramVisitor() {}
 
     // Called when an HTTP/3 datagram is received. |payload| does not contain
-    // the stream or context IDs. Note that this contains the stream ID even if
-    // flow IDs from draft-ietf-masque-h3-datagram-00 are in use.
-    virtual void OnHttp3Datagram(
-        QuicStreamId stream_id,
-        absl::optional<QuicDatagramContextId> context_id,
-        absl::string_view payload) = 0;
+    // the stream ID.
+    virtual void OnHttp3Datagram(QuicStreamId stream_id,
+                                 absl::string_view payload) = 0;
   };
 
-  class QUIC_EXPORT_PRIVATE Http3DatagramRegistrationVisitor {
-   public:
-    virtual ~Http3DatagramRegistrationVisitor() {}
+  // Registers |visitor| to receive HTTP/3 datagrams. |visitor| must be
+  // valid until a corresponding call to UnregisterHttp3DatagramVisitor.
+  void RegisterHttp3DatagramVisitor(Http3DatagramVisitor* visitor);
 
-    // Called when a REGISTER_DATAGRAM_CONTEXT or REGISTER_DATAGRAM_NO_CONTEXT
-    // capsule is received. Note that this contains the stream ID even if flow
-    // IDs from draft-ietf-masque-h3-datagram-00 are in use.
-    virtual void OnContextReceived(
-        QuicStreamId stream_id,
-        absl::optional<QuicDatagramContextId> context_id,
-        DatagramFormatType format_type,
-        absl::string_view format_additional_data) = 0;
+  // Unregisters an HTTP/3 datagram visitor. Must only be called after a call to
+  // RegisterHttp3DatagramVisitor.
+  void UnregisterHttp3DatagramVisitor();
 
-    // Called when a CLOSE_DATAGRAM_CONTEXT capsule is received. Note that this
-    // contains the stream ID even if flow IDs from
-    // draft-ietf-masque-h3-datagram-00 are in use.
-    virtual void OnContextClosed(
-        QuicStreamId stream_id,
-        absl::optional<QuicDatagramContextId> context_id,
-        ContextCloseCode close_code, absl::string_view close_details) = 0;
-  };
-
-  // Registers |visitor| to receive HTTP/3 datagram context registrations. This
-  // must not be called without first calling
-  // UnregisterHttp3DatagramRegistrationVisitor. |visitor| must be valid until a
-  // corresponding call to UnregisterHttp3DatagramRegistrationVisitor.
-  void RegisterHttp3DatagramRegistrationVisitor(
-      Http3DatagramRegistrationVisitor* visitor,
-      bool use_datagram_contexts = false);
-
-  // Unregisters for HTTP/3 datagram context registrations. Must not be called
-  // unless previously registered.
-  void UnregisterHttp3DatagramRegistrationVisitor();
-
-  // Moves an HTTP/3 datagram registration to a different visitor. Mainly meant
-  // to be used by the visitors' move operators.
-  void MoveHttp3DatagramRegistration(Http3DatagramRegistrationVisitor* visitor);
-
-  // Registers |visitor| to receive HTTP/3 datagrams for optional context ID
-  // |context_id|. This must not be called on a previously registered context ID
-  // without first calling UnregisterHttp3DatagramContextId. |visitor| must be
-  // valid until a corresponding call to UnregisterHttp3DatagramContextId. If
-  // this method is called multiple times, the context ID MUST either be always
-  // present, or always absent.
-  void RegisterHttp3DatagramContextId(
-      absl::optional<QuicDatagramContextId> context_id,
-      DatagramFormatType format_type, absl::string_view format_additional_data,
-      Http3DatagramVisitor* visitor);
-
-  // Unregisters an HTTP/3 datagram context ID. Must be called on a previously
-  // registered context.
-  void UnregisterHttp3DatagramContextId(
-      absl::optional<QuicDatagramContextId> context_id);
-
-  // Moves an HTTP/3 datagram context ID to a different visitor. Mainly meant
-  // to be used by the visitors' move operators.
-  void MoveHttp3DatagramContextIdRegistration(
-      absl::optional<QuicDatagramContextId> context_id,
-      Http3DatagramVisitor* visitor);
+  // Replaces the current HTTP/3 datagram visitor with a different visitor.
+  // Mainly meant to be used by the visitors' move operators.
+  void ReplaceHttp3DatagramVisitor(Http3DatagramVisitor* visitor);
 
   // Sets max datagram time in queue.
   void SetMaxDatagramTimeInQueue(QuicTime::Delta max_time_in_queue);
 
-  // Generates a new HTTP/3 datagram context ID for this stream. A datagram
-  // registration visitor must be currently registered on this stream.
-  QuicDatagramContextId GetNextDatagramContextId();
-
   void OnDatagramReceived(QuicDataReader* reader);
 
-  void RegisterHttp3DatagramFlowId(QuicDatagramStreamId flow_id);
-
-  QuicByteCount GetMaxDatagramSize(
-      absl::optional<QuicDatagramContextId> context_id) const;
+  QuicByteCount GetMaxDatagramSize() const;
 
   // Writes |capsule| onto the DATA stream.
   void WriteCapsule(const Capsule& capsule, bool fin = false);
@@ -358,21 +301,27 @@ class QUIC_EXPORT_PRIVATE QuicSpdyStream
   virtual void OnTrailingHeadersComplete(bool fin, size_t frame_len,
                                          const QuicHeaderList& header_list);
   virtual size_t WriteHeadersImpl(
-      spdy::SpdyHeaderBlock header_block, bool fin,
-      QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener);
+      spdy::Http2HeaderBlock header_block, bool fin,
+      quiche::QuicheReferenceCountedPointer<QuicAckListenerInterface>
+          ack_listener);
 
   Visitor* visitor() { return visitor_; }
 
   void set_headers_decompressed(bool val) { headers_decompressed_ = val; }
 
   void set_ack_listener(
-      QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener) {
+      quiche::QuicheReferenceCountedPointer<QuicAckListenerInterface>
+          ack_listener) {
     ack_listener_ = std::move(ack_listener);
   }
 
   void OnWriteSideInDataRecvdState() override;
 
   virtual bool AreHeadersValid(const QuicHeaderList& header_list) const;
+  // TODO(b/202433856) Merge AreHeaderFieldValueValid into AreHeadersValid once
+  // all flags guarding the behavior of AreHeadersValid has been rolled out.
+  virtual bool AreHeaderFieldValuesValid(
+      const QuicHeaderList& header_list) const;
 
   // Reset stream upon invalid request headers.
   virtual void OnInvalidHeaders();
@@ -412,7 +361,7 @@ class QUIC_EXPORT_PRIVATE QuicSpdyStream
   QuicByteCount GetNumFrameHeadersInInterval(QuicStreamOffset offset,
                                              QuicByteCount data_length) const;
 
-  void MaybeProcessSentWebTransportHeaders(spdy::SpdyHeaderBlock& headers);
+  void MaybeProcessSentWebTransportHeaders(spdy::Http2HeaderBlock& headers);
   void MaybeProcessReceivedWebTransportHeaders();
 
   // Writes HTTP/3 DATA frame header. If |force_write| is true, use
@@ -425,11 +374,7 @@ class QUIC_EXPORT_PRIVATE QuicSpdyStream
   void HandleBodyAvailable();
 
   // Called when a datagram frame or capsule is received.
-  void HandleReceivedDatagram(absl::optional<QuicDatagramContextId> context_id,
-                              absl::string_view payload);
-
-  // Whether datagram contexts should be used on this stream.
-  bool ShouldUseDatagramContexts() const;
+  void HandleReceivedDatagram(absl::string_view payload);
 
   QuicSpdySession* spdy_session_;
 
@@ -457,7 +402,7 @@ class QUIC_EXPORT_PRIVATE QuicSpdyStream
   bool trailers_consumed_;
 
   // The parsed trailers received from the peer.
-  spdy::SpdyHeaderBlock received_trailers_;
+  spdy::Http2HeaderBlock received_trailers_;
 
   // Headers accumulator for decoding HEADERS frame payload.
   std::unique_ptr<QpackDecodedHeadersAccumulator>
@@ -485,7 +430,7 @@ class QUIC_EXPORT_PRIVATE QuicSpdyStream
 
   // Ack listener of this stream, and it is notified when any of written bytes
   // are acked or retransmitted.
-  QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener_;
+  quiche::QuicheReferenceCountedPointer<QuicAckListenerInterface> ack_listener_;
 
   // Offset of unacked frame headers.
   QuicIntervalSet<QuicStreamOffset> unacked_frame_headers_offsets_;
@@ -503,13 +448,7 @@ class QUIC_EXPORT_PRIVATE QuicSpdyStream
   std::unique_ptr<WebTransportDataStream> web_transport_data_;
 
   // HTTP/3 Datagram support.
-  Http3DatagramRegistrationVisitor* datagram_registration_visitor_ = nullptr;
-  Http3DatagramVisitor* datagram_no_context_visitor_ = nullptr;
-  absl::optional<QuicDatagramStreamId> datagram_flow_id_;
-  QuicDatagramContextId datagram_next_available_context_id_;
-  absl::flat_hash_map<QuicDatagramContextId, Http3DatagramVisitor*>
-      datagram_context_visitors_;
-  bool use_datagram_contexts_ = false;
+  Http3DatagramVisitor* datagram_visitor_ = nullptr;
 };
 
 }  // namespace quic

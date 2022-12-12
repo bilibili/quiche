@@ -42,28 +42,28 @@ namespace quic {
 namespace {
 
 // Implements the HKDF-Expand-Label function as defined in section 7.1 of RFC
-// 8446, except that it uses "quic " as the prefix instead of "tls13 ", as
-// specified by draft-ietf-quic-tls-14. The HKDF-Expand-Label function takes 4
-// explicit arguments (Secret, Label, Context, and Length), as well as
-// implicit PRF which is the hash function negotiated by TLS. Its use in QUIC
-// (as needed by the QUIC stack, instead of as used internally by the TLS
-// stack) is only for deriving initial secrets for obfuscation and for
-// calculating packet protection keys and IVs from the corresponding packet
-// protection secret. Neither of these uses need a Context (a zero-length
-// context is provided), so this argument is omitted here.
+// 8446. The HKDF-Expand-Label function takes 4 explicit arguments (Secret,
+// Label, Context, and Length), as well as implicit PRF which is the hash
+// function negotiated by TLS. Its use in QUIC (as needed by the QUIC stack,
+// instead of as used internally by the TLS stack) is only for deriving initial
+// secrets for obfuscation, for calculating packet protection keys and IVs from
+// the corresponding packet protection secret and key update in the same quic
+// session. None of these uses need a Context (a zero-length context is
+// provided), so this argument is omitted here.
 //
 // The implicit PRF is explicitly passed into HkdfExpandLabel as |prf|; the
 // Secret, Label, and Length are passed in as |secret|, |label|, and
 // |out_len|, respectively. The resulting expanded secret is returned.
 std::vector<uint8_t> HkdfExpandLabel(const EVP_MD* prf,
-                                     const std::vector<uint8_t>& secret,
-                                     const std::string& label,
-                                     size_t out_len) {
+                                     absl::Span<const uint8_t> secret,
+                                     const std::string& label, size_t out_len) {
   bssl::ScopedCBB quic_hkdf_label;
   CBB inner_label;
   const char label_prefix[] = "tls13 ";
-  // 19 = size(u16) + size(u8) + len("tls13 ") + len ("client in") + size(u8)
-  static const size_t max_quic_hkdf_label_length = 19;
+  // 20 = size(u16) + size(u8) + len("tls13 ") +
+  //      max_len("client in", "server in", "quicv2 key", ... ) +
+  //      size(u8);
+  static const size_t max_quic_hkdf_label_length = 20;
   if (!CBB_init(quic_hkdf_label.get(), max_quic_hkdf_label_length) ||
       !CBB_add_u16(quic_hkdf_label.get(), out_len) ||
       !CBB_add_u8_length_prefixed(quic_hkdf_label.get(), &inner_label) ||
@@ -73,6 +73,7 @@ std::vector<uint8_t> HkdfExpandLabel(const EVP_MD* prf,
       !CBB_add_bytes(&inner_label,
                      reinterpret_cast<const uint8_t*>(label.data()),
                      label.size()) ||
+      // Zero length |Context|.
       !CBB_add_u8(quic_hkdf_label.get(), 0) ||
       !CBB_flush(quic_hkdf_label.get())) {
     QUIC_LOG(ERROR) << "Building HKDF label failed";
@@ -91,25 +92,37 @@ std::vector<uint8_t> HkdfExpandLabel(const EVP_MD* prf,
 
 }  // namespace
 
+const std::string getLabelForVersion(const ParsedQuicVersion& version,
+                                     const absl::string_view& predicate) {
+  static_assert(SupportedVersions().size() == 6u,
+                "Supported versions out of sync with HKDF labels");
+  if (version == ParsedQuicVersion::V2Draft01()) {
+    return absl::StrCat("quicv2 ", predicate);
+  } else {
+    return absl::StrCat("quic ", predicate);
+  }
+}
+
 void CryptoUtils::InitializeCrypterSecrets(
-    const EVP_MD* prf,
-    const std::vector<uint8_t>& pp_secret,
-    QuicCrypter* crypter) {
-  SetKeyAndIV(prf, pp_secret, crypter);
-  std::vector<uint8_t> header_protection_key =
-      GenerateHeaderProtectionKey(prf, pp_secret, crypter->GetKeySize());
+    const EVP_MD* prf, const std::vector<uint8_t>& pp_secret,
+    const ParsedQuicVersion& version, QuicCrypter* crypter) {
+  SetKeyAndIV(prf, pp_secret, version, crypter);
+  std::vector<uint8_t> header_protection_key = GenerateHeaderProtectionKey(
+      prf, pp_secret, version, crypter->GetKeySize());
   crypter->SetHeaderProtectionKey(
       absl::string_view(reinterpret_cast<char*>(header_protection_key.data()),
                         header_protection_key.size()));
 }
 
 void CryptoUtils::SetKeyAndIV(const EVP_MD* prf,
-                              const std::vector<uint8_t>& pp_secret,
+                              absl::Span<const uint8_t> pp_secret,
+                              const ParsedQuicVersion& version,
                               QuicCrypter* crypter) {
   std::vector<uint8_t> key =
-      HkdfExpandLabel(prf, pp_secret, "quic key", crypter->GetKeySize());
-  std::vector<uint8_t> iv =
-      HkdfExpandLabel(prf, pp_secret, "quic iv", crypter->GetIVSize());
+      HkdfExpandLabel(prf, pp_secret, getLabelForVersion(version, "key"),
+                      crypter->GetKeySize());
+  std::vector<uint8_t> iv = HkdfExpandLabel(
+      prf, pp_secret, getLabelForVersion(version, "iv"), crypter->GetIVSize());
   crypter->SetKey(
       absl::string_view(reinterpret_cast<char*>(key.data()), key.size()));
   crypter->SetIV(
@@ -117,16 +130,17 @@ void CryptoUtils::SetKeyAndIV(const EVP_MD* prf,
 }
 
 std::vector<uint8_t> CryptoUtils::GenerateHeaderProtectionKey(
-    const EVP_MD* prf,
-    const std::vector<uint8_t>& pp_secret,
-    size_t out_len) {
-  return HkdfExpandLabel(prf, pp_secret, "quic hp", out_len);
+    const EVP_MD* prf, absl::Span<const uint8_t> pp_secret,
+    const ParsedQuicVersion& version, size_t out_len) {
+  return HkdfExpandLabel(prf, pp_secret, getLabelForVersion(version, "hp"),
+                         out_len);
 }
 
 std::vector<uint8_t> CryptoUtils::GenerateNextKeyPhaseSecret(
-    const EVP_MD* prf,
+    const EVP_MD* prf, const ParsedQuicVersion& version,
     const std::vector<uint8_t>& current_secret) {
-  return HkdfExpandLabel(prf, current_secret, "quic ku", current_secret.size());
+  return HkdfExpandLabel(prf, current_secret, getLabelForVersion(version, "ku"),
+                         current_secret.size());
 }
 
 namespace {
@@ -138,6 +152,9 @@ const uint8_t kDraft29InitialSalt[] = {0xaf, 0xbf, 0xec, 0x28, 0x99, 0x93, 0xd2,
 const uint8_t kRFCv1InitialSalt[] = {0x38, 0x76, 0x2c, 0xf7, 0xf5, 0x59, 0x34,
                                      0xb3, 0x4d, 0x17, 0x9a, 0xe6, 0xa4, 0xc8,
                                      0x0c, 0xad, 0xcc, 0xbb, 0x7f, 0x0a};
+const uint8_t kV2Draft01InitialSalt[] = {
+    0xa7, 0x07, 0xc2, 0x03, 0xa5, 0x9b, 0x47, 0x18, 0x4a, 0x1d,
+    0x62, 0xca, 0x57, 0x04, 0x06, 0xea, 0x7a, 0xe3, 0xe5, 0xd3};
 
 // Salts used by deployed versions of QUIC. When introducing a new version,
 // generate a new salt by running `openssl rand -hex 20`.
@@ -154,9 +171,12 @@ const uint8_t kReservedForNegotiationSalt[] = {
 
 const uint8_t* InitialSaltForVersion(const ParsedQuicVersion& version,
                                      size_t* out_len) {
-  static_assert(SupportedVersions().size() == 5u,
+  static_assert(SupportedVersions().size() == 6u,
                 "Supported versions out of sync with initial encryption salts");
-  if (version == ParsedQuicVersion::RFCv1()) {
+  if (version == ParsedQuicVersion::V2Draft01()) {
+    *out_len = ABSL_ARRAYSIZE(kV2Draft01InitialSalt);
+    return kV2Draft01InitialSalt;
+  } else if (version == ParsedQuicVersion::RFCv1()) {
     *out_len = ABSL_ARRAYSIZE(kRFCv1InitialSalt);
     return kRFCv1InitialSalt;
   } else if (version == ParsedQuicVersion::Draft29()) {
@@ -191,6 +211,11 @@ const uint8_t kRFCv1RetryIntegrityKey[] = {0xbe, 0x0c, 0x69, 0x0b, 0x9f, 0x66,
                                            0xe3, 0x68, 0xc8, 0x4e};
 const uint8_t kRFCv1RetryIntegrityNonce[] = {
     0x46, 0x15, 0x99, 0xd3, 0x5d, 0x63, 0x2b, 0xf2, 0x23, 0x98, 0x25, 0xbb};
+const uint8_t kV2Draft01RetryIntegrityKey[] = {
+    0xba, 0x85, 0x8d, 0xc7, 0xb4, 0x3d, 0xe5, 0xdb,
+    0xf8, 0x76, 0x17, 0xff, 0x4a, 0xb2, 0x53, 0xdb};
+const uint8_t kV2Draft01RetryIntegrityNonce[] = {
+    0x14, 0x1b, 0x99, 0xc2, 0x39, 0xb0, 0x3e, 0x78, 0x5d, 0x6a, 0x2e, 0x9f};
 // Retry integrity key used by ParsedQuicVersion::ReservedForNegotiation().
 const uint8_t kReservedForNegotiationRetryIntegrityKey[] = {
     0xf2, 0xcd, 0x8f, 0xe0, 0x36, 0xd0, 0x25, 0x35,
@@ -204,13 +229,21 @@ const uint8_t kReservedForNegotiationRetryIntegrityNonce[] = {
 bool RetryIntegrityKeysForVersion(const ParsedQuicVersion& version,
                                   absl::string_view* key,
                                   absl::string_view* nonce) {
-  static_assert(SupportedVersions().size() == 5u,
+  static_assert(SupportedVersions().size() == 6u,
                 "Supported versions out of sync with retry integrity keys");
   if (!version.UsesTls()) {
     QUIC_BUG(quic_bug_10699_2)
         << "Attempted to get retry integrity keys for invalid version "
         << version;
     return false;
+  } else if (version == ParsedQuicVersion::V2Draft01()) {
+    *key = absl::string_view(
+        reinterpret_cast<const char*>(kV2Draft01RetryIntegrityKey),
+        ABSL_ARRAYSIZE(kV2Draft01RetryIntegrityKey));
+    *nonce = absl::string_view(
+        reinterpret_cast<const char*>(kV2Draft01RetryIntegrityNonce),
+        ABSL_ARRAYSIZE(kV2Draft01RetryIntegrityNonce));
+    return true;
   } else if (version == ParsedQuicVersion::RFCv1()) {
     *key = absl::string_view(
         reinterpret_cast<const char*>(kRFCv1RetryIntegrityKey),
@@ -291,20 +324,20 @@ void CryptoUtils::CreateInitialObfuscators(Perspective perspective,
   std::vector<uint8_t> encryption_secret = HkdfExpandLabel(
       hash, handshake_secret, encryption_label, EVP_MD_size(hash));
   crypters->encrypter = std::make_unique<Aes128GcmEncrypter>();
-  InitializeCrypterSecrets(hash, encryption_secret, crypters->encrypter.get());
+  InitializeCrypterSecrets(hash, encryption_secret, version,
+                           crypters->encrypter.get());
 
   std::vector<uint8_t> decryption_secret = HkdfExpandLabel(
       hash, handshake_secret, decryption_label, EVP_MD_size(hash));
   crypters->decrypter = std::make_unique<Aes128GcmDecrypter>();
-  InitializeCrypterSecrets(hash, decryption_secret, crypters->decrypter.get());
+  InitializeCrypterSecrets(hash, decryption_secret, version,
+                           crypters->decrypter.get());
 }
 
 // static
 bool CryptoUtils::ValidateRetryIntegrityTag(
-    ParsedQuicVersion version,
-    QuicConnectionId original_connection_id,
-    absl::string_view retry_without_tag,
-    absl::string_view integrity_tag) {
+    ParsedQuicVersion version, QuicConnectionId original_connection_id,
+    absl::string_view retry_without_tag, absl::string_view integrity_tag) {
   unsigned char computed_integrity_tag[kRetryIntegrityTagLength];
   if (integrity_tag.length() != ABSL_ARRAYSIZE(computed_integrity_tag)) {
     QUIC_BUG(quic_bug_10699_4)
@@ -348,10 +381,8 @@ bool CryptoUtils::ValidateRetryIntegrityTag(
 }
 
 // static
-void CryptoUtils::GenerateNonce(QuicWallTime now,
-                                QuicRandom* random_generator,
-                                absl::string_view orbit,
-                                std::string* nonce) {
+void CryptoUtils::GenerateNonce(QuicWallTime now, QuicRandom* random_generator,
+                                absl::string_view orbit, std::string* nonce) {
   // a 4-byte timestamp + 28 random bytes.
   nonce->reserve(kNonceSize);
   nonce->resize(kNonceSize);
@@ -375,17 +406,13 @@ void CryptoUtils::GenerateNonce(QuicWallTime now,
 }
 
 // static
-bool CryptoUtils::DeriveKeys(const ParsedQuicVersion& version,
-                             absl::string_view premaster_secret,
-                             QuicTag aead,
-                             absl::string_view client_nonce,
-                             absl::string_view server_nonce,
-                             absl::string_view pre_shared_key,
-                             const std::string& hkdf_input,
-                             Perspective perspective,
-                             Diversification diversification,
-                             CrypterPair* crypters,
-                             std::string* subkey_secret) {
+bool CryptoUtils::DeriveKeys(
+    const ParsedQuicVersion& version, absl::string_view premaster_secret,
+    QuicTag aead, absl::string_view client_nonce,
+    absl::string_view server_nonce, absl::string_view pre_shared_key,
+    const std::string& hkdf_input, Perspective perspective,
+    Diversification diversification, CrypterPair* crypters,
+    std::string* subkey_secret) {
   // If the connection is using PSK, concatenate it with the pre-master secret.
   std::unique_ptr<char[]> psk_premaster_secret;
   if (!pre_shared_key.empty()) {
@@ -573,8 +600,7 @@ QuicErrorCode CryptoUtils::ValidateServerHelloVersions(
 }
 
 QuicErrorCode CryptoUtils::ValidateClientHello(
-    const CryptoHandshakeMessage& client_hello,
-    ParsedQuicVersion version,
+    const CryptoHandshakeMessage& client_hello, ParsedQuicVersion version,
     const ParsedQuicVersionVector& supported_versions,
     std::string* error_details) {
   if (client_hello.tag() != kCHLO) {
@@ -597,8 +623,7 @@ QuicErrorCode CryptoUtils::ValidateClientHello(
 }
 
 QuicErrorCode CryptoUtils::ValidateClientHelloVersion(
-    QuicVersionLabel client_version,
-    ParsedQuicVersion connection_version,
+    QuicVersionLabel client_version, ParsedQuicVersion connection_version,
     const ParsedQuicVersionVector& supported_versions,
     std::string* error_details) {
   if (client_version != CreateQuicVersionLabel(connection_version)) {
@@ -736,8 +761,7 @@ std::string CryptoUtils::EarlyDataReasonToString(
 
 // static
 std::string CryptoUtils::HashHandshakeMessage(
-    const CryptoHandshakeMessage& message,
-    Perspective /*perspective*/) {
+    const CryptoHandshakeMessage& message, Perspective /*perspective*/) {
   std::string output;
   const QuicData& serialized = message.GetSerialized();
   uint8_t digest[SHA256_DIGEST_LENGTH];
@@ -761,6 +785,26 @@ bool CryptoUtils::GetSSLCapabilities(const SSL* ssl,
 
   *capabilities = bssl::UniquePtr<uint8_t>(buffer);
   return true;
+}
+
+// static
+absl::optional<std::string> CryptoUtils::GenerateProofPayloadToBeSigned(
+    absl::string_view chlo_hash, absl::string_view server_config) {
+  size_t payload_size = sizeof(kProofSignatureLabel) + sizeof(uint32_t) +
+                        chlo_hash.size() + server_config.size();
+  std::string payload;
+  payload.resize(payload_size);
+  QuicDataWriter payload_writer(payload_size, payload.data(),
+                                quiche::Endianness::HOST_BYTE_ORDER);
+  bool success = payload_writer.WriteBytes(kProofSignatureLabel,
+                                           sizeof(kProofSignatureLabel)) &&
+                 payload_writer.WriteUInt32(chlo_hash.size()) &&
+                 payload_writer.WriteStringPiece(chlo_hash) &&
+                 payload_writer.WriteStringPiece(server_config);
+  if (!success) {
+    return absl::nullopt;
+  }
+  return payload;
 }
 
 }  // namespace quic

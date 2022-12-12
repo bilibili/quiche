@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+#include "gquiche/quic/platform/api/quic_ip_address_family.h"
+
 namespace quic {
 
 namespace {

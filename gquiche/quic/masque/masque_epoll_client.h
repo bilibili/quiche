@@ -7,23 +7,22 @@
 
 #include <string>
 
+#include "gquiche/quic/core/io/quic_event_loop.h"
 #include "gquiche/quic/masque/masque_client_session.h"
 #include "gquiche/quic/masque/masque_utils.h"
 #include "gquiche/quic/platform/api/quic_export.h"
-#include "gquiche/quic/tools/quic_client.h"
-#include "gquiche/quic/tools/quic_url.h"
+#include "gquiche/quic/tools/quic_default_client.h"
 
 namespace quic {
 
 // QUIC client that implements MASQUE.
-class QUIC_NO_EXPORT MasqueEpollClient : public QuicClient,
+class QUIC_NO_EXPORT MasqueEpollClient : public QuicDefaultClient,
                                          public MasqueClientSession::Owner {
  public:
   // Constructs a MasqueEpollClient, performs a synchronous DNS lookup.
   static std::unique_ptr<MasqueEpollClient> Create(
       const std::string& uri_template, MasqueMode masque_mode,
-      QuicEpollServer* epoll_server,
-      std::unique_ptr<ProofVerifier> proof_verifier);
+      QuicEventLoop* event_loop, std::unique_ptr<ProofVerifier> proof_verifier);
 
   // From QuicClient.
   std::unique_ptr<QuicSession> CreateQuicClientSession(
@@ -38,9 +37,6 @@ class QUIC_NO_EXPORT MasqueEpollClient : public QuicClient,
 
   // From MasqueClientSession::Owner.
   void OnSettingsReceived() override;
-  // Send a MASQUE client connection ID unregister command to the server.
-  void UnregisterClientConnectionId(
-      QuicConnectionId client_connection_id) override;
 
   MasqueMode masque_mode() const { return masque_mode_; }
 
@@ -48,7 +44,7 @@ class QUIC_NO_EXPORT MasqueEpollClient : public QuicClient,
   // Constructor is private, use Create() instead.
   MasqueEpollClient(QuicSocketAddress server_address,
                     const QuicServerId& server_id, MasqueMode masque_mode,
-                    QuicEpollServer* epoll_server,
+                    QuicEventLoop* event_loop,
                     std::unique_ptr<ProofVerifier> proof_verifier,
                     const std::string& uri_template);
 

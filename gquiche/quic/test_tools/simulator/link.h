@@ -21,10 +21,8 @@ namespace simulator {
 // synchronization issues.
 class OneWayLink : public Actor, public ConstrainedPortInterface {
  public:
-  OneWayLink(Simulator* simulator,
-             std::string name,
-             UnconstrainedPortInterface* sink,
-             QuicBandwidth bandwidth,
+  OneWayLink(Simulator* simulator, std::string name,
+             UnconstrainedPortInterface* sink, QuicBandwidth bandwidth,
              QuicTime::Delta propagation_delay);
   OneWayLink(const OneWayLink&) = delete;
   OneWayLink& operator=(const OneWayLink&) = delete;
@@ -34,8 +32,8 @@ class OneWayLink : public Actor, public ConstrainedPortInterface {
   QuicTime::Delta TimeUntilAvailable() override;
   void Act() override;
 
-  inline QuicBandwidth bandwidth() const { return bandwidth_; }
-  inline void set_bandwidth(QuicBandwidth new_bandwidth) {
+  QuicBandwidth bandwidth() const { return bandwidth_; }
+  void set_bandwidth(QuicBandwidth new_bandwidth) {
     bandwidth_ = new_bandwidth;
   }
 
@@ -73,21 +71,17 @@ class OneWayLink : public Actor, public ConstrainedPortInterface {
 // OneWayLink objects tied together.
 class SymmetricLink {
  public:
-  SymmetricLink(Simulator* simulator,
-                std::string name,
+  SymmetricLink(Simulator* simulator, std::string name,
                 UnconstrainedPortInterface* sink_a,
-                UnconstrainedPortInterface* sink_b,
-                QuicBandwidth bandwidth,
+                UnconstrainedPortInterface* sink_b, QuicBandwidth bandwidth,
                 QuicTime::Delta propagation_delay);
-  SymmetricLink(Endpoint* endpoint_a,
-                Endpoint* endpoint_b,
-                QuicBandwidth bandwidth,
-                QuicTime::Delta propagation_delay);
+  SymmetricLink(Endpoint* endpoint_a, Endpoint* endpoint_b,
+                QuicBandwidth bandwidth, QuicTime::Delta propagation_delay);
   SymmetricLink(const SymmetricLink&) = delete;
   SymmetricLink& operator=(const SymmetricLink&) = delete;
 
-  inline QuicBandwidth bandwidth() { return a_to_b_link_.bandwidth(); }
-  inline void set_bandwidth(QuicBandwidth new_bandwidth) {
+  QuicBandwidth bandwidth() { return a_to_b_link_.bandwidth(); }
+  void set_bandwidth(QuicBandwidth new_bandwidth) {
     a_to_b_link_.set_bandwidth(new_bandwidth);
     b_to_a_link_.set_bandwidth(new_bandwidth);
   }

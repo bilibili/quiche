@@ -11,11 +11,11 @@
 #include "gquiche/quic/core/crypto/null_decrypter.h"
 #include "gquiche/quic/core/crypto/null_encrypter.h"
 #include "gquiche/quic/core/quic_connection.h"
-#include "gquiche/quic/core/quic_default_packet_writer.h"
+#include "gquiche/quic/core/quic_packet_writer.h"
 #include "gquiche/quic/core/quic_packets.h"
 #include "gquiche/quic/core/quic_stream_frame_data_producer.h"
 #include "gquiche/quic/core/quic_trace_visitor.h"
-#include "gquiche/quic/platform/api/quic_containers.h"
+#include "gquiche/quic/test_tools/mock_connection_id_generator.h"
 #include "gquiche/quic/test_tools/simple_session_notifier.h"
 #include "gquiche/quic/test_tools/simulator/link.h"
 #include "gquiche/quic/test_tools/simulator/queue.h"
@@ -41,13 +41,12 @@ class QuicEndpointBase : public Endpoint,
  public:
   // Does not create the connection; the subclass has to create connection by
   // itself.
-  QuicEndpointBase(Simulator* simulator,
-                   std::string name,
+  QuicEndpointBase(Simulator* simulator, std::string name,
                    std::string peer_name);
   ~QuicEndpointBase() override;
 
-  inline QuicConnection* connection() { return connection_.get(); }
-  inline size_t write_blocked_count() { return write_blocked_count_; }
+  QuicConnection* connection() { return connection_.get(); }
+  size_t write_blocked_count() { return write_blocked_count_; }
 
   // Drop the next packet upon receipt.
   void DropNextIncomingPacket();
@@ -77,13 +76,13 @@ class QuicEndpointBase : public Endpoint,
     explicit Writer(QuicEndpointBase* endpoint);
     ~Writer() override;
 
-    WriteResult WritePacket(const char* buffer,
-                            size_t buf_len,
+    WriteResult WritePacket(const char* buffer, size_t buf_len,
                             const QuicIpAddress& self_address,
                             const QuicSocketAddress& peer_address,
                             PerPacketOptions* options) override;
     bool IsWriteBlocked() const override;
     void SetWritable() override;
+    absl::optional<int> MessageTooBigErrorCode() const override;
     QuicByteCount GetMaxPacketSize(
         const QuicSocketAddress& peer_address) const override;
     bool SupportsReleaseTime() const override;
@@ -107,8 +106,7 @@ class QuicEndpointBase : public Endpoint,
                                           QuicStreamOffset offset,
                                           QuicByteCount data_length,
                                           QuicDataWriter* writer) override;
-    bool WriteCryptoData(EncryptionLevel level,
-                         QuicStreamOffset offset,
+    bool WriteCryptoData(EncryptionLevel level, QuicStreamOffset offset,
                          QuicByteCount data_length,
                          QuicDataWriter* writer) override;
   };
@@ -130,6 +128,8 @@ class QuicEndpointBase : public Endpoint,
   bool drop_next_packet_;
 
   std::unique_ptr<QuicTraceVisitor> trace_visitor_;
+
+  test::MockConnectionIdGenerator connection_id_generator_;
 };
 
 // Multiplexes multiple connections at the same host on the network.

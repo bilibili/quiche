@@ -13,7 +13,7 @@
 #include "gquiche/quic/platform/api/quic_test.h"
 #include "gquiche/quic/test_tools/quic_test_utils.h"
 
-namespace quic {
+namespace quic::test {
 
 namespace {
 
@@ -58,6 +58,33 @@ TEST_F(QuicConnectionIdTest, Data) {
   static const uint8_t kNewLength = 4;
   connection_id2.set_length(kNewLength);
   EXPECT_EQ(kNewLength, connection_id2.length());
+}
+
+TEST_F(QuicConnectionIdTest, SpanData) {
+  QuicConnectionId connection_id = QuicConnectionId({0x01, 0x02, 0x03});
+  EXPECT_EQ(connection_id.length(), 3);
+  QuicConnectionId empty_connection_id =
+      QuicConnectionId(absl::Span<uint8_t>());
+  EXPECT_EQ(empty_connection_id.length(), 0);
+  QuicConnectionId connection_id2 = QuicConnectionId({
+      0x01,
+      0x02,
+      0x03,
+      0x04,
+      0x05,
+      0x06,
+      0x07,
+      0x08,
+      0x09,
+      0x0a,
+      0x0b,
+      0x0c,
+      0x0d,
+      0x0e,
+      0x0f,
+      0x10,
+  });
+  EXPECT_EQ(connection_id2.length(), 16);
 }
 
 TEST_F(QuicConnectionIdTest, DoubleConvert) {
@@ -151,4 +178,4 @@ TEST_F(QuicConnectionIdTest, ChangeLength) {
 
 }  // namespace
 
-}  // namespace quic
+}  // namespace quic::test

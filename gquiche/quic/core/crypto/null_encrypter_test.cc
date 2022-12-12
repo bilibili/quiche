@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "gquiche/quic/core/crypto/null_encrypter.h"
+
 #include "absl/base/macros.h"
 #include "gquiche/quic/platform/api/quic_test.h"
 #include "gquiche/quic/test_tools/quic_test_utils.h"

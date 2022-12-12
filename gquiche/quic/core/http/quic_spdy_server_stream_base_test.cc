@@ -8,10 +8,11 @@
 #include "gquiche/quic/core/crypto/null_encrypter.h"
 #include "gquiche/quic/platform/api/quic_flags.h"
 #include "gquiche/quic/platform/api/quic_test.h"
-#include "gquiche/quic/test_tools/qpack/qpack_encoder_test_utils.h"
+#include "gquiche/quic/test_tools/qpack/qpack_test_utils.h"
 #include "gquiche/quic/test_tools/quic_spdy_session_peer.h"
 #include "gquiche/quic/test_tools/quic_stream_peer.h"
 #include "gquiche/quic/test_tools/quic_test_utils.h"
+#include "gquiche/spdy/core/http2_header_block.h"
 
 using testing::_;
 
@@ -308,21 +309,17 @@ TEST_F(QuicSpdyServerStreamBaseTest, InvalidRequestHeader) {
 TEST_F(QuicSpdyServerStreamBaseTest, EmptyHeaders) {
   SetQuicReloadableFlag(quic_verify_request_headers_2, true);
   SetQuicReloadableFlag(quic_act_upon_invalid_header, true);
-  spdy::SpdyHeaderBlock empty_header;
+  spdy::Http2HeaderBlock empty_header;
   quic::test::NoopQpackStreamSenderDelegate encoder_stream_sender_delegate;
-  quic::test::NoopDecoderStreamErrorDelegate decoder_stream_error_delegate;
+  NoopDecoderStreamErrorDelegate decoder_stream_error_delegate;
   auto qpack_encoder =
       std::make_unique<quic::QpackEncoder>(&decoder_stream_error_delegate);
   qpack_encoder->set_qpack_stream_sender_delegate(
       &encoder_stream_sender_delegate);
   std::string payload =
       qpack_encoder->EncodeHeaderList(stream_->id(), empty_header, nullptr);
-  std::unique_ptr<char[]> headers_buffer;
-  quic::QuicByteCount headers_frame_header_length =
-      quic::HttpEncoder::SerializeHeadersFrameHeader(payload.length(),
-                                                     &headers_buffer);
-  absl::string_view headers_frame_header(headers_buffer.get(),
-                                         headers_frame_header_length);
+  std::string headers_frame_header =
+      quic::HttpEncoder::SerializeHeadersFrameHeader(payload.length());
 
   EXPECT_CALL(
       session_,

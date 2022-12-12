@@ -13,6 +13,9 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "url/third_party/mozilla/url_parse.h"
+#include "gquiche/quic/core/io/quic_default_event_loop.h"
+#include "gquiche/quic/core/io/quic_event_loop.h"
+#include "gquiche/quic/core/quic_default_clock.h"
 #include "gquiche/quic/core/quic_server_id.h"
 #include "gquiche/quic/masque/masque_client_tools.h"
 #include "gquiche/quic/masque/masque_encapsulated_epoll_client.h"
@@ -21,26 +24,24 @@
 #include "gquiche/quic/platform/api/quic_default_proof_providers.h"
 #include "gquiche/quic/platform/api/quic_flags.h"
 #include "gquiche/quic/platform/api/quic_socket_address.h"
-#include "gquiche/quic/platform/api/quic_system_event_loop.h"
 #include "gquiche/quic/tools/fake_proof_verifier.h"
+#include "gquiche/common/platform/api/quiche_command_line_flags.h"
+#include "gquiche/common/platform/api/quiche_system_event_loop.h"
 
-DEFINE_QUIC_COMMAND_LINE_FLAG(bool,
-                              disable_certificate_verification,
-                              false,
-                              "If true, don't verify the server certificate.");
+DEFINE_QUICHE_COMMAND_LINE_FLAG(
+    bool, disable_certificate_verification, false,
+    "If true, don't verify the server certificate.");
 
-DEFINE_QUIC_COMMAND_LINE_FLAG(std::string,
-                              masque_mode,
-                              "",
-                              "Allows setting MASQUE mode, valid values are "
-                              "open and legacy. Defaults to open.");
+DEFINE_QUICHE_COMMAND_LINE_FLAG(
+    std::string, masque_mode, "",
+    "Allows setting MASQUE mode, currently only valid value is \"open\".");
 
 namespace quic {
 
 namespace {
 
 int RunMasqueClient(int argc, char* argv[]) {
-  QuicSystemEventLoop event_loop("masque_client");
+  quiche::QuicheSystemEventLoop system_event_loop("masque_client");
   const char* usage = "Usage: masque_client [options] <url>";
 
   // The first non-flag argument is the URI template of the MASQUE server.
@@ -48,21 +49,25 @@ int RunMasqueClient(int argc, char* argv[]) {
   // Note that the URI template expansion currently only supports string
   // replacement of {target_host} and {target_port}, not
   // {?target_host,target_port}.
-  std::vector<std::string> urls = QuicParseCommandLineFlags(usage, argc, argv);
+  std::vector<std::string> urls =
+      quiche::QuicheParseCommandLineFlags(usage, argc, argv);
   if (urls.empty()) {
-    QuicPrintCommandLineFlagHelp(usage);
+    quiche::QuichePrintCommandLineFlagHelp(usage);
     return 1;
   }
 
   const bool disable_certificate_verification =
-      GetQuicFlag(FLAGS_disable_certificate_verification);
-  QuicEpollServer epoll_server;
+      quiche::GetQuicheCommandLineFlag(FLAGS_disable_certificate_verification);
+  std::unique_ptr<QuicEventLoop> event_loop =
+      GetDefaultEventLoop()->Create(QuicDefaultClock::Get());
 
   std::string uri_template = urls[0];
   if (!absl::StrContains(uri_template, '/')) {
-    // Allow passing in authority instead of URI template.
+    // If an authority is passed in instead of a URI template, use the default
+    // URI template.
     uri_template =
-        absl::StrCat("https://", uri_template, "/{target_host}/{target_port}/");
+        absl::StrCat("https://", uri_template,
+                     "/.well-known/masque/udp/{target_host}/{target_port}/");
   }
   url::Parsed parsed_uri_template;
   url::ParseStandardURL(uri_template.c_str(), uri_template.length(),
@@ -83,15 +88,13 @@ int RunMasqueClient(int argc, char* argv[]) {
     proof_verifier = CreateDefaultProofVerifier(host);
   }
   MasqueMode masque_mode = MasqueMode::kOpen;
-  std::string mode_string = GetQuicFlag(FLAGS_masque_mode);
-  if (mode_string == "legacy") {
-    masque_mode = MasqueMode::kLegacy;
-  } else if (!mode_string.empty() && mode_string != "open") {
+  std::string mode_string = quiche::GetQuicheCommandLineFlag(FLAGS_masque_mode);
+  if (!mode_string.empty() && mode_string != "open") {
     std::cerr << "Invalid masque_mode \"" << mode_string << "\"" << std::endl;
     return 1;
   }
   std::unique_ptr<MasqueEpollClient> masque_client = MasqueEpollClient::Create(
-      uri_template, masque_mode, &epoll_server, std::move(proof_verifier));
+      uri_template, masque_mode, event_loop.get(), std::move(proof_verifier));
   if (masque_client == nullptr) {
     return 1;
   }
@@ -101,7 +104,7 @@ int RunMasqueClient(int argc, char* argv[]) {
 
   for (size_t i = 1; i < urls.size(); ++i) {
     if (!tools::SendEncapsulatedMasqueRequest(
-            masque_client.get(), &epoll_server, urls[i],
+            masque_client.get(), event_loop.get(), urls[i],
             disable_certificate_verification)) {
       return 1;
     }
@@ -114,6 +117,4 @@ int RunMasqueClient(int argc, char* argv[]) {
 
 }  // namespace quic
 
-int main(int argc, char* argv[]) {
-  return quic::RunMasqueClient(argc, argv);
-}
+int main(int argc, char* argv[]) { return quic::RunMasqueClient(argc, argv); }

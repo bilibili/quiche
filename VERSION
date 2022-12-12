@@ -1,5 +1,6 @@
-chromium_tag: 98.0.4758.81
-quiche_version: 4003b67
-boringssl_version: 3a667d1
+chromium_tag: 107.0.5304.62
+quiche_version: a80d590
+boringssl_version: 19009c5
 googleurl_version: 4c7645e
-absl_version: 9336be0
+absl_version: 1be36c8a
+

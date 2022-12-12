@@ -9,6 +9,10 @@
 
 namespace quic {
 
+namespace test {
+class QuicCoalescedPacketPeer;
+}
+
 // QuicCoalescedPacket is used to buffer multiple packets which can be coalesced
 // into the same UDP datagram.
 class QUIC_EXPORT_PRIVATE QuicCoalescedPacket {
@@ -21,7 +25,7 @@ class QUIC_EXPORT_PRIVATE QuicCoalescedPacket {
   bool MaybeCoalescePacket(const SerializedPacket& packet,
                            const QuicSocketAddress& self_address,
                            const QuicSocketAddress& peer_address,
-                           QuicBufferAllocator* allocator,
+                           quiche::QuicheBufferAllocator* allocator,
                            QuicPacketLength current_max_packet_length);
 
   // Clears this coalesced packet.
@@ -33,8 +37,7 @@ class QUIC_EXPORT_PRIVATE QuicCoalescedPacket {
   // Copies encrypted_buffers_ to |buffer| and sets |length_copied| to the
   // copied amount. Returns false if copy fails (i.e., |buffer_len| is not
   // enough).
-  bool CopyEncryptedBuffers(char* buffer,
-                            size_t buffer_len,
+  bool CopyEncryptedBuffers(char* buffer, size_t buffer_len,
                             size_t* length_copied) const;
 
   std::string ToString(size_t serialized_length) const;
@@ -61,7 +64,11 @@ class QUIC_EXPORT_PRIVATE QuicCoalescedPacket {
 
   QuicPacketLength max_packet_length() const { return max_packet_length_; }
 
+  std::vector<size_t> packet_lengths() const;
+
  private:
+  friend class test::QuicCoalescedPacketPeer;
+
   // self/peer addresses are set when trying to coalesce the first packet.
   // Packets with different self/peer addresses cannot be coalesced.
   QuicSocketAddress self_address_;

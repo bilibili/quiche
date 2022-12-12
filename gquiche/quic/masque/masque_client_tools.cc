@@ -3,17 +3,20 @@
 // found in the LICENSE file.
 
 #include "gquiche/quic/masque/masque_client_tools.h"
+
 #include "gquiche/quic/masque/masque_encapsulated_epoll_client.h"
 #include "gquiche/quic/masque/masque_utils.h"
 #include "gquiche/quic/platform/api/quic_default_proof_providers.h"
 #include "gquiche/quic/tools/fake_proof_verifier.h"
+#include "gquiche/quic/tools/quic_name_lookup.h"
 #include "gquiche/quic/tools/quic_url.h"
+#include "gquiche/spdy/core/http2_header_block.h"
 
 namespace quic {
 namespace tools {
 
 bool SendEncapsulatedMasqueRequest(MasqueEpollClient* masque_client,
-                                   QuicEpollServer* epoll_server,
+                                   QuicEventLoop* event_loop,
                                    std::string url_string,
                                    bool disable_certificate_verification) {
   const QuicUrl url(url_string, "https");
@@ -33,7 +36,7 @@ bool SendEncapsulatedMasqueRequest(MasqueEpollClient* masque_client,
   }
   const QuicServerId server_id(url.host(), url.port());
   auto client = std::make_unique<MasqueEncapsulatedEpollClient>(
-      addr, server_id, epoll_server, std::move(proof_verifier), masque_client);
+      addr, server_id, event_loop, std::move(proof_verifier), masque_client);
 
   if (client == nullptr) {
     QUIC_LOG(ERROR) << "Failed to create MasqueEncapsulatedEpollClient for "

@@ -7,7 +7,7 @@
 
 #include <algorithm>
 #include <limits>
-
+#include <queue>
 #include "gquiche/quic/core/congestion_control/bandwidth_sampler.h"
 #include "gquiche/quic/core/congestion_control/send_algorithm_interface.h"
 #include "gquiche/quic/core/congestion_control/windowed_filter.h"
@@ -20,6 +20,18 @@
 
 namespace quic {
 
+enum class Bbr2Mode : uint8_t {
+  // Startup phase of the connection.
+  STARTUP,
+  // After achieving the highest possible bandwidth during the startup, lower
+  // the pacing rate in order to drain the queue.
+  DRAIN,
+  // Cruising mode.
+  PROBE_BW,
+  // Temporarily slow down sending in order to empty the buffer and measure
+  // the real minimum RTT.
+  PROBE_RTT,
+};
 template <typename T>
 class QUIC_EXPORT_PRIVATE Limits {
  public:
@@ -75,7 +87,7 @@ struct QUIC_EXPORT_PRIVATE Bbr2Params {
    * STARTUP parameters.
    */
 
-  // The gain for both CWND and PacingRate at startup.
+  // The gain for CWND in startup.
   float startup_cwnd_gain = 2.0;
   // TODO(wub): Maybe change to the newly derived value of 2.773 (4 * ln(2)).
   float startup_pacing_gain = 2.885;
@@ -269,6 +281,35 @@ class QUIC_EXPORT_PRIVATE MinRttFilter {
   QuicTime min_rtt_timestamp_;
 };
 
+class QUIC_EXPORT_PRIVATE Bbr2MinPacketLostListFilter {
+ public:
+  uint64_t min_packet_lost_queue_size_ = 400;
+  float min_packet_lost_index_ = 0.52;
+
+  void Update(float sample);
+  void Advance();
+  float Get() const;
+ private:
+  std::pair<std::multiset<float>, std::multiset<float>> min_packet_lost_;
+  std::queue <float> min_packet_lost_queue_;
+};
+
+class QUIC_EXPORT_PRIVATE Bbr2MaxBandwidthListFilter {
+ public:
+  uint64_t max_bandwidth_queue_size_ = 100;
+  float max_bandwidth_index_ = 0.1;
+
+  void Update(QuicBandwidth sample);
+
+  void Advance();
+
+  QuicBandwidth Get() const;
+
+ private:
+  std::pair<std::multiset<QuicBandwidth>, std::multiset<QuicBandwidth>> max_bandwidth_;
+  std::queue <QuicBandwidth> max_bandwidth_queue_;
+};
+
 class QUIC_EXPORT_PRIVATE Bbr2MaxBandwidthFilter {
  public:
   void Update(QuicBandwidth sample) {
@@ -339,23 +380,19 @@ struct QUIC_EXPORT_PRIVATE Bbr2CongestionEvent {
 // bandwidth_(hi|lo), bandwidth and rtt estimates, etc.
 class QUIC_EXPORT_PRIVATE Bbr2NetworkModel {
  public:
-  Bbr2NetworkModel(const Bbr2Params* params,
-                   QuicTime::Delta initial_rtt,
-                   QuicTime initial_rtt_timestamp,
-                   float cwnd_gain,
-                   float pacing_gain,
-                   const BandwidthSampler* old_sampler);
+  Bbr2NetworkModel(const Bbr2Params* params, QuicTime::Delta initial_rtt,
+                   QuicTime initial_rtt_timestamp, float cwnd_gain,
+                   float pacing_gain, const BandwidthSampler* old_sampler);
 
-  void OnPacketSent(QuicTime sent_time,
-                    QuicByteCount bytes_in_flight,
-                    QuicPacketNumber packet_number,
-                    QuicByteCount bytes,
+  void OnPacketSent(QuicTime sent_time, QuicByteCount bytes_in_flight,
+                    QuicPacketNumber packet_number, QuicByteCount bytes,
                     HasRetransmittableData is_retransmittable);
 
   void OnCongestionEventStart(QuicTime event_time,
                               const AckedPacketVector& acked_packets,
                               const LostPacketVector& lost_packets,
-                              Bbr2CongestionEvent* congestion_event);
+                              Bbr2CongestionEvent* congestion_event,
+                              const Bbr2Mode mode);
 
   void OnCongestionEventFinish(QuicPacketNumber least_unacked_packet,
                                const Bbr2CongestionEvent& congestion_event);
@@ -365,17 +402,23 @@ class QUIC_EXPORT_PRIVATE Bbr2NetworkModel {
   void UpdateNetworkParameters(QuicTime::Delta rtt);
 
   // Update inflight/bandwidth short-term lower bounds.
-  void AdaptLowerBounds(const Bbr2CongestionEvent& congestion_event);
+  void AdaptLowerBounds(const Bbr2CongestionEvent& congestion_event, const Bbr2Mode mode);
 
   // Restart the current round trip as if it is starting now.
-  void RestartRoundEarly();
+  void RestartRoundEarly(QuicTime now);
 
-  void AdvanceMaxBandwidthFilter() { max_bandwidth_filter_.Advance(); }
+  void AdvanceMaxBandwidthFilter() { 
+    if (is_use_bandwidth_list_) {
+      max_bandwidth_list_filter_.Advance();
+    } else {
+      max_bandwidth_filter_.Advance(); 
+    }
+  }
 
   void OnApplicationLimited() { bandwidth_sampler_.OnAppLimited(); }
 
   // Calculates BDP using the current MaxBandwidth.
-  QuicByteCount BDP() const { return BDP(MaxBandwidth()); }
+  QuicByteCount BDP(const Bbr2Mode mode) const { return BDP(MaxBandwidth(mode)); }
 
   QuicByteCount BDP(QuicBandwidth bandwidth) const {
     return bandwidth * MinRtt();
@@ -395,7 +438,13 @@ class QUIC_EXPORT_PRIVATE Bbr2NetworkModel {
     min_rtt_filter_.ForceUpdate(MinRtt(), MinRttTimestamp() + duration);
   }
 
-  QuicBandwidth MaxBandwidth() const { return max_bandwidth_filter_.Get(); }
+  QuicBandwidth MaxBandwidth(const Bbr2Mode mode) const { 
+    if (is_use_bandwidth_list_ && mode != Bbr2Mode::STARTUP) {
+      return max_bandwidth_list_filter_.Get();
+    } else {
+      return max_bandwidth_filter_.Get(); 
+    }
+  }
 
   QuicByteCount MaxAckHeight() const {
     return bandwidth_sampler_.max_ack_height();
@@ -444,8 +493,8 @@ class QUIC_EXPORT_PRIVATE Bbr2NetworkModel {
 
   bool MaybeExpireMinRtt(const Bbr2CongestionEvent& congestion_event);
 
-  QuicBandwidth BandwidthEstimate() const {
-    return std::min(MaxBandwidth(), bandwidth_lo_);
+  QuicBandwidth BandwidthEstimate(const Bbr2Mode mode) const {
+    return std::min(MaxBandwidth(mode), bandwidth_lo_);
   }
 
   QuicRoundTripCount RoundTripCount() const {
@@ -461,12 +510,13 @@ class QUIC_EXPORT_PRIVATE Bbr2NetworkModel {
   // round. Returns true if there was sufficient bandwidth growth and false
   // otherwise.  If it's been too many rounds without growth, also sets
   // |full_bandwidth_reached_| to true.
-  bool HasBandwidthGrowth(const Bbr2CongestionEvent& congestion_event);
+  bool HasBandwidthGrowth(const Bbr2CongestionEvent& congestion_event, const Bbr2Mode mode);
 
   // Returns true if the minimum bytes in flight during the round is greater
   // than the BDP * |bdp_gain|.
   bool CheckPersistentQueue(const Bbr2CongestionEvent& congestion_event,
-                            float bdp_gain);
+                            float bdp_gain,
+                            const Bbr2Mode mode);
 
   QuicPacketNumber last_sent_packet() const {
     return round_trip_counter_.last_sent_packet();
@@ -527,6 +577,17 @@ class QUIC_EXPORT_PRIVATE Bbr2NetworkModel {
 
   float pacing_gain() const { return pacing_gain_; }
   void set_pacing_gain(float pacing_gain) { pacing_gain_ = pacing_gain; }
+  void set_extra_loss_threshold(float extra_loss_threshold) { extra_loss_threshold_ = extra_loss_threshold; }
+  void set_bandwidth_list_size(uint64_t bandwidth_list_size) {max_bandwidth_list_filter_.max_bandwidth_queue_size_ = bandwidth_list_size; }
+  void set_bandwidth_list_index(float bandwidth_list_index) {max_bandwidth_list_filter_.max_bandwidth_index_ = bandwidth_list_index; }
+  void set_update_packet_lost_range_time(QuicTime::Delta update_packet_lost_range_time) {update_packet_lost_range_time_ = update_packet_lost_range_time;}
+  void set_is_update_min_packet_lost(bool is_update_min_packet_lost) {is_update_min_packet_lost_ = is_update_min_packet_lost;}
+  void set_is_update_min_packet_lost_old(bool is_update_min_packet_lost_old) {is_update_min_packet_lost_old_ = is_update_min_packet_lost_old;}
+  void set_min_packet_lost_list_size(uint64_t min_packet_lost_list_size) { min_packet_lost_list_filter_.min_packet_lost_queue_size_= min_packet_lost_list_size;}
+  void set_min_packet_lost_list_index(float min_packet_lost_list_index) {min_packet_lost_list_filter_.min_packet_lost_index_ = min_packet_lost_list_index;}
+  void set_is_use_bandwidth_list(bool is_use_bandwidth_list) {is_use_bandwidth_list_ = is_use_bandwidth_list;}
+  void set_is_use_decrease_pacing_rate_by_rtt(bool is_use_decrease_pacing_rate_by_rtt) {is_use_decrease_pacing_rate_by_rtt_ = is_use_decrease_pacing_rate_by_rtt;}
+  void set_is_use_rtt_determine_congested_by_random(bool is_use_rtt_determine_congested_by_random) {is_use_rtt_determine_congested_by_random_ = is_use_rtt_determine_congested_by_random;}
 
   bool full_bandwidth_reached() const { return full_bandwidth_reached_; }
   void set_full_bandwidth_reached() { full_bandwidth_reached_ = true; }
@@ -537,9 +598,15 @@ class QUIC_EXPORT_PRIVATE Bbr2NetworkModel {
     return rounds_without_bandwidth_growth_;
   }
 
+  QuicTime::Delta last_round_rtt_;
+  QuicTime::Delta rtt_diff_;
+  QuicTime::Delta pre_min_rtt_;
+  QuicTime::Delta pre_max_rtt_;
+  bool is_link_full_;
+  float rtt_weight_;
  private:
   // Called when a new round trip starts.
-  void OnNewRound();
+  void OnNewRound(QuicTime now);
 
   const Bbr2Params& Params() const { return *params_; }
   const Bbr2Params* const params_;
@@ -551,10 +618,17 @@ class QUIC_EXPORT_PRIVATE Bbr2NetworkModel {
   // The filter that tracks the maximum bandwidth over multiple recent round
   // trips.
   Bbr2MaxBandwidthFilter max_bandwidth_filter_;
+
+  Bbr2MinPacketLostListFilter min_packet_lost_list_filter_;
+  Bbr2MaxBandwidthListFilter max_bandwidth_list_filter_;
+
   MinRttFilter min_rtt_filter_;
 
   // Bytes lost in the current round. Updated once per congestion event.
   QuicByteCount bytes_lost_in_round_ = 0;
+
+  QuicByteCount bytes_send_in_round_ = 0;
+  QuicByteCount bytes_send_in_prior_round_ = 0;
   // Number of loss marking events in the current round.
   int64_t loss_events_in_round_ = 0;
 
@@ -565,7 +639,8 @@ class QUIC_EXPORT_PRIVATE Bbr2NetworkModel {
   QuicByteCount max_bytes_delivered_in_round_ = 0;
 
   // The minimum bytes in flight during this round.
-  QuicByteCount min_bytes_in_flight_in_round_ = 0;
+  QuicByteCount min_bytes_in_flight_in_round_ =
+      std::numeric_limits<uint64_t>::max();
 
   // Max bandwidth in the current round. Updated once per congestion event.
   QuicBandwidth bandwidth_latest_ = QuicBandwidth::Zero();
@@ -584,6 +659,17 @@ class QUIC_EXPORT_PRIVATE Bbr2NetworkModel {
   float cwnd_gain_;
   float pacing_gain_;
 
+  //extra loss threshold from bbr2sender
+  float extra_loss_threshold_;
+  float min_packet_lost_;
+  bool is_update_min_packet_lost_;
+  bool is_update_min_packet_lost_old_;
+  bool is_use_bandwidth_list_;
+  bool is_use_decrease_pacing_rate_by_rtt_;
+  bool is_use_rtt_determine_congested_by_random_;
+
+  QuicTime::Delta update_packet_lost_range_time_;
+  QuicTime packet_lost_update_time_;
   // Whether we are cwnd limited prior to the start of the current aggregation
   // epoch.
   bool cwnd_limited_before_aggregation_epoch_ = false;
@@ -592,19 +678,6 @@ class QUIC_EXPORT_PRIVATE Bbr2NetworkModel {
   bool full_bandwidth_reached_ = false;
   QuicBandwidth full_bandwidth_baseline_ = QuicBandwidth::Zero();
   QuicRoundTripCount rounds_without_bandwidth_growth_ = 0;
-};
-
-enum class Bbr2Mode : uint8_t {
-  // Startup phase of the connection.
-  STARTUP,
-  // After achieving the highest possible bandwidth during the startup, lower
-  // the pacing rate in order to drain the queue.
-  DRAIN,
-  // Cruising mode.
-  PROBE_BW,
-  // Temporarily slow down sending in order to empty the buffer and measure
-  // the real minimum RTT.
-  PROBE_RTT,
 };
 
 QUIC_EXPORT_PRIVATE inline std::ostream& operator<<(std::ostream& os,
@@ -641,8 +714,7 @@ class QUIC_EXPORT_PRIVATE Bbr2ModeBase {
                      const Bbr2CongestionEvent* congestion_event) = 0;
 
   virtual Bbr2Mode OnCongestionEvent(
-      QuicByteCount prior_in_flight,
-      QuicTime event_time,
+      QuicByteCount prior_in_flight, QuicTime event_time,
       const AckedPacketVector& acked_packets,
       const LostPacketVector& lost_packets,
       const Bbr2CongestionEvent& congestion_event) = 0;

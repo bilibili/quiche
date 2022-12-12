@@ -54,8 +54,8 @@ SET(BASE_SRCS
     base/bvc-qlog/src/base_qlogger.cc
     base/bvc-qlog/src/file_qlogger.h
     base/bvc-qlog/src/file_qlogger.cc
-    base/bvc-qlog/src/bvc_quic_connection_debug_visitor.h
-    base/bvc-qlog/src/bvc_quic_connection_debug_visitor.cc
+    base/bvc-qlog/src/connection_debug_visitor.h
+    base/bvc-qlog/src/connection_debug_visitor.cc
 )
 
 
@@ -73,17 +73,13 @@ SET(PLATFORM_SRCS
     platform/base64.cc
     platform/mem_slice_buffer.cc
     platform/string_utils.cc
-    platform/quiche_platform_impl/flags_impl.cc
     platform/quiche_platform_impl/quiche_logging_impl.cc
     platform/quiche_platform_impl/quiche_time_utils_impl.cc
     platform/quiche_platform_impl/quic_mutex_impl.cc
     platform/quic_platform_impl/quic_cert_utils_impl.cc
     platform/quic_platform_impl/quic_default_proof_providers_impl.cc
     platform/quic_platform_impl/quic_hostname_utils_impl.cc
-    platform/quic_platform_impl/quic_mem_slice_impl.cc
     platform/quic_platform_impl/quic_mem_slice_span_impl.cc
-    platform/quic_platform_impl/quic_mem_slice_storage_impl.cc
-    platform/epoll_platform_impl/quic_epoll_clock.cc
 )
 
 SET(GQUICHE_SRCS
@@ -92,6 +88,20 @@ SET(GQUICHE_SRCS
     gquiche/common/quiche_text_utils.cc
     gquiche/common/quiche_data_reader.cc
     gquiche/common/quiche_data_writer.cc
+    gquiche/common/platform/api/quiche_mutex.cc
+    gquiche/common/platform/api/quiche_hostname_utils.cc
+    gquiche/common/quiche_ip_address.cc
+    gquiche/common/platform/default/quiche_platform_impl/quiche_stack_trace_impl.cc
+    gquiche/common/platform/default/quiche_platform_impl/quiche_flags_impl.cc
+    gquiche/common/platform/default/quiche_platform_impl/quiche_command_line_flags_impl.cc
+    gquiche/common/platform/default/quiche_platform_impl/quiche_mutex_impl.cc 
+    gquiche/common/quiche_buffer_allocator.cc 
+    gquiche/common/simple_buffer_allocator.cc
+    gquiche/common/quiche_ip_address_family.cc 
+    gquiche/common/quiche_mem_slice_storage.cc 
+    gquiche/common/structured_headers.cc 
+    gquiche/common/structured_headers_fuzzer.cc
+    gquiche/http2/adapter/noop_header_validator.cc 
     gquiche/http2/decoder/decode_buffer.cc
     gquiche/http2/decoder/decode_http2_structures.cc
     gquiche/http2/decoder/decode_status.cc
@@ -155,6 +165,8 @@ SET(GQUICHE_SRCS
     gquiche/quic/core/congestion_control/send_algorithm_interface.cc
     gquiche/quic/core/congestion_control/tcp_cubic_sender_bytes.cc
     gquiche/quic/core/congestion_control/uber_loss_algorithm.cc
+    gquiche/quic/core/crypto/certificate_util.cc 
+    gquiche/quic/core/crypto/web_transport_fingerprint_proof_verifier.cc 
     gquiche/quic/core/crypto/aead_base_decrypter.cc
     gquiche/quic/core/crypto/aead_base_encrypter.cc
     gquiche/quic/core/crypto/aes_128_gcm_12_decrypter.cc
@@ -175,7 +187,6 @@ SET(GQUICHE_SRCS
     gquiche/quic/core/crypto/chacha_base_decrypter.cc
     gquiche/quic/core/crypto/chacha_base_encrypter.cc
     gquiche/quic/core/crypto/channel_id.cc
-    gquiche/quic/core/crypto/common_cert_set.cc
     gquiche/quic/core/crypto/crypto_framer.cc
     gquiche/quic/core/crypto/crypto_handshake.cc
     gquiche/quic/core/crypto/crypto_handshake_message.cc
@@ -271,7 +282,6 @@ SET(GQUICHE_SRCS
     gquiche/quic/core/quic_ack_listener_interface.cc
     gquiche/quic/core/quic_alarm.cc
     gquiche/quic/core/quic_bandwidth.cc
-    gquiche/quic/core/quic_buffer_allocator.cc
     gquiche/quic/core/quic_buffered_packet_store.cc
     gquiche/quic/core/chlo_extractor.cc
     gquiche/quic/core/quic_clock.cc
@@ -313,8 +323,6 @@ SET(GQUICHE_SRCS
     gquiche/quic/core/quic_sent_packet_manager.cc
     gquiche/quic/core/quic_server_id.cc
     gquiche/quic/core/quic_session.cc
-    gquiche/quic/core/quic_simple_buffer_allocator.cc
-    gquiche/quic/core/quic_linux_socket_utils.cc
     gquiche/quic/core/quic_syscall_wrapper.cc
     gquiche/quic/core/quic_socket_address_coder.cc
     gquiche/quic/core/quic_stream.cc
@@ -323,7 +331,6 @@ SET(GQUICHE_SRCS
     gquiche/quic/core/quic_stream_sequencer.cc
     gquiche/quic/core/quic_stream_sequencer_buffer.cc
     gquiche/quic/core/quic_sustained_bandwidth_recorder.cc
-    gquiche/quic/core/quic_syscall_wrapper.cc
     gquiche/quic/core/quic_tag.cc
     gquiche/quic/core/quic_time_wait_list_manager.cc
     gquiche/quic/core/quic_time.cc
@@ -344,12 +351,15 @@ SET(GQUICHE_SRCS
     gquiche/quic/core/quic_chaos_protector.cc
     gquiche/quic/core/quic_connection_context.cc
     gquiche/quic/core/http/web_transport_stream_adapter.cc
-    gquiche/quic/platform/api/quic_file_utils.cc
-    gquiche/quic/platform/api/quic_hostname_utils.cc
-    gquiche/quic/platform/api/quic_ip_address.cc
-    gquiche/quic/platform/api/quic_mutex.cc
+    gquiche/quic/core/quic_default_clock.cc
+    gquiche/quic/core/io/event_loop_socket_factory.cc
+    gquiche/quic/core/io/event_loop_tcp_client_socket.cc 
+    gquiche/quic/core/io/quic_poll_event_loop.cc
+    gquiche/quic/core/io/quic_default_event_loop.cc
+    gquiche/quic/core/io/socket_posix.cc
+    gquiche/quic/core/deterministic_connection_id_generator.cc
+    gquiche/quic/core/quic_ping_manager.cc 
     gquiche/quic/platform/api/quic_socket_address.cc
-    gquiche/quic/platform/api/quic_mem_slice_storage.cc
     gquiche/spdy/core/hpack/hpack_constants.cc
     gquiche/spdy/core/hpack/hpack_decoder_adapter.cc
     gquiche/spdy/core/hpack/hpack_encoder.cc
@@ -361,15 +371,15 @@ SET(GQUICHE_SRCS
     gquiche/spdy/core/recording_headers_handler.cc
     gquiche/spdy/core/spdy_alt_svc_wire_format.cc
     gquiche/spdy/core/spdy_frame_builder.cc
-    gquiche/spdy/core/spdy_frame_reader.cc
     gquiche/spdy/core/spdy_framer.cc
-    gquiche/spdy/core/spdy_header_block.cc
-    gquiche/spdy/core/spdy_header_storage.cc
+    gquiche/spdy/core/http2_header_block.cc
     gquiche/spdy/core/spdy_no_op_visitor.cc
     gquiche/spdy/core/spdy_pinnable_buffer_piece.cc
     gquiche/spdy/core/spdy_prefixed_buffer_reader.cc
     gquiche/spdy/core/spdy_protocol.cc
     gquiche/spdy/core/spdy_simple_arena.cc
+    gquiche/spdy/core/http2_header_storage.cc
+    gquiche/quic/core/quic_epoll_clock.cc
 )
 
 
@@ -379,6 +389,9 @@ SET(QUIC_TOOLS_SRCS
     gquiche/quic/tools/quic_client_base.cc
     gquiche/quic/tools/quic_client.cc
     gquiche/quic/tools/quic_client_epoll_network_helper.cc
+    gquiche/quic/tools/quic_default_client.cc
+    gquiche/quic/tools/quic_name_lookup.cc
+    gquiche/quic/tools/quic_client_default_network_helper.cc
 )
 
 message("PROTO_SRCS = ${CoreProtoSource}")
@@ -398,10 +411,13 @@ ADD_LIBRARY(quiche
 TARGET_LINK_LIBRARIES(quiche
     absl::base
     absl::strings
-    absl::str_format
-    absl::time
-    absl::flat_hash_map
+    absl::status
     absl::synchronization
+    absl::time
+    absl::statusor
+    absl::flags_parse
+    absl::str_format
+    absl::flat_hash_map
     gurl fmt ssl
     ${QuicCoreProto}
     ${Protobuf_LIBRARIES}
@@ -439,7 +455,6 @@ TARGET_LINK_LIBRARIES(simple_quic_client -static-libstdc++
 SET(SIMPLE_QUIC_SERVER_SRCS
     gquiche/quic/tools/quic_server_bin.cc
     gquiche/quic/tools/quic_backend_response.cc
-    gquiche/quic/tools/quic_epoll_server_factory.cc
     gquiche/quic/tools/quic_memory_cache_backend.cc
     gquiche/quic/tools/quic_server.cc
     gquiche/quic/tools/quic_simple_crypto_server_stream_helper.cc
@@ -448,6 +463,9 @@ SET(SIMPLE_QUIC_SERVER_SRCS
     gquiche/quic/tools/quic_simple_server_stream.cc
     gquiche/quic/tools/quic_toy_server.cc
     gquiche/quic/tools/quic_url.cc
+    gquiche/quic/tools/quic_simple_server_backend.h
+    gquiche/quic/tools/quic_server_factory.cc
+    gquiche/quic/tools/web_transport_test_visitors.h
 )
 
 # Build bvc quic server binaries.

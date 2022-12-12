@@ -8,8 +8,8 @@
 
 #include "absl/memory/memory.h"
 #include "absl/strings/string_view.h"
-#include "gquiche/quic/core/quic_epoll_alarm_factory.h"
-#include "gquiche/quic/core/quic_epoll_connection_helper.h"
+#include "gquiche/quic/core/io/quic_default_event_loop.h"
+#include "gquiche/quic/core/quic_default_connection_helper.h"
 #include "gquiche/quic/tools/quic_simple_crypto_server_stream_helper.h"
 #include "gquiche/quic/tools/quic_simple_dispatcher.h"
 #include "gquiche/quic/tools/quic_simple_server_session.h"
@@ -23,21 +23,15 @@ class CustomStreamSession : public QuicSimpleServerSession {
   CustomStreamSession(
       const QuicConfig& config,
       const ParsedQuicVersionVector& supported_versions,
-      QuicConnection* connection,
-      QuicSession::Visitor* visitor,
+      QuicConnection* connection, QuicSession::Visitor* visitor,
       QuicCryptoServerStreamBase::Helper* helper,
       const QuicCryptoServerConfig* crypto_config,
       QuicCompressedCertsCache* compressed_certs_cache,
       QuicTestServer::StreamFactory* stream_factory,
       QuicTestServer::CryptoStreamFactory* crypto_stream_factory,
       QuicSimpleServerBackend* quic_simple_server_backend)
-      : QuicSimpleServerSession(config,
-                                supported_versions,
-                                connection,
-                                visitor,
-                                helper,
-                                crypto_config,
-                                compressed_certs_cache,
+      : QuicSimpleServerSession(config, supported_versions, connection, visitor,
+                                helper, crypto_config, compressed_certs_cache,
                                 quic_simple_server_backend),
         stream_factory_(stream_factory),
         crypto_stream_factory_(crypto_stream_factory) {}
@@ -73,22 +67,19 @@ class CustomStreamSession : public QuicSimpleServerSession {
 class QuicTestDispatcher : public QuicSimpleDispatcher {
  public:
   QuicTestDispatcher(
-      const QuicConfig* config,
-      const QuicCryptoServerConfig* crypto_config,
+      const QuicConfig* config, const QuicCryptoServerConfig* crypto_config,
       QuicVersionManager* version_manager,
       std::unique_ptr<QuicConnectionHelperInterface> helper,
       std::unique_ptr<QuicCryptoServerStreamBase::Helper> session_helper,
       std::unique_ptr<QuicAlarmFactory> alarm_factory,
       QuicSimpleServerBackend* quic_simple_server_backend,
-      uint8_t expected_server_connection_id_length)
-      : QuicSimpleDispatcher(config,
-                             crypto_config,
-                             version_manager,
-                             std::move(helper),
-                             std::move(session_helper),
+      uint8_t expected_server_connection_id_length,
+      ConnectionIdGeneratorInterface& generator)
+      : QuicSimpleDispatcher(config, crypto_config, version_manager,
+                             std::move(helper), std::move(session_helper),
                              std::move(alarm_factory),
                              quic_simple_server_backend,
-                             expected_server_connection_id_length),
+                             expected_server_connection_id_length, generator),
         session_factory_(nullptr),
         stream_factory_(nullptr),
         crypto_stream_factory_(nullptr) {}
@@ -103,7 +94,7 @@ class QuicTestDispatcher : public QuicSimpleDispatcher {
     QuicConnection* connection = new QuicConnection(
         id, self_address, peer_address, helper(), alarm_factory(), writer(),
         /* owns_writer= */ false, Perspective::IS_SERVER,
-        ParsedQuicVersionVector{version});
+        ParsedQuicVersionVector{version}, connection_id_generator());
 
     std::unique_ptr<QuicServerSessionBase> session;
     if (session_factory_ == nullptr && stream_factory_ == nullptr &&
@@ -169,38 +160,31 @@ QuicTestServer::QuicTestServer(
     : QuicServer(std::move(proof_source), quic_simple_server_backend) {}
 
 QuicTestServer::QuicTestServer(
-    std::unique_ptr<ProofSource> proof_source,
-    const QuicConfig& config,
+    std::unique_ptr<ProofSource> proof_source, const QuicConfig& config,
     const ParsedQuicVersionVector& supported_versions,
     QuicSimpleServerBackend* quic_simple_server_backend)
-    : QuicTestServer(std::move(proof_source),
-                     config,
-                     supported_versions,
+    : QuicTestServer(std::move(proof_source), config, supported_versions,
                      quic_simple_server_backend,
                      kQuicDefaultConnectionIdLength) {}
 
 QuicTestServer::QuicTestServer(
-    std::unique_ptr<ProofSource> proof_source,
-    const QuicConfig& config,
+    std::unique_ptr<ProofSource> proof_source, const QuicConfig& config,
     const ParsedQuicVersionVector& supported_versions,
     QuicSimpleServerBackend* quic_simple_server_backend,
     uint8_t expected_server_connection_id_length)
-    : QuicServer(std::move(proof_source),
-                 config,
-                 QuicCryptoServerConfig::ConfigOptions(),
-                 supported_versions,
+    : QuicServer(std::move(proof_source), config,
+                 QuicCryptoServerConfig::ConfigOptions(), supported_versions,
                  quic_simple_server_backend,
                  expected_server_connection_id_length) {}
 
 QuicDispatcher* QuicTestServer::CreateQuicDispatcher() {
   return new QuicTestDispatcher(
       &config(), &crypto_config(), version_manager(),
-      std::make_unique<QuicEpollConnectionHelper>(epoll_server(),
-                                                  QuicAllocator::BUFFER_POOL),
+      std::make_unique<QuicDefaultConnectionHelper>(),
       std::unique_ptr<QuicCryptoServerStreamBase::Helper>(
           new QuicSimpleCryptoServerStreamHelper()),
-      std::make_unique<QuicEpollAlarmFactory>(epoll_server()), server_backend(),
-      expected_server_connection_id_length());
+      event_loop()->CreateAlarmFactory(), server_backend(),
+      expected_server_connection_id_length(), connection_id_generator());
 }
 
 void QuicTestServer::SetSessionFactory(SessionFactory* factory) {
@@ -217,24 +201,29 @@ void QuicTestServer::SetCryptoStreamFactory(CryptoStreamFactory* factory) {
       ->SetCryptoStreamFactory(factory);
 }
 
+void QuicTestServer::SetEventLoopFactory(QuicEventLoopFactory* factory) {
+  event_loop_factory_ = factory;
+}
+
+std::unique_ptr<QuicEventLoop> QuicTestServer::CreateEventLoop() {
+  QuicEventLoopFactory* factory = event_loop_factory_;
+  if (factory == nullptr) {
+    factory = GetDefaultEventLoop();
+  }
+  return factory->Create(QuicDefaultClock::Get());
+}
+
 ///////////////////////////   TEST SESSIONS ///////////////////////////////
 
 ImmediateGoAwaySession::ImmediateGoAwaySession(
-    const QuicConfig& config,
-    QuicConnection* connection,
-    QuicSession::Visitor* visitor,
-    QuicCryptoServerStreamBase::Helper* helper,
+    const QuicConfig& config, QuicConnection* connection,
+    QuicSession::Visitor* visitor, QuicCryptoServerStreamBase::Helper* helper,
     const QuicCryptoServerConfig* crypto_config,
     QuicCompressedCertsCache* compressed_certs_cache,
     QuicSimpleServerBackend* quic_simple_server_backend)
-    : QuicSimpleServerSession(config,
-                              CurrentSupportedVersions(),
-                              connection,
-                              visitor,
-                              helper,
-                              crypto_config,
-                              compressed_certs_cache,
-                              quic_simple_server_backend) {}
+    : QuicSimpleServerSession(
+          config, CurrentSupportedVersions(), connection, visitor, helper,
+          crypto_config, compressed_certs_cache, quic_simple_server_backend) {}
 
 void ImmediateGoAwaySession::OnStreamFrame(const QuicStreamFrame& frame) {
   if (VersionUsesHttp3(transport_version())) {
@@ -256,8 +245,7 @@ void ImmediateGoAwaySession::OnCryptoFrame(const QuicCryptoFrame& frame) {
 }
 
 void ImmediateGoAwaySession::OnNewEncryptionKeyAvailable(
-    EncryptionLevel level,
-    std::unique_ptr<QuicEncrypter> encrypter) {
+    EncryptionLevel level, std::unique_ptr<QuicEncrypter> encrypter) {
   QuicSimpleServerSession::OnNewEncryptionKeyAvailable(level,
                                                        std::move(encrypter));
   if (VersionUsesHttp3(transport_version())) {

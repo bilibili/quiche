@@ -8,19 +8,19 @@
 #include "absl/container/inlined_vector.h"
 #include "absl/types/span.h"
 #include "gquiche/quic/core/quic_types.h"
-#include "gquiche/quic/platform/api/quic_containers.h"
 #include "gquiche/quic/platform/api/quic_export.h"
-#include "gquiche/quic/platform/api/quic_mem_slice.h"
+#include "gquiche/common/platform/api/quiche_mem_slice.h"
 
 namespace quic {
 
-using QuicMessageData = absl::InlinedVector<QuicMemSlice, 1>;
+using QuicMessageData = absl::InlinedVector<quiche::QuicheMemSlice, 1>;
 
 struct QUIC_EXPORT_PRIVATE QuicMessageFrame {
   QuicMessageFrame() = default;
   explicit QuicMessageFrame(QuicMessageId message_id);
-  QuicMessageFrame(QuicMessageId message_id, absl::Span<QuicMemSlice> span);
-  QuicMessageFrame(QuicMessageId message_id, QuicMemSlice slice);
+  QuicMessageFrame(QuicMessageId message_id,
+                   absl::Span<quiche::QuicheMemSlice> span);
+  QuicMessageFrame(QuicMessageId message_id, quiche::QuicheMemSlice slice);
   QuicMessageFrame(const char* data, QuicPacketLength length);
 
   QuicMessageFrame(const QuicMessageFrame& other) = delete;
@@ -32,8 +32,7 @@ struct QUIC_EXPORT_PRIVATE QuicMessageFrame {
   ~QuicMessageFrame();
 
   friend QUIC_EXPORT_PRIVATE std::ostream& operator<<(
-      std::ostream& os,
-      const QuicMessageFrame& s);
+      std::ostream& os, const QuicMessageFrame& s);
 
   // message_id is only used on the sender side and does not get serialized on
   // wire.

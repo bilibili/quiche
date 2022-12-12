@@ -60,6 +60,13 @@ bool RecordingHttp2Visitor::OnEndHeadersForStream(Http2StreamId stream_id) {
   return true;
 }
 
+bool RecordingHttp2Visitor::OnDataPaddingLength(Http2StreamId stream_id,
+                                                size_t padding_length) {
+  events_.push_back(
+      absl::StrFormat("OnDataPaddingLength %d %d", stream_id, padding_length));
+  return true;
+}
+
 bool RecordingHttp2Visitor::OnBeginDataForStream(Http2StreamId stream_id,
                                                  size_t payload_length) {
   events_.push_back(
@@ -83,16 +90,16 @@ void RecordingHttp2Visitor::OnRstStream(Http2StreamId stream_id,
                                     Http2ErrorCodeToString(error_code)));
 }
 
-void RecordingHttp2Visitor::OnCloseStream(Http2StreamId stream_id,
+bool RecordingHttp2Visitor::OnCloseStream(Http2StreamId stream_id,
                                           Http2ErrorCode error_code) {
   events_.push_back(absl::StrFormat("OnCloseStream %d %s", stream_id,
                                     Http2ErrorCodeToString(error_code)));
+  return true;
 }
 
 void RecordingHttp2Visitor::OnPriorityForStream(Http2StreamId stream_id,
                                                 Http2StreamId parent_stream_id,
-                                                int weight,
-                                                bool exclusive) {
+                                                int weight, bool exclusive) {
   events_.push_back(absl::StrFormat("OnPriorityForStream %d %d %d %d",
                                     stream_id, parent_stream_id, weight,
                                     exclusive));
@@ -103,8 +110,7 @@ void RecordingHttp2Visitor::OnPing(Http2PingId ping_id, bool is_ack) {
 }
 
 void RecordingHttp2Visitor::OnPushPromiseForStream(
-    Http2StreamId stream_id,
-    Http2StreamId promised_stream_id) {
+    Http2StreamId stream_id, Http2StreamId promised_stream_id) {
   events_.push_back(absl::StrFormat("OnPushPromiseForStream %d %d", stream_id,
                                     promised_stream_id));
 }

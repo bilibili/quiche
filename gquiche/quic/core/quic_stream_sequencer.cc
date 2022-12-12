@@ -66,12 +66,9 @@ void QuicStreamSequencer::OnStreamFrame(const QuicStreamFrame& frame) {
 
 void QuicStreamSequencer::OnCryptoFrame(const QuicCryptoFrame& frame) {
   ++num_frames_received_;
-  if (GetQuicReloadableFlag(quic_accept_empty_crypto_frame)) {
-    QUIC_RELOADABLE_FLAG_COUNT(quic_accept_empty_crypto_frame);
-    if (frame.data_length == 0) {
-      // Ignore empty crypto frame.
-      return;
-    }
+  if (frame.data_length == 0) {
+    // Ignore empty crypto frame.
+    return;
   }
   OnFrameData(frame.offset, frame.data_length, frame.data_buffer);
 }
@@ -250,9 +247,7 @@ void QuicStreamSequencer::MarkConsumed(size_t num_bytes_consumed) {
   stream_->AddBytesConsumed(num_bytes_consumed);
 }
 
-void QuicStreamSequencer::SetBlockedUntilFlush() {
-  blocked_ = true;
-}
+void QuicStreamSequencer::SetBlockedUntilFlush() { blocked_ = true; }
 
 void QuicStreamSequencer::SetUnblocked() {
   blocked_ = false;
@@ -295,6 +290,11 @@ size_t QuicStreamSequencer::NumBytesBuffered() const {
 
 QuicStreamOffset QuicStreamSequencer::NumBytesConsumed() const {
   return buffered_frames_.BytesConsumed();
+}
+
+bool QuicStreamSequencer::IsAllDataAvailable() const {
+  QUICHE_DCHECK_LE(NumBytesConsumed() + NumBytesBuffered(), close_offset_);
+  return NumBytesConsumed() + NumBytesBuffered() >= close_offset_;
 }
 
 const std::string QuicStreamSequencer::DebugString() const {

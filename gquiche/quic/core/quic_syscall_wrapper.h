@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef QUICHE_QUIC_PLATFORM_IMPL_QUIC_SYSCALL_WRAPPER_H_
-#define QUICHE_QUIC_PLATFORM_IMPL_QUIC_SYSCALL_WRAPPER_H_
+#ifndef QUICHE_QUIC_CORE_QUIC_SYSCALL_WRAPPER_H_
+#define QUICHE_QUIC_CORE_QUIC_SYSCALL_WRAPPER_H_
 
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -20,9 +20,7 @@ class QUIC_EXPORT_PRIVATE QuicSyscallWrapper {
 
   virtual ssize_t Sendmsg(int sockfd, const msghdr* msg, int flags);
 
-  virtual int Sendmmsg(int sockfd,
-                       mmsghdr* msgvec,
-                       unsigned int vlen,
+  virtual int Sendmmsg(int sockfd, mmsghdr* msgvec, unsigned int vlen,
                        int flags);
 };
 
@@ -46,4 +44,4 @@ class QUIC_EXPORT_PRIVATE ScopedGlobalSyscallWrapperOverride {
 
 }  // namespace quic
 
-#endif  // QUICHE_QUIC_PLATFORM_IMPL_QUIC_SYSCALL_WRAPPER_H_
+#endif  // QUICHE_QUIC_CORE_QUIC_SYSCALL_WRAPPER_H_

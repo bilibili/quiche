@@ -214,10 +214,7 @@ std::string TransmissionTypeToString(TransmissionType transmission_type) {
     RETURN_STRING_LITERAL(HANDSHAKE_RETRANSMISSION);
     RETURN_STRING_LITERAL(ALL_ZERO_RTT_RETRANSMISSION);
     RETURN_STRING_LITERAL(LOSS_RETRANSMISSION);
-    RETURN_STRING_LITERAL(RTO_RETRANSMISSION);
-    RETURN_STRING_LITERAL(TLP_RETRANSMISSION);
     RETURN_STRING_LITERAL(PTO_RETRANSMISSION);
-    RETURN_STRING_LITERAL(PROBING_RETRANSMISSION);
     RETURN_STRING_LITERAL(PATH_RETRANSMISSION);
     RETURN_STRING_LITERAL(ALL_INITIAL_RETRANSMISSION);
     default:
@@ -296,18 +293,36 @@ std::string PacketNumberSpaceToString(PacketNumberSpace packet_number_space) {
 
 std::string SerializedPacketFateToString(SerializedPacketFate fate) {
   switch (fate) {
+    RETURN_STRING_LITERAL(DISCARD);
     RETURN_STRING_LITERAL(COALESCE);
     RETURN_STRING_LITERAL(BUFFER);
     RETURN_STRING_LITERAL(SEND_TO_WRITER);
     RETURN_STRING_LITERAL(LEGACY_VERSION_ENCAPSULATE);
-    default:
-      return absl::StrCat("Unknown(", static_cast<int>(fate), ")");
   }
+  return absl::StrCat("Unknown(", static_cast<int>(fate), ")");
 }
 
 std::ostream& operator<<(std::ostream& os, SerializedPacketFate fate) {
   os << SerializedPacketFateToString(fate);
   return os;
+}
+
+std::string CongestionControlTypeToString(CongestionControlType cc_type) {
+  switch (cc_type) {
+    case kCubicBytes:
+      return "CUBIC_BYTES";
+    case kRenoBytes:
+      return "RENO_BYTES";
+    case kBBR:
+      return "BBR";
+    case kBBRv2:
+      return "BBRv2";
+    case kPCC:
+      return "PCC";
+    case kGoogCC:
+      return "GoogCC";
+  }
+  return absl::StrCat("Unknown(", static_cast<int>(cc_type), ")");
 }
 
 std::string EncryptionLevelToString(EncryptionLevel level) {

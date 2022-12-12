@@ -20,11 +20,13 @@
 #include "gquiche/http2/http2_constants.h"
 #include "gquiche/http2/http2_structures.h"
 #include "gquiche/http2/test_tools/frame_parts_collector.h"
+#include "gquiche/common/platform/api/quiche_export.h"
 
 namespace http2 {
 namespace test {
 
-class FramePartsCollectorListener : public FramePartsCollector {
+class QUICHE_NO_EXPORT FramePartsCollectorListener
+    : public FramePartsCollector {
  public:
   FramePartsCollectorListener() {}
   ~FramePartsCollectorListener() override {}
@@ -65,8 +67,7 @@ class FramePartsCollectorListener : public FramePartsCollector {
   void OnGoAwayEnd() override;
   void OnWindowUpdate(const Http2FrameHeader& header,
                       uint32_t window_size_increment) override;
-  void OnAltSvcStart(const Http2FrameHeader& header,
-                     size_t origin_length,
+  void OnAltSvcStart(const Http2FrameHeader& header, size_t origin_length,
                      size_t value_length) override;
   void OnAltSvcOriginData(const char* data, size_t len) override;
   void OnAltSvcValueData(const char* data, size_t len) override;

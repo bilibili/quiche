@@ -7,10 +7,13 @@
 
 #include <string>
 
-#include "gquiche/quic/core/quic_simple_buffer_allocator.h"
 #include "gquiche/quic/core/web_transport_interface.h"
 #include "gquiche/quic/platform/api/quic_logging.h"
+#include "gquiche/common/platform/api/quiche_logging.h"
+#include "gquiche/common/platform/api/quiche_mem_slice.h"
 #include "gquiche/common/quiche_circular_deque.h"
+#include "gquiche/common/simple_buffer_allocator.h"
+#include "gquiche/spdy/core/http2_header_block.h"
 
 namespace quic {
 
@@ -122,7 +125,7 @@ class WebTransportUnidirectionalEchoReadVisitor
     }
   }
 
-  void OnCanWrite() override { QUIC_NOTREACHED(); }
+  void OnCanWrite() override { QUICHE_NOTREACHED(); }
 
   void OnResetStreamReceived(WebTransportStreamError /*error*/) override {}
   void OnStopSendingReceived(WebTransportStreamError /*error*/) override {}
@@ -142,7 +145,7 @@ class WebTransportUnidirectionalEchoWriteVisitor
                                              const std::string& data)
       : stream_(stream), data_(data) {}
 
-  void OnCanRead() override { QUIC_NOTREACHED(); }
+  void OnCanRead() override { QUICHE_NOTREACHED(); }
   void OnCanWrite() override {
     if (data_.empty()) {
       return;
@@ -173,7 +176,7 @@ class EchoWebTransportSessionVisitor : public WebTransportVisitor {
   EchoWebTransportSessionVisitor(WebTransportSession* session)
       : session_(session) {}
 
-  void OnSessionReady(const spdy::SpdyHeaderBlock&) override {
+  void OnSessionReady(const spdy::Http2HeaderBlock&) override {
     if (session_->CanOpenNextOutgoingBidirectionalStream()) {
       OnCanCreateNewOutgoingBidirectionalStream();
     }
@@ -218,9 +221,8 @@ class EchoWebTransportSessionVisitor : public WebTransportVisitor {
   }
 
   void OnDatagramReceived(absl::string_view datagram) override {
-    auto buffer = MakeUniqueBuffer(&allocator_, datagram.size());
-    memcpy(buffer.get(), datagram.data(), datagram.size());
-    QuicMemSlice slice(std::move(buffer), datagram.size());
+    quiche::QuicheMemSlice slice(
+        quiche::QuicheBuffer::Copy(&allocator_, datagram));
     session_->SendOrQueueDatagram(std::move(slice));
   }
 
@@ -252,7 +254,7 @@ class EchoWebTransportSessionVisitor : public WebTransportVisitor {
 
  private:
   WebTransportSession* session_;
-  SimpleBufferAllocator allocator_;
+  quiche::SimpleBufferAllocator allocator_;
   bool echo_stream_opened_ = false;
 
   quiche::QuicheCircularDeque<std::string> streams_to_echo_back_;

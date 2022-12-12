@@ -13,12 +13,9 @@
 #include "absl/strings/match.h"
 #include "absl/strings/string_view.h"
 #include "gquiche/quic/platform/api/quic_epoll.h"
-#include "gquiche/quic/platform/api/quic_port_utils.h"
 #include "gquiche/quic/platform/api/quic_test.h"
 #include "gquiche/quic/platform/api/quic_test_loopback.h"
 #include "gquiche/quic/test_tools/crypto_test_utils.h"
-#include "gquiche/quic/test_tools/quic_client_peer.h"
-#include "gquiche/common/quiche_text_utils.h"
 
 namespace quic {
 namespace test {
@@ -26,11 +23,18 @@ namespace {
 
 const char* kPathToFds = "/proc/self/fd";
 
+// Return the value of a symbolic link in |path|, if |path| is not found, return
+// an empty string.
 std::string ReadLink(const std::string& path) {
   std::string result(PATH_MAX, '\0');
   ssize_t result_size = readlink(path.c_str(), &result[0], result.size());
+  if (result_size < 0 && errno == ENOENT) {
+    return "";
+  }
   QUICHE_CHECK(result_size > 0 &&
-               static_cast<size_t>(result_size) < result.size());
+               static_cast<size_t>(result_size) < result.size())
+      << "result_size:" << result_size << ", errno:" << errno
+      << ", path:" << path;
   result.resize(result_size);
   return result;
 }
@@ -68,8 +72,7 @@ class QuicClientTest : public QuicTest {
   // Creates a new QuicClient and Initializes it on an unused port.
   // Caller is responsible for deletion.
   std::unique_ptr<QuicClient> CreateAndInitializeQuicClient() {
-    uint16_t port = QuicPickServerPortForTestsOrDie();
-    QuicSocketAddress server_address(QuicSocketAddress(TestLoopback(), port));
+    QuicSocketAddress server_address(QuicSocketAddress(TestLoopback(), 0));
     QuicServerId server_id("hostname", server_address.port(), false);
     ParsedQuicVersionVector versions = AllSupportedVersions();
     auto client = std::make_unique<QuicClient>(
@@ -112,15 +115,19 @@ TEST_F(QuicClientTest, CreateAndCleanUpUDPSockets) {
   EXPECT_EQ(number_of_open_fds + 1, NumOpenSocketFDs());
 
   // Create more UDP sockets.
-  EXPECT_TRUE(QuicClientPeer::CreateUDPSocketAndBind(client.get()));
+  EXPECT_TRUE(client->network_helper()->CreateUDPSocketAndBind(
+      client->server_address(), client->bind_to_address(),
+      client->local_port()));
   EXPECT_EQ(number_of_open_fds + 2, NumOpenSocketFDs());
-  EXPECT_TRUE(QuicClientPeer::CreateUDPSocketAndBind(client.get()));
+  EXPECT_TRUE(client->network_helper()->CreateUDPSocketAndBind(
+      client->server_address(), client->bind_to_address(),
+      client->local_port()));
   EXPECT_EQ(number_of_open_fds + 3, NumOpenSocketFDs());
 
   // Clean up UDP sockets.
-  QuicClientPeer::CleanUpUDPSocket(client.get(), client->GetLatestFD());
+  client->epoll_network_helper()->CleanUpUDPSocket(client->GetLatestFD());
   EXPECT_EQ(number_of_open_fds + 2, NumOpenSocketFDs());
-  QuicClientPeer::CleanUpUDPSocket(client.get(), client->GetLatestFD());
+  client->epoll_network_helper()->CleanUpUDPSocket(client->GetLatestFD());
   EXPECT_EQ(number_of_open_fds + 1, NumOpenSocketFDs());
 }
 

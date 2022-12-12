@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include "platform/epoll_platform_impl/epoll_thread_impl.h"
+#include "platform/quiche_platform_impl/epoll_thread_impl.h"
 
 namespace epoll_server {
 

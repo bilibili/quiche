@@ -16,8 +16,8 @@
 #include "absl/strings/string_view.h"
 #include "gquiche/common/platform/api/quiche_export.h"
 #include "gquiche/spdy/core/hpack/hpack_encoder.h"
+#include "gquiche/spdy/core/http2_header_block.h"
 #include "gquiche/spdy/core/spdy_alt_svc_wire_format.h"
-#include "gquiche/spdy/core/spdy_header_block.h"
 #include "gquiche/spdy/core/spdy_headers_handler_interface.h"
 #include "gquiche/spdy/core/spdy_protocol.h"
 #include "gquiche/spdy/core/zero_copy_output_buffer.h"
@@ -56,8 +56,7 @@ class QUICHE_EXPORT_PRIVATE SpdyFramer {
 
   // Create a SpdyFrameSequence to serialize |frame_ir|.
   static std::unique_ptr<SpdyFrameSequence> CreateIterator(
-      SpdyFramer* framer,
-      std::unique_ptr<const SpdyFrameIR> frame_ir);
+      SpdyFramer* framer, std::unique_ptr<const SpdyFrameIR> frame_ir);
 
   // Gets the serialized flags for the given |frame|.
   static uint8_t GetSerializedFlags(const SpdyFrameIR& frame);
@@ -146,8 +145,7 @@ class QUICHE_EXPORT_PRIVATE SpdyFramer {
   // Serializes the data frame header and optionally padding length fields,
   // excluding actual data payload and padding.
   bool SerializeDataFrameHeaderWithPaddingLengthField(
-      const SpdyDataIR& data,
-      ZeroCopyOutputBuffer* output) const;
+      const SpdyDataIR& data, ZeroCopyOutputBuffer* output) const;
 
   bool SerializeRstStream(const SpdyRstStreamIR& rst_stream,
                           ZeroCopyOutputBuffer* output) const;
@@ -295,7 +293,7 @@ class QUICHE_EXPORT_PRIVATE SpdyFramer {
   };
 
   // Iteratively converts a SpdyHeadersIR (with a possibly huge
-  // SpdyHeaderBlock) into an appropriate sequence of SpdySerializedFrames, and
+  // Http2HeaderBlock) into an appropriate sequence of SpdySerializedFrames, and
   // write to the output.
   class QUICHE_EXPORT_PRIVATE SpdyHeaderFrameIterator
       : public SpdyFrameIterator {
@@ -316,7 +314,7 @@ class QUICHE_EXPORT_PRIVATE SpdyFramer {
   };
 
   // Iteratively converts a SpdyPushPromiseIR (with a possibly huge
-  // SpdyHeaderBlock) into an appropriate sequence of SpdySerializedFrames, and
+  // Http2HeaderBlock) into an appropriate sequence of SpdySerializedFrames, and
   // write to the output.
   class QUICHE_EXPORT_PRIVATE SpdyPushPromiseFrameIterator
       : public SpdyFrameIterator {
@@ -360,10 +358,8 @@ class QUICHE_EXPORT_PRIVATE SpdyFramer {
 
  private:
   void SerializeHeadersBuilderHelper(const SpdyHeadersIR& headers,
-                                     uint8_t* flags,
-                                     size_t* size,
-                                     std::string* hpack_encoding,
-                                     int* weight,
+                                     uint8_t* flags, size_t* size,
+                                     std::string* hpack_encoding, int* weight,
                                      size_t* length_field);
   void SerializePushPromiseBuilderHelper(const SpdyPushPromiseIR& push_promise,
                                          uint8_t* flags,

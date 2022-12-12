@@ -86,14 +86,18 @@
 // Note that SpdyIntrusiveList::size() runs in O(N) time.
 
 #include <stddef.h>
+
 #include <iterator>
 
+#include "gquiche/common/platform/api/quiche_export.h"
 
 namespace spdy {
 
-template <typename T, typename ListID> class SpdyIntrusiveList;
+template <typename T, typename ListID>
+class SpdyIntrusiveList;
 
-template <typename T, typename ListID = void> class SpdyIntrusiveLink {
+template <typename T, typename ListID = void>
+class QUICHE_EXPORT_PRIVATE SpdyIntrusiveLink {
  protected:
   // We declare the constructor protected so that only derived types and the
   // befriended list can construct this.
@@ -117,15 +121,17 @@ template <typename T, typename ListID = void> class SpdyIntrusiveLink {
   SpdyIntrusiveLink* prev_;
 };
 
-template <typename T, typename ListID = void> class SpdyIntrusiveList {
-  template <typename QualifiedT, typename QualifiedLinkT> class iterator_impl;
+template <typename T, typename ListID = void>
+class QUICHE_EXPORT_PRIVATE SpdyIntrusiveList {
+  template <typename QualifiedT, typename QualifiedLinkT>
+  class iterator_impl;
 
  public:
   typedef T value_type;
-  typedef value_type *pointer;
-  typedef const value_type *const_pointer;
-  typedef value_type &reference;
-  typedef const value_type &const_reference;
+  typedef value_type* pointer;
+  typedef const value_type* const_pointer;
+  typedef value_type& reference;
+  typedef const value_type& const_reference;
   typedef size_t size_type;
   typedef ptrdiff_t difference_type;
 
@@ -181,7 +187,7 @@ template <typename T, typename ListID = void> class SpdyIntrusiveList {
   reference back() { return *(--end()); }
   const_reference back() const { return *(--end()); }
 
-  static iterator insert(iterator position, T *obj) {
+  static iterator insert(iterator position, T* obj) {
     return insert_link(position.link(), obj);
   }
   void push_front(T* obj) { insert(begin(), obj); }
@@ -262,10 +268,13 @@ template <typename T, typename ListID = void> class SpdyIntrusiveList {
   // variant of T and the matching qualified link type. Essentially, QualifiedT
   // will either be 'T' or 'const T', the latter for a const_iterator.
   template <typename QualifiedT, typename QualifiedLinkT>
-  class iterator_impl : public std::iterator<std::bidirectional_iterator_tag,
-                                             QualifiedT> {
+  class QUICHE_EXPORT_PRIVATE iterator_impl {
    public:
-    typedef std::iterator<std::bidirectional_iterator_tag, QualifiedT> base;
+    using iterator_category = std::bidirectional_iterator_tag;
+    using value_type = QualifiedT;
+    using difference_type = std::ptrdiff_t;
+    using pointer = QualifiedT*;
+    using reference = QualifiedT&;
 
     iterator_impl() = default;
     iterator_impl(QualifiedLinkT* link) : link_(link) {}
@@ -285,21 +294,25 @@ template <typename T, typename ListID = void> class SpdyIntrusiveList {
       return link_ != x.link_;
     }
 
-    typename base::reference operator*() const { return *operator->(); }
-    typename base::pointer operator->() const {
-      return link_->cast_to_derived();
-    }
+    reference operator*() const { return *operator->(); }
+    pointer operator->() const { return link_->cast_to_derived(); }
 
-    QualifiedLinkT *link() const { return link_; }
+    QualifiedLinkT* link() const { return link_; }
 
 #ifndef SWIG  // SWIG can't wrap these operator overloads.
-    iterator_impl& operator++() { link_ = link_->next_; return *this; }
+    iterator_impl& operator++() {
+      link_ = link_->next_;
+      return *this;
+    }
     iterator_impl operator++(int /*unused*/) {
       iterator_impl tmp = *this;
       ++*this;
       return tmp;
     }
-    iterator_impl& operator--() { link_ = link_->prev_; return *this; }
+    iterator_impl& operator--() {
+      link_ = link_->prev_;
+      return *this;
+    }
     iterator_impl operator--(int /*unused*/) {
       iterator_impl tmp = *this;
       --*this;
@@ -309,7 +322,8 @@ template <typename T, typename ListID = void> class SpdyIntrusiveList {
 
    private:
     // Ensure iterators can access other iterators node directly.
-    template <typename U, typename V> friend class iterator_impl;
+    template <typename U, typename V>
+    friend class iterator_impl;
 
     QualifiedLinkT* link_ = nullptr;
   };

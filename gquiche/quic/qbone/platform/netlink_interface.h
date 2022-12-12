@@ -51,8 +51,7 @@ class NetlinkInterface {
 
   // Gets the addresses for the given interface referred by the given
   // interface_index.
-  virtual bool GetAddresses(int interface_index,
-                            uint8_t unwanted_flags,
+  virtual bool GetAddresses(int interface_index, uint8_t unwanted_flags,
                             std::vector<AddressInfo>* addresses,
                             int* num_ipv6_nodad_dadfailed_addresses) = 0;
 
@@ -70,13 +69,11 @@ class NetlinkInterface {
   // the length of the payload. The caller is responsible for making sure
   // payload bytes are accessible after the RTA header.
   virtual bool ChangeLocalAddress(
-      uint32_t interface_index,
-      Verb verb,
-      const QuicIpAddress& address,
-      uint8_t prefix_length,
-      uint8_t ifa_flags,
-      uint8_t ifa_scope,
+      uint32_t interface_index, Verb verb, const QuicIpAddress& address,
+      uint8_t prefix_length, uint8_t ifa_flags, uint8_t ifa_scope,
       const std::vector<struct rtattr*>& additional_attributes) = 0;
+
+  static constexpr uint32_t kUnspecifiedInitCwnd = 0;
 
   // Routing rule reported back from GetRouteInfo.
   struct RoutingRule {
@@ -85,6 +82,7 @@ class NetlinkInterface {
     QuicIpAddress preferred_source;
     uint8_t scope;
     int out_interface;
+    uint32_t init_cwnd;  // kUnspecifiedInitCwnd if unspecified
   };
 
   struct IpRule {
@@ -111,12 +109,10 @@ class NetlinkInterface {
   //
   // For Verb::kReplace, rule matching is done by destination_subnet. If no
   // matching rule is found, a new entry will be created.
-  virtual bool ChangeRoute(Verb verb,
-                           uint32_t table,
-                           const IpRange& destination_subnet,
-                           uint8_t scope,
+  virtual bool ChangeRoute(Verb verb, uint32_t table,
+                           const IpRange& destination_subnet, uint8_t scope,
                            QuicIpAddress preferred_source,
-                           int32_t interface_index) = 0;
+                           int32_t interface_index, uint32_t init_cwnd) = 0;
 
   // Returns the set of all rules in the routing policy database.
   virtual bool GetRuleInfo(std::vector<IpRule>* ip_rules) = 0;

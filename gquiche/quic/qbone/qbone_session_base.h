@@ -10,7 +10,6 @@
 #include "gquiche/quic/core/quic_crypto_stream.h"
 #include "gquiche/quic/core/quic_error_codes.h"
 #include "gquiche/quic/core/quic_session.h"
-#include "gquiche/quic/platform/api/quic_containers.h"
 #include "gquiche/quic/platform/api/quic_export.h"
 #include "gquiche/quic/qbone/qbone_packet_writer.h"
 #include "gquiche/quic/qbone/qbone_stream.h"
@@ -19,8 +18,7 @@ namespace quic {
 
 class QUIC_EXPORT_PRIVATE QboneSessionBase : public QuicSession {
  public:
-  QboneSessionBase(QuicConnection* connection,
-                   Visitor* owner,
+  QboneSessionBase(QuicConnection* connection, Visitor* owner,
                    const QuicConfig& config,
                    const ParsedQuicVersionVector& supported_versions,
                    QbonePacketWriter* writer);
@@ -90,10 +88,9 @@ class QUIC_EXPORT_PRIVATE QboneSessionBase : public QuicSession {
 
   QbonePacketWriter* writer_;
 
-  // If true, MESSAGE frames are used for short datagrams.  If false, ephemeral
-  // streams are used instead.  Note that receiving MESSAGE frames is always
-  // supported.
-  bool send_packets_as_messages_ = false;
+  // If true, send QUIC DATAGRAM (aka MESSAGE) frames instead of ephemeral
+  // streams. Note that receiving DATAGRAM frames is always supported.
+  bool send_packets_as_messages_ = true;
 
  private:
   // Used for the crypto handshake.

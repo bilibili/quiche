@@ -8,10 +8,10 @@
 #include <limits>
 #include <memory>
 
+#include "gquiche/common/platform/api/quiche_expect_bug.h"
 #include "gquiche/common/platform/api/quiche_test.h"
-#include "gquiche/common/platform/api/quiche_test_helpers.h"
 #include "gquiche/spdy/core/spdy_bitmasks.h"
-#include "gquiche/spdy/core/spdy_test_utils.h"
+#include "gquiche/spdy/test_tools/spdy_test_utils.h"
 
 namespace spdy {
 

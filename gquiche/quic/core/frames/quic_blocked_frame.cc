@@ -4,23 +4,25 @@
 
 #include "gquiche/quic/core/frames/quic_blocked_frame.h"
 
+#include "gquiche/quic/core/quic_types.h"
+
 namespace quic {
 
-QuicBlockedFrame::QuicBlockedFrame(QuicControlFrameId control_frame_id,
-                                   QuicStreamId stream_id)
-    : control_frame_id(control_frame_id), stream_id(stream_id), offset(0) {}
+QuicBlockedFrame::QuicBlockedFrame() : QuicInlinedFrame(BLOCKED_FRAME) {}
 
 QuicBlockedFrame::QuicBlockedFrame(QuicControlFrameId control_frame_id,
                                    QuicStreamId stream_id,
                                    QuicStreamOffset offset)
-    : control_frame_id(control_frame_id),
+    : QuicInlinedFrame(BLOCKED_FRAME),
+      control_frame_id(control_frame_id),
       stream_id(stream_id),
       offset(offset) {}
 
 std::ostream& operator<<(std::ostream& os,
                          const QuicBlockedFrame& blocked_frame) {
   os << "{ control_frame_id: " << blocked_frame.control_frame_id
-     << ", stream_id: " << blocked_frame.stream_id << " }\n";
+     << ", stream_id: " << blocked_frame.stream_id
+     << ", offset: " << blocked_frame.offset << " }\n";
   return os;
 }
 

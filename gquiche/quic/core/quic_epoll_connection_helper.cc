@@ -12,23 +12,21 @@
 namespace quic {
 
 QuicEpollConnectionHelper::QuicEpollConnectionHelper(
-    QuicEpollServer* epoll_server,
-    QuicAllocator type)
+    QuicEpollServer* epoll_server, QuicAllocator allocator_type)
     : clock_(epoll_server),
       random_generator_(QuicRandom::GetInstance()),
-      allocator_type_(type) {}
+      allocator_type_(allocator_type) {}
 
 QuicEpollConnectionHelper::~QuicEpollConnectionHelper() = default;
 
-const QuicClock* QuicEpollConnectionHelper::GetClock() const {
-  return &clock_;
-}
+const QuicClock* QuicEpollConnectionHelper::GetClock() const { return &clock_; }
 
 QuicRandom* QuicEpollConnectionHelper::GetRandomGenerator() {
   return random_generator_;
 }
 
-QuicBufferAllocator* QuicEpollConnectionHelper::GetStreamSendBufferAllocator() {
+quiche::QuicheBufferAllocator*
+QuicEpollConnectionHelper::GetStreamSendBufferAllocator() {
   if (allocator_type_ == QuicAllocator::BUFFER_POOL) {
     return &stream_buffer_allocator_;
   } else {

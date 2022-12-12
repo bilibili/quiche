@@ -10,19 +10,35 @@
 #include "absl/strings/escaping.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
-#include "gquiche/quic/platform/api/quic_flags.h"
 #include "gquiche/quic/platform/api/quic_test.h"
 #include "gquiche/quic/test_tools/qpack/qpack_encoder_peer.h"
-#include "gquiche/quic/test_tools/qpack/qpack_encoder_test_utils.h"
 #include "gquiche/quic/test_tools/qpack/qpack_test_utils.h"
 
 using ::testing::_;
 using ::testing::Eq;
+using ::testing::Return;
 using ::testing::StrictMock;
 
 namespace quic {
 namespace test {
 namespace {
+
+// A number larger than kMaxBytesBufferedByStream in
+// qpack_encoder_stream_sender.cc.  Returning this value from NumBytesBuffered()
+// will instruct QpackEncoder not to generate any instructions for the encoder
+// stream.
+constexpr uint64_t kTooManyBytesBuffered = 1024 * 1024;
+
+// Mock QpackEncoder::DecoderStreamErrorDelegate implementation.
+class MockDecoderStreamErrorDelegate
+    : public QpackEncoder::DecoderStreamErrorDelegate {
+ public:
+  ~MockDecoderStreamErrorDelegate() override = default;
+
+  MOCK_METHOD(void, OnDecoderStreamError,
+              (QuicErrorCode error_code, absl::string_view error_message),
+              (override));
+};
 
 class QpackEncoderTest : public QuicTest {
  protected:
@@ -47,6 +63,8 @@ class QpackEncoderTest : public QuicTest {
 };
 
 TEST_F(QpackEncoderTest, Empty) {
+  EXPECT_CALL(encoder_stream_sender_delegate_, NumBytesBuffered())
+      .WillRepeatedly(Return(0));
   spdy::Http2HeaderBlock header_list;
   std::string output = Encode(header_list);
 
@@ -54,6 +72,8 @@ TEST_F(QpackEncoderTest, Empty) {
 }
 
 TEST_F(QpackEncoderTest, EmptyName) {
+  EXPECT_CALL(encoder_stream_sender_delegate_, NumBytesBuffered())
+      .WillRepeatedly(Return(0));
   spdy::Http2HeaderBlock header_list;
   header_list[""] = "foo";
   std::string output = Encode(header_list);
@@ -62,6 +82,8 @@ TEST_F(QpackEncoderTest, EmptyName) {
 }
 
 TEST_F(QpackEncoderTest, EmptyValue) {
+  EXPECT_CALL(encoder_stream_sender_delegate_, NumBytesBuffered())
+      .WillRepeatedly(Return(0));
   spdy::Http2HeaderBlock header_list;
   header_list["foo"] = "";
   std::string output = Encode(header_list);
@@ -70,6 +92,8 @@ TEST_F(QpackEncoderTest, EmptyValue) {
 }
 
 TEST_F(QpackEncoderTest, EmptyNameAndValue) {
+  EXPECT_CALL(encoder_stream_sender_delegate_, NumBytesBuffered())
+      .WillRepeatedly(Return(0));
   spdy::Http2HeaderBlock header_list;
   header_list[""] = "";
   std::string output = Encode(header_list);
@@ -78,6 +102,8 @@ TEST_F(QpackEncoderTest, EmptyNameAndValue) {
 }
 
 TEST_F(QpackEncoderTest, Simple) {
+  EXPECT_CALL(encoder_stream_sender_delegate_, NumBytesBuffered())
+      .WillRepeatedly(Return(0));
   spdy::Http2HeaderBlock header_list;
   header_list["foo"] = "bar";
   std::string output = Encode(header_list);
@@ -86,6 +112,8 @@ TEST_F(QpackEncoderTest, Simple) {
 }
 
 TEST_F(QpackEncoderTest, Multiple) {
+  EXPECT_CALL(encoder_stream_sender_delegate_, NumBytesBuffered())
+      .WillRepeatedly(Return(0));
   spdy::Http2HeaderBlock header_list;
   header_list["foo"] = "bar";
   // 'Z' would be Huffman encoded to 8 bits, so no Huffman encoding is used.
@@ -108,6 +136,8 @@ TEST_F(QpackEncoderTest, Multiple) {
 }
 
 TEST_F(QpackEncoderTest, StaticTable) {
+  EXPECT_CALL(encoder_stream_sender_delegate_, NumBytesBuffered())
+      .WillRepeatedly(Return(0));
   {
     spdy::Http2HeaderBlock header_list;
     header_list[":method"] = "GET";
@@ -149,6 +179,8 @@ TEST_F(QpackEncoderTest, DecoderStreamError) {
 }
 
 TEST_F(QpackEncoderTest, SplitAlongNullCharacter) {
+  EXPECT_CALL(encoder_stream_sender_delegate_, NumBytesBuffered())
+      .WillRepeatedly(Return(0));
   spdy::Http2HeaderBlock header_list;
   header_list["foo"] = absl::string_view("bar\0bar\0baz", 11);
   std::string output = Encode(header_list);
@@ -217,6 +249,8 @@ TEST_F(QpackEncoderTest, InvalidHeaderAcknowledgement) {
 }
 
 TEST_F(QpackEncoderTest, DynamicTable) {
+  EXPECT_CALL(encoder_stream_sender_delegate_, NumBytesBuffered())
+      .WillRepeatedly(Return(0));
   encoder_.SetMaximumBlockedStreams(1);
   encoder_.SetMaximumDynamicTableCapacity(4096);
   encoder_.SetDynamicTableCapacity(4096);
@@ -252,6 +286,8 @@ TEST_F(QpackEncoderTest, DynamicTable) {
 
 // There is no room in the dynamic table after inserting the first entry.
 TEST_F(QpackEncoderTest, SmallDynamicTable) {
+  EXPECT_CALL(encoder_stream_sender_delegate_, NumBytesBuffered())
+      .WillRepeatedly(Return(0));
   encoder_.SetMaximumBlockedStreams(1);
   encoder_.SetMaximumDynamicTableCapacity(QpackEntry::Size("foo", "bar"));
   encoder_.SetDynamicTableCapacity(QpackEntry::Size("foo", "bar"));
@@ -288,6 +324,8 @@ TEST_F(QpackEncoderTest, SmallDynamicTable) {
 }
 
 TEST_F(QpackEncoderTest, BlockedStream) {
+  EXPECT_CALL(encoder_stream_sender_delegate_, NumBytesBuffered())
+      .WillRepeatedly(Return(0));
   encoder_.SetMaximumBlockedStreams(1);
   encoder_.SetMaximumDynamicTableCapacity(4096);
   encoder_.SetDynamicTableCapacity(4096);
@@ -395,6 +433,8 @@ TEST_F(QpackEncoderTest, BlockedStream) {
 }
 
 TEST_F(QpackEncoderTest, Draining) {
+  EXPECT_CALL(encoder_stream_sender_delegate_, NumBytesBuffered())
+      .WillRepeatedly(Return(0));
   spdy::Http2HeaderBlock header_list1;
   header_list1["one"] = "foo";
   header_list1["two"] = "foo";
@@ -465,6 +505,127 @@ TEST_F(QpackEncoderTest, DynamicTableCapacityLessThanMaximum) {
 
   EXPECT_EQ(1024u, header_table->maximum_dynamic_table_capacity());
   EXPECT_EQ(30u, header_table->dynamic_table_capacity());
+}
+
+TEST_F(QpackEncoderTest, EncoderStreamWritesDisallowedThenAllowed) {
+  EXPECT_CALL(encoder_stream_sender_delegate_, NumBytesBuffered())
+      .WillRepeatedly(Return(kTooManyBytesBuffered));
+  encoder_.SetMaximumBlockedStreams(1);
+  encoder_.SetMaximumDynamicTableCapacity(4096);
+  encoder_.SetDynamicTableCapacity(4096);
+
+  spdy::Http2HeaderBlock header_list1;
+  header_list1["foo"] = "bar";
+  header_list1.AppendValueOrAddHeader("foo", "baz");
+  header_list1["cookie"] = "baz";  // name matches static entry
+
+  // Encoder is not allowed to write on the encoder stream.
+  // No Set Dynamic Table Capacity or Insert instructions are sent.
+  // Headers are encoded as string literals.
+  EXPECT_EQ(absl::HexStringToBytes("0000"        // prefix
+                                   "2a94e7"      // literal name "foo"
+                                   "03626172"    // with literal value "bar"
+                                   "2a94e7"      // literal name "foo"
+                                   "0362617a"    // with literal value "baz"
+                                   "55"          // name of static entry 5
+                                   "0362617a"),  // with literal value "baz"
+            Encode(header_list1));
+
+  EXPECT_EQ(0u, encoder_stream_sent_byte_count_);
+
+  // If number of bytes buffered by encoder stream goes under the threshold,
+  // then QpackEncoder will resume emitting encoder stream instructions.
+  ::testing::Mock::VerifyAndClearExpectations(&encoder_stream_sender_delegate_);
+  EXPECT_CALL(encoder_stream_sender_delegate_, NumBytesBuffered())
+      .WillRepeatedly(Return(0));
+
+  spdy::Http2HeaderBlock header_list2;
+  header_list2["foo"] = "bar";
+  header_list2.AppendValueOrAddHeader("foo",
+                                      "baz");  // name matches dynamic entry
+  header_list2["cookie"] = "baz";              // name matches static entry
+
+  // Set Dynamic Table Capacity instruction.
+  std::string set_dyanamic_table_capacity = absl::HexStringToBytes("3fe11f");
+  // Insert three entries into the dynamic table.
+  std::string insert_entries = absl::HexStringToBytes(
+      "62"          // insert without name reference
+      "94e7"        // Huffman-encoded name "foo"
+      "03626172"    // value "bar"
+      "80"          // insert with name reference, dynamic index 0
+      "0362617a"    // value "baz"
+      "c5"          // insert with name reference, static index 5
+      "0362617a");  // value "baz"
+  EXPECT_CALL(encoder_stream_sender_delegate_,
+              WriteStreamData(Eq(
+                  absl::StrCat(set_dyanamic_table_capacity, insert_entries))));
+
+  EXPECT_EQ(absl::HexStringToBytes(
+                "0400"      // prefix
+                "828180"),  // dynamic entries with relative index 0, 1, and 2
+            Encode(header_list2));
+
+  EXPECT_EQ(insert_entries.size(), encoder_stream_sent_byte_count_);
+}
+
+TEST_F(QpackEncoderTest, EncoderStreamWritesAllowedThenDisallowed) {
+  EXPECT_CALL(encoder_stream_sender_delegate_, NumBytesBuffered())
+      .WillRepeatedly(Return(0));
+  encoder_.SetMaximumBlockedStreams(1);
+  encoder_.SetMaximumDynamicTableCapacity(4096);
+  encoder_.SetDynamicTableCapacity(4096);
+
+  spdy::Http2HeaderBlock header_list1;
+  header_list1["foo"] = "bar";
+  header_list1.AppendValueOrAddHeader("foo",
+                                      "baz");  // name matches dynamic entry
+  header_list1["cookie"] = "baz";              // name matches static entry
+
+  // Set Dynamic Table Capacity instruction.
+  std::string set_dyanamic_table_capacity = absl::HexStringToBytes("3fe11f");
+  // Insert three entries into the dynamic table.
+  std::string insert_entries = absl::HexStringToBytes(
+      "62"          // insert without name reference
+      "94e7"        // Huffman-encoded name "foo"
+      "03626172"    // value "bar"
+      "80"          // insert with name reference, dynamic index 0
+      "0362617a"    // value "baz"
+      "c5"          // insert with name reference, static index 5
+      "0362617a");  // value "baz"
+  EXPECT_CALL(encoder_stream_sender_delegate_,
+              WriteStreamData(Eq(
+                  absl::StrCat(set_dyanamic_table_capacity, insert_entries))));
+
+  EXPECT_EQ(absl::HexStringToBytes(
+                "0400"      // prefix
+                "828180"),  // dynamic entries with relative index 0, 1, and 2
+            Encode(header_list1));
+
+  EXPECT_EQ(insert_entries.size(), encoder_stream_sent_byte_count_);
+
+  // If number of bytes buffered by encoder stream goes over the threshold,
+  // then QpackEncoder will stop emitting encoder stream instructions.
+  ::testing::Mock::VerifyAndClearExpectations(&encoder_stream_sender_delegate_);
+  EXPECT_CALL(encoder_stream_sender_delegate_, NumBytesBuffered())
+      .WillRepeatedly(Return(kTooManyBytesBuffered));
+
+  spdy::Http2HeaderBlock header_list2;
+  header_list2["foo"] = "bar";  // matches previously inserted dynamic entry
+  header_list2["bar"] = "baz";
+  header_list2["cookie"] = "baz";  // name matches static entry
+
+  // Encoder is not allowed to write on the encoder stream.
+  // No Set Dynamic Table Capacity or Insert instructions are sent.
+  // Headers are encoded as string literals.
+  EXPECT_EQ(
+      absl::HexStringToBytes("0400"      // prefix
+                             "82"        // dynamic entry with relative index 0
+                             "23626172"  // literal name "bar"
+                             "0362617a"  // with literal value "baz"
+                             "80"),      // dynamic entry with relative index 2
+      Encode(header_list2));
+
+  EXPECT_EQ(0u, encoder_stream_sent_byte_count_);
 }
 
 }  // namespace

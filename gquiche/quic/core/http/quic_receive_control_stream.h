@@ -35,7 +35,7 @@ class QUIC_EXPORT_PRIVATE QuicReceiveControlStream
 
   // HttpDecoder::Visitor implementation.
   void OnError(HttpDecoder* decoder) override;
-  bool OnMaxPushIdFrame(const MaxPushIdFrame& frame) override;
+  bool OnMaxPushIdFrame() override;
   bool OnGoAwayFrame(const GoAwayFrame& frame) override;
   bool OnSettingsFrameStart(QuicByteCount header_length) override;
   bool OnSettingsFrame(const SettingsFrame& frame) override;
@@ -53,8 +53,7 @@ class QUIC_EXPORT_PRIVATE QuicReceiveControlStream
   bool OnAcceptChFrame(const AcceptChFrame& frame) override;
   void OnWebTransportStreamFrameType(QuicByteCount header_length,
                                      WebTransportSessionId session_id) override;
-  bool OnUnknownFrameStart(uint64_t frame_type,
-                           QuicByteCount header_length,
+  bool OnUnknownFrameStart(uint64_t frame_type, QuicByteCount header_length,
                            QuicByteCount payload_length) override;
   bool OnUnknownFramePayload(absl::string_view payload) override;
   bool OnUnknownFrameEnd() override;

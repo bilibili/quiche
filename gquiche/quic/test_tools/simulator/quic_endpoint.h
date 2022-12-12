@@ -9,11 +9,10 @@
 #include "gquiche/quic/core/crypto/null_decrypter.h"
 #include "gquiche/quic/core/crypto/null_encrypter.h"
 #include "gquiche/quic/core/quic_connection.h"
-#include "gquiche/quic/core/quic_default_packet_writer.h"
+#include "gquiche/quic/core/quic_packet_writer.h"
 #include "gquiche/quic/core/quic_packets.h"
 #include "gquiche/quic/core/quic_stream_frame_data_producer.h"
 #include "gquiche/quic/core/quic_trace_visitor.h"
-#include "gquiche/quic/platform/api/quic_containers.h"
 #include "gquiche/quic/test_tools/simple_session_notifier.h"
 #include "gquiche/quic/test_tools/simulator/link.h"
 #include "gquiche/quic/test_tools/simulator/queue.h"
@@ -31,16 +30,13 @@ class QuicEndpoint : public QuicEndpointBase,
                      public QuicConnectionVisitorInterface,
                      public SessionNotifierInterface {
  public:
-  QuicEndpoint(Simulator* simulator,
-               std::string name,
-               std::string peer_name,
-               Perspective perspective,
-               QuicConnectionId connection_id);
+  QuicEndpoint(Simulator* simulator, std::string name, std::string peer_name,
+               Perspective perspective, QuicConnectionId connection_id);
 
   QuicByteCount bytes_to_transfer() const;
   QuicByteCount bytes_transferred() const;
   QuicByteCount bytes_received() const;
-  inline bool wrong_data_received() const { return wrong_data_received_; }
+  bool wrong_data_received() const { return wrong_data_received_; }
 
   // Send |bytes| bytes.  Initiates the transfer if one is not already in
   // progress.
@@ -50,12 +46,6 @@ class QuicEndpoint : public QuicEndpointBase,
   void OnStreamFrame(const QuicStreamFrame& frame) override;
   void OnCryptoFrame(const QuicCryptoFrame& frame) override;
   void OnCanWrite() override;
-  bool SendProbingData() override;
-  bool ValidateStatelessReset(
-      const quic::QuicSocketAddress& /*self_address*/,
-      const quic::QuicSocketAddress& /*peer_address*/) override {
-    return true;
-  }
   bool WillingAndAbleToWrite() const override;
   bool ShouldKeepConnectionAlive() const override;
 
@@ -84,8 +74,10 @@ class QuicEndpoint : public QuicEndpointBase,
   void SendNewConnectionId(const QuicNewConnectionIdFrame& /*frame*/) override {
   }
   void SendRetireConnectionId(uint64_t /*sequence_number*/) override {}
-  void OnServerConnectionIdIssued(
-      const QuicConnectionId& /*server_connection_id*/) override {}
+  bool MaybeReserveConnectionId(
+      const QuicConnectionId& /*server_connection_id*/) override {
+    return true;
+  }
   void OnServerConnectionIdRetired(
       const QuicConnectionId& /*server_connection_id*/) override {}
   bool AllowSelfAddressChange() const override;
@@ -116,16 +108,20 @@ class QuicEndpoint : public QuicEndpointBase,
       const QuicSocketAddress& /*address*/) const override {
     return false;
   }
+  void OnBandwidthUpdateTimeout() override {}
+  std::unique_ptr<QuicPathValidationContext> CreateContextForMultiPortPath()
+      override {
+    return nullptr;
+  }
 
   // End QuicConnectionVisitorInterface implementation.
 
   // Begin SessionNotifierInterface methods:
-  bool OnFrameAcked(const QuicFrame& frame,
-                    QuicTime::Delta ack_delay_time,
+  bool OnFrameAcked(const QuicFrame& frame, QuicTime::Delta ack_delay_time,
                     QuicTime receive_timestamp) override;
   void OnStreamFrameRetransmitted(const QuicStreamFrame& /*frame*/) override {}
   void OnFrameLost(const QuicFrame& frame) override;
-  void RetransmitFrames(const QuicFrames& frames,
+  bool RetransmitFrames(const QuicFrames& frames,
                         TransmissionType type) override;
   bool IsFrameOutstanding(const QuicFrame& frame) const override;
   bool HasUnackedCryptoData() const override;
@@ -141,18 +137,14 @@ class QuicEndpoint : public QuicEndpointBase,
                                           QuicStreamOffset offset,
                                           QuicByteCount data_length,
                                           QuicDataWriter* writer) override;
-    bool WriteCryptoData(EncryptionLevel level,
-                         QuicStreamOffset offset,
+    bool WriteCryptoData(EncryptionLevel level, QuicStreamOffset offset,
                          QuicByteCount data_length,
                          QuicDataWriter* writer) override;
   };
 
   std::unique_ptr<QuicConnection> CreateConnection(
-      Simulator* simulator,
-      std::string name,
-      std::string peer_name,
-      Perspective perspective,
-      QuicConnectionId connection_id);
+      Simulator* simulator, std::string name, std::string peer_name,
+      Perspective perspective, QuicConnectionId connection_id);
 
   // Write stream data until |bytes_to_transfer_| is zero or the connection is
   // write-blocked.

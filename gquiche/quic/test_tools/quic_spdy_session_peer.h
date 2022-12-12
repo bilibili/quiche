@@ -12,6 +12,7 @@
 #include "gquiche/quic/core/qpack/qpack_send_stream.h"
 #include "gquiche/quic/core/quic_packets.h"
 #include "gquiche/quic/core/quic_write_blocked_list.h"
+#include "gquiche/spdy/core/http2_header_block.h"
 #include "gquiche/spdy/core/spdy_framer.h"
 
 namespace quic {
@@ -32,9 +33,10 @@ class QuicSpdySessionPeer {
   static void SetMaxInboundHeaderListSize(QuicSpdySession* session,
                                           size_t max_inbound_header_size);
   static size_t WriteHeadersOnHeadersStream(
-      QuicSpdySession* session, QuicStreamId id, spdy::SpdyHeaderBlock headers,
+      QuicSpdySession* session, QuicStreamId id, spdy::Http2HeaderBlock headers,
       bool fin, const spdy::SpdyStreamPrecedence& precedence,
-      QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener);
+      quiche::QuicheReferenceCountedPointer<QuicAckListenerInterface>
+          ack_listener);
   // |session| can't be nullptr.
   static QuicStreamId GetNextOutgoingUnidirectionalStreamId(
       QuicSpdySession* session);

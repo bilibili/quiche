@@ -1,8 +1,16 @@
+/*
+ * Copyright (c) Facebook, Inc. and its affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ *
+ */
+
 #include "base/bvc-qlog/src/qlogger_constants.h"
 
 namespace quic {
-quiche::QuicheStringPiece vantagePointString(VantagePoint vantagePoint) {
-  switch (vantagePoint) {
+quiche::QuicheStringPiece vantagePointString(VantagePoint vantage_point) {
+  switch (vantage_point) {
     case VantagePoint::IS_CLIENT:
       return kQLogClientVantagePoint;
     case VantagePoint::IS_SERVER:
@@ -124,14 +132,8 @@ quiche::QuicheStringPiece toQlogString(TransmissionType type) {
       return "all_zero_rtt_retransmission";
     case TransmissionType::LOSS_RETRANSMISSION:
       return "loss_retransmission";
-    case TransmissionType::RTO_RETRANSMISSION:
-      return "rto_retransmission";
-    case TransmissionType::TLP_RETRANSMISSION:
-      return "tlp_retransmission";
     case TransmissionType::PTO_RETRANSMISSION:
       return "pto_retransmission";
-    case TransmissionType::PROBING_RETRANSMISSION:
-      return "probing_retransmission";
     default:
       return "invalid_retransmission";
   }

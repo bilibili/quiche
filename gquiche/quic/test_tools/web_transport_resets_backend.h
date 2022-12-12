@@ -6,6 +6,7 @@
 #define QUICHE_QUIC_TEST_TOOLS_WEB_TRANSPORT_RESETS_BACKEND_H_
 
 #include "gquiche/quic/test_tools/quic_test_backend.h"
+#include "gquiche/spdy/core/http2_header_block.h"
 
 namespace quic {
 namespace test {

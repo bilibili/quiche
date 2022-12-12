@@ -14,6 +14,7 @@
 #include "gquiche/quic/core/quic_alarm.h"
 #include "gquiche/quic/core/quic_packets.h"
 #include "gquiche/quic/platform/api/quic_export.h"
+#include "gquiche/spdy/core/http2_header_block.h"
 #include "gquiche/spdy/core/spdy_framer.h"
 
 namespace quic {
@@ -30,8 +31,7 @@ class QUIC_EXPORT_PRIVATE QuicClientPromisedInfo
     : public QuicClientPushPromiseIndex::TryHandle {
  public:
   // Interface to QuicSpdyClientStream
-  QuicClientPromisedInfo(QuicSpdyClientSessionBase* session,
-                         QuicStreamId id,
+  QuicClientPromisedInfo(QuicSpdyClientSessionBase* session, QuicStreamId id,
                          std::string url);
   QuicClientPromisedInfo(const QuicClientPromisedInfo&) = delete;
   QuicClientPromisedInfo& operator=(const QuicClientPromisedInfo&) = delete;
@@ -40,15 +40,15 @@ class QUIC_EXPORT_PRIVATE QuicClientPromisedInfo
   void Init();
 
   // Validate promise headers etc. Returns true if headers are valid.
-  bool OnPromiseHeaders(const spdy::SpdyHeaderBlock& headers);
+  bool OnPromiseHeaders(const spdy::Http2HeaderBlock& headers);
 
   // Store response, possibly proceed with final validation.
-  void OnResponseHeaders(const spdy::SpdyHeaderBlock& headers);
+  void OnResponseHeaders(const spdy::Http2HeaderBlock& headers);
 
   // Rendezvous between this promised stream and a client request that
   // has a matching URL.
   virtual QuicAsyncStatus HandleClientRequest(
-      const spdy::SpdyHeaderBlock& headers,
+      const spdy::Http2HeaderBlock& headers,
       QuicClientPushPromiseIndex::Delegate* delegate);
 
   void Cancel() override;
@@ -68,9 +68,9 @@ class QUIC_EXPORT_PRIVATE QuicClientPromisedInfo
   // validation requires the response headers (for the actual Vary
   // field list), the promise headers (taking the role of the "cached"
   // request), and the client request headers.
-  spdy::SpdyHeaderBlock* request_headers() { return &request_headers_; }
+  spdy::Http2HeaderBlock* request_headers() { return &request_headers_; }
 
-  spdy::SpdyHeaderBlock* response_headers() { return response_headers_.get(); }
+  spdy::Http2HeaderBlock* response_headers() { return response_headers_.get(); }
 
   // After validation, client will use this to access the pushed stream.
 
@@ -100,9 +100,9 @@ class QUIC_EXPORT_PRIVATE QuicClientPromisedInfo
   QuicSpdyClientSessionBase* session_;
   QuicStreamId id_;
   std::string url_;
-  spdy::SpdyHeaderBlock request_headers_;
-  std::unique_ptr<spdy::SpdyHeaderBlock> response_headers_;
-  spdy::SpdyHeaderBlock client_request_headers_;
+  spdy::Http2HeaderBlock request_headers_;
+  std::unique_ptr<spdy::Http2HeaderBlock> response_headers_;
+  spdy::Http2HeaderBlock client_request_headers_;
   QuicClientPushPromiseIndex::Delegate* client_request_delegate_;
 
   // The promise will commit suicide eventually if it is not claimed by a GET

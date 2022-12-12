@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "absl/container/node_hash_map.h"
-#include "gquiche/quic/platform/api/quic_containers.h"
 #include "gquiche/quic/platform/api/quic_logging.h"
 #include "gquiche/quic/platform/api/quic_test.h"
 #include "gquiche/quic/test_tools/quic_test_utils.h"
@@ -48,7 +47,7 @@ class Counter : public Actor {
   QuicTime::Delta period_;
 };
 
-class SimulatorTest : public QuicTest {};
+class SimulatorTest : public quic::test::QuicTest {};
 
 // Test that the basic event handling works, and that Actors can be created and
 // destroyed mid-simulation.
@@ -111,10 +110,8 @@ class CounterPort : public UnconstrainedPortInterface {
 // CounterPort as an Rx interface.
 class LinkSaturator : public Endpoint {
  public:
-  LinkSaturator(Simulator* simulator,
-                std::string name,
-                QuicByteCount packet_size,
-                std::string destination)
+  LinkSaturator(Simulator* simulator, std::string name,
+                QuicByteCount packet_size, std::string destination)
       : Endpoint(simulator, name),
         packet_size_(packet_size),
         destination_(std::move(destination)),
@@ -429,9 +426,7 @@ TEST_F(SimulatorTest, SwitchedNetwork) {
 // instantiated.
 class AlarmToggler : public Actor {
  public:
-  AlarmToggler(Simulator* simulator,
-               std::string name,
-               QuicAlarm* alarm,
+  AlarmToggler(Simulator* simulator, std::string name, QuicAlarm* alarm,
                QuicTime::Delta interval)
       : Actor(simulator, name),
         alarm_(alarm),

@@ -12,15 +12,13 @@
 #include "gquiche/quic/platform/api/quic_flags.h"
 #include "gquiche/quic/platform/api/quic_logging.h"
 
-using spdy::SpdyHeaderBlock;
+using spdy::Http2HeaderBlock;
 
 namespace quic {
 
 QuicSpdyClientSessionBase::QuicSpdyClientSessionBase(
-    QuicConnection* connection,
-    QuicClientPushPromiseIndex* push_promise_index,
-    const QuicConfig& config,
-    const ParsedQuicVersionVector& supported_versions)
+    QuicConnection* connection, QuicClientPushPromiseIndex* push_promise_index,
+    const QuicConfig& config, const ParsedQuicVersionVector& supported_versions)
     : QuicSpdySession(connection, nullptr, config, supported_versions),
       push_promise_index_(push_promise_index),
       largest_promised_stream_id_(
@@ -40,24 +38,20 @@ void QuicSpdyClientSessionBase::OnConfigNegotiated() {
 }
 
 void QuicSpdyClientSessionBase::OnInitialHeadersComplete(
-    QuicStreamId stream_id,
-    const SpdyHeaderBlock& response_headers) {
+    QuicStreamId stream_id, const Http2HeaderBlock& response_headers) {
   // Note that the strong ordering of the headers stream means that
   // QuicSpdyClientStream::OnPromiseHeadersComplete must have already
   // been called (on the associated stream) if this is a promised
   // stream. However, this stream may not have existed at this time,
   // hence the need to query the session.
   QuicClientPromisedInfo* promised = GetPromisedById(stream_id);
-  if (!promised)
-    return;
+  if (!promised) return;
 
   promised->OnResponseHeaders(response_headers);
 }
 
 void QuicSpdyClientSessionBase::OnPromiseHeaderList(
-    QuicStreamId stream_id,
-    QuicStreamId promised_stream_id,
-    size_t frame_len,
+    QuicStreamId stream_id, QuicStreamId promised_stream_id, size_t frame_len,
     const QuicHeaderList& header_list) {
   if (IsStaticStream(stream_id)) {
     connection()->CloseConnection(
@@ -87,8 +81,9 @@ void QuicSpdyClientSessionBase::OnPromiseHeaderList(
     return;
   }
 
-  if (VersionUsesHttp3(transport_version()) &&
-      !CanCreatePushStreamWithId(promised_stream_id)) {
+  if (VersionUsesHttp3(transport_version())) {
+    // Received push stream id is higher than MAX_PUSH_ID
+    // because no MAX_PUSH_ID frame is ever sent.
     connection()->CloseConnection(
         QUIC_INVALID_STREAM_ID,
         "Received push stream id higher than MAX_PUSH_ID.",
@@ -105,9 +100,9 @@ void QuicSpdyClientSessionBase::OnPromiseHeaderList(
   stream->OnPromiseHeaderList(promised_stream_id, frame_len, header_list);
 }
 
-bool QuicSpdyClientSessionBase::HandlePromised(QuicStreamId /* associated_id */,
-                                               QuicStreamId promised_id,
-                                               const SpdyHeaderBlock& headers) {
+bool QuicSpdyClientSessionBase::HandlePromised(
+    QuicStreamId /* associated_id */, QuicStreamId promised_id,
+    const Http2HeaderBlock& headers) {
   // TODO(b/136295430): Do not treat |promised_id| as a stream ID when using
   // IETF QUIC.
   // Due to pathalogical packet re-ordering, it is possible that
@@ -204,8 +199,7 @@ void QuicSpdyClientSessionBase::OnPushStreamTimedOut(
     QuicStreamId /*stream_id*/) {}
 
 void QuicSpdyClientSessionBase::ResetPromised(
-    QuicStreamId id,
-    QuicRstStreamErrorCode error_code) {
+    QuicStreamId id, QuicRstStreamErrorCode error_code) {
   QUICHE_DCHECK(QuicUtils::IsServerInitiatedStreamId(transport_version(), id));
   ResetStream(id, error_code);
   if (!IsOpenStream(id) && !IsClosedStream(id)) {
@@ -265,11 +259,9 @@ bool QuicSpdyClientSessionBase::OnSettingsFrame(const SettingsFrame& frame) {
   if (!QuicSpdySession::OnSettingsFrame(frame)) {
     return false;
   }
-  std::unique_ptr<char[]> buffer;
-  QuicByteCount frame_length =
-      HttpEncoder::SerializeSettingsFrame(frame, &buffer);
+  std::string settings_frame = HttpEncoder::SerializeSettingsFrame(frame);
   auto serialized_data = std::make_unique<ApplicationState>(
-      buffer.get(), buffer.get() + frame_length);
+      settings_frame.data(), settings_frame.data() + settings_frame.length());
   GetMutableCryptoStream()->SetServerApplicationStateForResumption(
       std::move(serialized_data));
   return true;

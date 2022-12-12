@@ -6,14 +6,17 @@
 
 #include <netinet/ip6.h>
 
+#include <memory>
+
 #include "absl/container/node_hash_map.h"
-#include "gquiche/quic/platform/api/quic_containers.h"
-#include "gquiche/quic/platform/api/quic_epoll.h"
+#include "gquiche/quic/core/io/quic_default_event_loop.h"
+#include "gquiche/quic/core/io/quic_event_loop.h"
+#include "gquiche/quic/core/quic_default_clock.h"
 #include "gquiche/quic/platform/api/quic_ip_address.h"
 #include "gquiche/quic/platform/api/quic_test.h"
 #include "gquiche/quic/qbone/platform/mock_kernel.h"
 
-namespace quic {
+namespace quic::test {
 namespace {
 
 using ::testing::_;
@@ -80,7 +83,8 @@ class StatsInterface : public IcmpReachable::StatsInterface {
 
 class IcmpReachableTest : public QuicTest {
  public:
-  IcmpReachableTest() {
+  IcmpReachableTest()
+      : event_loop_(GetDefaultEventLoop()->Create(QuicDefaultClock::Get())) {
     QUICHE_CHECK(source_.FromString(kSourceAddress));
     QUICHE_CHECK(destination_.FromString(kDestinationAddress));
 
@@ -114,13 +118,13 @@ class IcmpReachableTest : public QuicTest {
   int read_src_fd_;
 
   StrictMock<MockKernel> kernel_;
-  QuicEpollServer epoll_server_;
+  std::unique_ptr<QuicEventLoop> event_loop_;
   StatsInterface stats_;
 };
 
 TEST_F(IcmpReachableTest, SendsPings) {
-  IcmpReachable reachable(source_, destination_, absl::ZeroDuration(), &kernel_,
-                          &epoll_server_, &stats_);
+  IcmpReachable reachable(source_, destination_, QuicTime::Delta::Zero(),
+                          &kernel_, event_loop_.get(), &stats_);
 
   SetFdExpectations();
   ASSERT_TRUE(reachable.Init());
@@ -134,15 +138,13 @@ TEST_F(IcmpReachableTest, SendsPings) {
         return len;
       }));
 
-  epoll_server_.WaitForEventsAndExecuteCallbacks();
+  event_loop_->RunEventLoopOnce(QuicTime::Delta::FromSeconds(1));
   EXPECT_FALSE(stats_.HasWriteErrors());
-
-  epoll_server_.Shutdown();
 }
 
 TEST_F(IcmpReachableTest, HandlesUnreachableEvents) {
-  IcmpReachable reachable(source_, destination_, absl::ZeroDuration(), &kernel_,
-                          &epoll_server_, &stats_);
+  IcmpReachable reachable(source_, destination_, QuicTime::Delta::Zero(),
+                          &kernel_, event_loop_.get(), &stats_);
 
   SetFdExpectations();
   ASSERT_TRUE(reachable.Init());
@@ -153,20 +155,18 @@ TEST_F(IcmpReachableTest, HandlesUnreachableEvents) {
                                 int flags, const struct sockaddr* dest_addr,
                                 socklen_t addrlen) { return len; }));
 
-  epoll_server_.WaitForEventsAndExecuteCallbacks();
+  event_loop_->RunEventLoopOnce(QuicTime::Delta::FromSeconds(1));
   EXPECT_EQ(stats_.unreachable_count(), 0);
 
-  epoll_server_.WaitForEventsAndExecuteCallbacks();
+  event_loop_->RunEventLoopOnce(QuicTime::Delta::FromSeconds(1));
   EXPECT_FALSE(stats_.HasWriteErrors());
   EXPECT_EQ(stats_.unreachable_count(), 1);
   EXPECT_EQ(stats_.current_source(), kNoSource);
-
-  epoll_server_.Shutdown();
 }
 
 TEST_F(IcmpReachableTest, HandlesReachableEvents) {
-  IcmpReachable reachable(source_, destination_, absl::ZeroDuration(), &kernel_,
-                          &epoll_server_, &stats_);
+  IcmpReachable reachable(source_, destination_, QuicTime::Delta::Zero(),
+                          &kernel_, event_loop_.get(), &stats_);
 
   SetFdExpectations();
   ASSERT_TRUE(reachable.Init());
@@ -194,7 +194,7 @@ TEST_F(IcmpReachableTest, HandlesReachableEvents) {
             return read(sockfd, buf, len);
           }));
 
-  epoll_server_.WaitForEventsAndExecuteCallbacks();
+  event_loop_->RunEventLoopOnce(QuicTime::Delta::FromSeconds(1));
   EXPECT_EQ(stats_.reachable_count(), 0);
 
   icmp6_hdr response = last_request_hdr;
@@ -203,18 +203,16 @@ TEST_F(IcmpReachableTest, HandlesReachableEvents) {
   write(read_src_fd_, reinterpret_cast<const void*>(&response),
         sizeof(icmp6_hdr));
 
-  epoll_server_.WaitForEventsAndExecuteCallbacks();
+  event_loop_->RunEventLoopOnce(QuicTime::Delta::FromSeconds(1));
   EXPECT_FALSE(stats_.HasReadErrors());
   EXPECT_FALSE(stats_.HasWriteErrors());
   EXPECT_EQ(stats_.reachable_count(), 1);
   EXPECT_EQ(stats_.current_source(), source_.ToString());
-
-  epoll_server_.Shutdown();
 }
 
 TEST_F(IcmpReachableTest, HandlesWriteErrors) {
-  IcmpReachable reachable(source_, destination_, absl::ZeroDuration(), &kernel_,
-                          &epoll_server_, &stats_);
+  IcmpReachable reachable(source_, destination_, QuicTime::Delta::Zero(),
+                          &kernel_, event_loop_.get(), &stats_);
 
   SetFdExpectations();
   ASSERT_TRUE(reachable.Init());
@@ -226,15 +224,13 @@ TEST_F(IcmpReachableTest, HandlesWriteErrors) {
         return 0;
       }));
 
-  epoll_server_.WaitForEventsAndExecuteCallbacks();
+  event_loop_->RunEventLoopOnce(QuicTime::Delta::FromSeconds(1));
   EXPECT_EQ(stats_.WriteErrorCount(EAGAIN), 1);
-
-  epoll_server_.Shutdown();
 }
 
 TEST_F(IcmpReachableTest, HandlesReadErrors) {
-  IcmpReachable reachable(source_, destination_, absl::ZeroDuration(), &kernel_,
-                          &epoll_server_, &stats_);
+  IcmpReachable reachable(source_, destination_, QuicTime::Delta::Zero(),
+                          &kernel_, event_loop_.get(), &stats_);
 
   SetFdExpectations();
   ASSERT_TRUE(reachable.Init());
@@ -256,12 +252,10 @@ TEST_F(IcmpReachableTest, HandlesReadErrors) {
   write(read_src_fd_, reinterpret_cast<const void*>(&response),
         sizeof(icmp6_hdr));
 
-  epoll_server_.WaitForEventsAndExecuteCallbacks();
+  event_loop_->RunEventLoopOnce(QuicTime::Delta::FromSeconds(1));
   EXPECT_EQ(stats_.reachable_count(), 0);
   EXPECT_EQ(stats_.ReadErrorCount(EIO), 1);
-
-  epoll_server_.Shutdown();
 }
 
 }  // namespace
-}  // namespace quic
+}  // namespace quic::test

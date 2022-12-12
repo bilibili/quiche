@@ -46,7 +46,7 @@ class QuicReceivedPacketManagerTest : public QuicTest {
   QuicReceivedPacketManagerTest() : received_manager_(&stats_) {
     clock_.AdvanceTime(QuicTime::Delta::FromSeconds(1));
     rtt_stats_.UpdateRtt(kMinRttMs, QuicTime::Delta::Zero(), QuicTime::Zero());
-    received_manager_.set_save_timestamps(true);
+    received_manager_.set_save_timestamps(true, false);
   }
 
   void RecordPacketReceipt(uint64_t packet_number) {
@@ -67,8 +67,9 @@ class QuicReceivedPacketManagerTest : public QuicTest {
                              uint64_t last_received_packet_number) {
     received_manager_.MaybeUpdateAckTimeout(
         should_last_packet_instigate_acks,
-        QuicPacketNumber(last_received_packet_number), clock_.ApproximateNow(),
-        &rtt_stats_);
+        QuicPacketNumber(last_received_packet_number),
+        /*last_packet_receipt_time=*/clock_.ApproximateNow(),
+        /*now=*/clock_.ApproximateNow(), &rtt_stats_);
   }
 
   void CheckAckTimeout(QuicTime time) {
@@ -186,6 +187,21 @@ TEST_F(QuicReceivedPacketManagerTest, IgnoreOutOfOrderTimestamps) {
                       QuicTime::Zero() + QuicTime::Delta::FromMilliseconds(1));
   EXPECT_EQ(2u, received_manager_.ack_frame().received_packet_times.size());
   RecordPacketReceipt(3, QuicTime::Zero());
+  EXPECT_EQ(2u, received_manager_.ack_frame().received_packet_times.size());
+}
+
+TEST_F(QuicReceivedPacketManagerTest, IgnoreOutOfOrderPackets) {
+  received_manager_.set_save_timestamps(true, true);
+  EXPECT_FALSE(received_manager_.ack_frame_updated());
+  RecordPacketReceipt(1, QuicTime::Zero());
+  EXPECT_TRUE(received_manager_.ack_frame_updated());
+  EXPECT_EQ(1u, received_manager_.ack_frame().received_packet_times.size());
+  RecordPacketReceipt(4,
+                      QuicTime::Zero() + QuicTime::Delta::FromMilliseconds(1));
+  EXPECT_EQ(2u, received_manager_.ack_frame().received_packet_times.size());
+
+  RecordPacketReceipt(3,
+                      QuicTime::Zero() + QuicTime::Delta::FromMilliseconds(3));
   EXPECT_EQ(2u, received_manager_.ack_frame().received_packet_times.size());
 }
 
@@ -620,6 +636,44 @@ TEST_F(QuicReceivedPacketManagerTest,
       CheckAckTimeout(clock_.ApproximateNow() + kDelayedAckTime);
     }
   }
+}
+
+TEST_F(QuicReceivedPacketManagerTest, UpdateAckTimeoutOnPacketReceiptTime) {
+  EXPECT_FALSE(HasPendingAck());
+
+  // Received packets 3 and 4.
+  QuicTime packet_receipt_time3 = clock_.ApproximateNow();
+  // Packet 3 gets processed after 10ms.
+  clock_.AdvanceTime(QuicTime::Delta::FromMilliseconds(10));
+  RecordPacketReceipt(3, packet_receipt_time3);
+  received_manager_.MaybeUpdateAckTimeout(
+      kInstigateAck, QuicPacketNumber(3),
+      /*last_packet_receipt_time=*/packet_receipt_time3,
+      clock_.ApproximateNow(), &rtt_stats_);
+  // Make sure ACK timeout is based on receipt time.
+  CheckAckTimeout(packet_receipt_time3 + kDelayedAckTime);
+
+  RecordPacketReceipt(4, clock_.ApproximateNow());
+  MaybeUpdateAckTimeout(kInstigateAck, 4);
+  // Immediate ack is sent.
+  CheckAckTimeout(clock_.ApproximateNow());
+}
+
+TEST_F(QuicReceivedPacketManagerTest,
+       UpdateAckTimeoutOnPacketReceiptTimeLongerQueuingTime) {
+  EXPECT_FALSE(HasPendingAck());
+
+  // Received packets 3 and 4.
+  QuicTime packet_receipt_time3 = clock_.ApproximateNow();
+  // Packet 3 gets processed after 100ms.
+  clock_.AdvanceTime(QuicTime::Delta::FromMilliseconds(100));
+  RecordPacketReceipt(3, packet_receipt_time3);
+  received_manager_.MaybeUpdateAckTimeout(
+      kInstigateAck, QuicPacketNumber(3),
+      /*last_packet_receipt_time=*/packet_receipt_time3,
+      clock_.ApproximateNow(), &rtt_stats_);
+  // Given 100ms > ack delay, verify immediate ACK.
+  CheckAckTimeout(clock_.ApproximateNow());
 }
 
 }  // namespace

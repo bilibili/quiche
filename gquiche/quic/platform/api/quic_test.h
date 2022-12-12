@@ -6,26 +6,21 @@
 #define QUICHE_QUIC_PLATFORM_API_QUIC_TEST_H_
 
 #include "gquiche/quic/platform/api/quic_logging.h"
-#include "platform/quic_platform_impl/quic_test_impl.h"
 #include "gquiche/common/platform/api/quiche_test.h"
 
-using QuicFlagSaver = QuicFlagSaverImpl;
+namespace quic::test {
+
+using QuicFlagSaver = quiche::test::QuicheFlagSaver;
 
 // Defines the base classes to be used in QUIC tests.
-using QuicTest = QuicTestImpl;
+using QuicTest = quiche::test::QuicheTest;
 template <class T>
-using QuicTestWithParam = QuicTestWithParamImpl<T>;
+using QuicTestWithParam = quiche::test::QuicheTestWithParam<T>;
 
-// Class which needs to be instantiated in tests which use threads.
-using ScopedEnvironmentForThreads = ScopedEnvironmentForThreadsImpl;
+}  // namespace quic::test
 
-#define QUIC_TEST_DISABLED_IN_CHROME(name) \
-  QUIC_TEST_DISABLED_IN_CHROME_IMPL(name)
+#define QUIC_TEST_DISABLED_IN_CHROME(name) QUICHE_TEST_DISABLED_IN_CHROME(name)
 
-inline std::string QuicGetTestMemoryCachePath() {
-  return QuicGetTestMemoryCachePathImpl();
-}
-
-#define QUIC_SLOW_TEST(test) QUIC_SLOW_TEST_IMPL(test)
+#define QUIC_SLOW_TEST(test) QUICHE_SLOW_TEST(test)
 
 #endif  // QUICHE_QUIC_PLATFORM_API_QUIC_TEST_H_

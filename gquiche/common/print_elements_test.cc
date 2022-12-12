@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "absl/strings/string_view.h"
-#include "quic/core/quic_error_codes.h"
+#include "gquiche/quic/core/quic_error_codes.h"
 #include "gquiche/common/platform/api/quiche_test.h"
 
 using quic::QuicIetfTransportErrorCodes;

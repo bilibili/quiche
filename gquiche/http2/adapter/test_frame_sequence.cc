@@ -9,12 +9,11 @@ namespace http2 {
 namespace adapter {
 namespace test {
 
-std::vector<const Header> ToHeaders(
+std::vector<Header> ToHeaders(
     absl::Span<const std::pair<absl::string_view, absl::string_view>> headers) {
-  std::vector<const Header> out;
-  for (const auto& header : headers) {
-    out.push_back(
-        std::make_pair(HeaderRep(header.first), HeaderRep(header.second)));
+  std::vector<Header> out;
+  for (auto [name, value] : headers) {
+    out.push_back(std::make_pair(HeaderRep(name), HeaderRep(value)));
   }
   return out;
 }
@@ -31,8 +30,7 @@ TestFrameSequence& TestFrameSequence::ServerPreface(
 }
 
 TestFrameSequence& TestFrameSequence::Data(Http2StreamId stream_id,
-                                           absl::string_view payload,
-                                           bool fin,
+                                           absl::string_view payload, bool fin,
                                            absl::optional<int> padding_length) {
   auto data = absl::make_unique<spdy::SpdyDataIR>(stream_id, payload);
   data->set_fin(fin);
@@ -147,8 +145,7 @@ TestFrameSequence& TestFrameSequence::WindowUpdate(Http2StreamId stream_id,
 
 TestFrameSequence& TestFrameSequence::Priority(Http2StreamId stream_id,
                                                Http2StreamId parent_stream_id,
-                                               int weight,
-                                               bool exclusive) {
+                                               int weight, bool exclusive) {
   frames_.push_back(absl::make_unique<spdy::SpdyPriorityIR>(
       stream_id, parent_stream_id, weight, exclusive));
   return *this;
@@ -157,18 +154,16 @@ TestFrameSequence& TestFrameSequence::Priority(Http2StreamId stream_id,
 TestFrameSequence& TestFrameSequence::Metadata(Http2StreamId stream_id,
                                                absl::string_view payload,
                                                bool multiple_frames) {
-  const std::string encoded_payload = MetadataBlockForPayload(payload);
   if (multiple_frames) {
-    const size_t pos = encoded_payload.size() / 2;
+    const size_t pos = payload.size() / 2;
     frames_.push_back(absl::make_unique<spdy::SpdyUnknownIR>(
-        stream_id, kMetadataFrameType, 0, encoded_payload.substr(0, pos)));
+        stream_id, kMetadataFrameType, 0, std::string(payload.substr(0, pos))));
     frames_.push_back(absl::make_unique<spdy::SpdyUnknownIR>(
         stream_id, kMetadataFrameType, kMetadataEndFlag,
-        encoded_payload.substr(pos)));
+        std::string(payload.substr(pos))));
   } else {
     frames_.push_back(absl::make_unique<spdy::SpdyUnknownIR>(
-        stream_id, kMetadataFrameType, kMetadataEndFlag,
-        std::move(encoded_payload)));
+        stream_id, kMetadataFrameType, kMetadataEndFlag, std::string(payload)));
   }
   return *this;
 }
@@ -184,16 +179,6 @@ std::string TestFrameSequence::Serialize() {
     absl::StrAppend(&result, absl::string_view(f));
   }
   return result;
-}
-
-std::string TestFrameSequence::MetadataBlockForPayload(
-    absl::string_view payload) {
-  // Encode the payload using a header block.
-  spdy::SpdyHeaderBlock block;
-  block["example-payload"] = payload;
-  spdy::HpackEncoder encoder;
-  encoder.DisableCompression();
-  return encoder.EncodeHeaderBlock(block);
 }
 
 }  // namespace test

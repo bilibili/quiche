@@ -11,6 +11,7 @@
 #include "gquiche/quic/core/crypto/quic_crypto_client_config.h"
 #include "gquiche/quic/core/quic_crypto_client_stream.h"
 #include "gquiche/quic/core/quic_server_id.h"
+#include "gquiche/quic/core/quic_types.h"
 #include "gquiche/quic/platform/api/quic_export.h"
 #include "gquiche/common/platform/api/quiche_logging.h"
 
@@ -23,10 +24,8 @@ class QUIC_EXPORT_PRIVATE QuicCryptoClientHandshaker
       public QuicCryptoHandshaker {
  public:
   QuicCryptoClientHandshaker(
-      const QuicServerId& server_id,
-      QuicCryptoClientStream* stream,
-      QuicSession* session,
-      std::unique_ptr<ProofVerifyContext> verify_context,
+      const QuicServerId& server_id, QuicCryptoClientStream* stream,
+      QuicSession* session, std::unique_ptr<ProofVerifyContext> verify_context,
       QuicCryptoClientConfig* crypto_config,
       QuicCryptoClientStream::ProofHandler* proof_handler);
   QuicCryptoClientHandshaker(const QuicCryptoClientHandshaker&) = delete;
@@ -45,13 +44,16 @@ class QUIC_EXPORT_PRIVATE QuicCryptoClientHandshaker
   int num_scup_messages_received() const override;
   std::string chlo_hash() const override;
   bool encryption_established() const override;
+  bool IsCryptoFrameExpectedForEncryptionLevel(
+      EncryptionLevel level) const override;
+  EncryptionLevel GetEncryptionLevelToSendCryptoDataOfSpace(
+      PacketNumberSpace space) const override;
   bool one_rtt_keys_available() const override;
   const QuicCryptoNegotiatedParameters& crypto_negotiated_params()
       const override;
   CryptoMessageParser* crypto_message_parser() override;
   HandshakeState GetHandshakeState() const override;
   size_t BufferSizeLimitForLevel(EncryptionLevel level) const override;
-  bool KeyUpdateSupportedLocally() const override;
   std::unique_ptr<QuicDecrypter> AdvanceKeysAndCreateCurrentOneRttDecrypter()
       override;
   std::unique_ptr<QuicEncrypter> CreateCurrentOneRttEncrypter() override;
@@ -94,8 +96,7 @@ class QUIC_EXPORT_PRIVATE QuicCryptoClientHandshaker
     ~ProofVerifierCallbackImpl() override;
 
     // ProofVerifierCallback interface.
-    void Run(bool ok,
-             const std::string& error_details,
+    void Run(bool ok, const std::string& error_details,
              std::unique_ptr<ProofVerifyDetails>* details) override;
 
     // Cancel causes any future callbacks to be ignored. It must be called on
@@ -203,7 +204,7 @@ class QUIC_EXPORT_PRIVATE QuicCryptoClientHandshaker
 
   bool encryption_established_;
   bool one_rtt_keys_available_;
-  QuicReferenceCountedPointer<QuicCryptoNegotiatedParameters>
+  quiche::QuicheReferenceCountedPointer<QuicCryptoNegotiatedParameters>
       crypto_negotiated_params_;
 };
 

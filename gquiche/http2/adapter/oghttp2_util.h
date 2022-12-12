@@ -4,12 +4,12 @@
 #include "absl/types/span.h"
 #include "gquiche/http2/adapter/http2_protocol.h"
 #include "gquiche/common/platform/api/quiche_export.h"
-#include "gquiche/spdy/core/spdy_header_block.h"
+#include "gquiche/spdy/core/http2_header_block.h"
 
 namespace http2 {
 namespace adapter {
 
-QUICHE_EXPORT_PRIVATE spdy::SpdyHeaderBlock ToHeaderBlock(
+QUICHE_EXPORT_PRIVATE spdy::Http2HeaderBlock ToHeaderBlock(
     absl::Span<const Header> headers);
 
 }  // namespace adapter

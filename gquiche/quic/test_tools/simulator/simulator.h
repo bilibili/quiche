@@ -10,11 +10,10 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "gquiche/quic/core/quic_connection.h"
-#include "gquiche/quic/core/quic_simple_buffer_allocator.h"
 #include "gquiche/quic/platform/api/quic_bug_tracker.h"
-#include "gquiche/quic/platform/api/quic_containers.h"
 #include "gquiche/quic/test_tools/simulator/actor.h"
 #include "gquiche/quic/test_tools/simulator/alarm_factory.h"
+#include "gquiche/common/simple_buffer_allocator.h"
 
 namespace quic {
 namespace simulator {
@@ -42,16 +41,14 @@ class Simulator : public QuicConnectionHelperInterface {
   // Begin QuicConnectionHelperInterface implementation.
   const QuicClock* GetClock() const override;
   QuicRandom* GetRandomGenerator() override;
-  QuicBufferAllocator* GetStreamSendBufferAllocator() override;
+  quiche::QuicheBufferAllocator* GetStreamSendBufferAllocator() override;
   // End QuicConnectionHelperInterface implementation.
 
   QuicAlarmFactory* GetAlarmFactory();
 
-  inline void set_random_generator(QuicRandom* random) {
-    random_generator_ = random;
-  }
+  void set_random_generator(QuicRandom* random) { random_generator_ = random; }
 
-  inline bool enable_random_delays() const { return enable_random_delays_; }
+  bool enable_random_delays() const { return enable_random_delays_; }
 
   // Run the simulation until either no actors are scheduled or
   // |termination_predicate| returns true.  Returns true if terminated due to
@@ -110,7 +107,7 @@ class Simulator : public QuicConnectionHelperInterface {
 
   Clock clock_;
   QuicRandom* random_generator_;
-  SimpleBufferAllocator buffer_allocator_;
+  quiche::SimpleBufferAllocator buffer_allocator_;
   AlarmFactory alarm_factory_;
 
   // Alarm for RunFor() method.

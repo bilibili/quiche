@@ -91,7 +91,7 @@ constexpr quiche::QuicheStringPiece kQLogClientVantagePoint = "client";
 
 using VantagePoint = Perspective;
 
-quiche::QuicheStringPiece vantagePointString(VantagePoint vantagePoint);
+quiche::QuicheStringPiece vantagePointString(VantagePoint vantage_point);
 
 quiche::QuicheStringPiece toQlogString(QuicFrameType frame);
 

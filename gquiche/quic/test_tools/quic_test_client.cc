@@ -14,7 +14,8 @@
 #include "gquiche/quic/core/crypto/proof_verifier.h"
 #include "gquiche/quic/core/http/quic_spdy_client_stream.h"
 #include "gquiche/quic/core/http/spdy_utils.h"
-#include "gquiche/quic/core/quic_epoll_connection_helper.h"
+#include "gquiche/quic/core/io/quic_default_event_loop.h"
+#include "gquiche/quic/core/quic_default_clock.h"
 #include "gquiche/quic/core/quic_packet_writer_wrapper.h"
 #include "gquiche/quic/core/quic_server_id.h"
 #include "gquiche/quic/core/quic_utils.h"
@@ -22,7 +23,6 @@
 #include "gquiche/quic/platform/api/quic_logging.h"
 #include "gquiche/quic/platform/api/quic_stack_trace.h"
 #include "gquiche/quic/test_tools/crypto_test_utils.h"
-#include "gquiche/quic/test_tools/quic_client_peer.h"
 #include "gquiche/quic/test_tools/quic_connection_peer.h"
 #include "gquiche/quic/test_tools/quic_spdy_session_peer.h"
 #include "gquiche/quic/test_tools/quic_spdy_stream_peer.h"
@@ -45,16 +45,11 @@ class RecordingProofVerifier : public ProofVerifier {
 
   // ProofVerifier interface.
   QuicAsyncStatus VerifyProof(
-      const std::string& hostname,
-      const uint16_t port,
-      const std::string& server_config,
-      QuicTransportVersion transport_version,
-      absl::string_view chlo_hash,
-      const std::vector<std::string>& certs,
-      const std::string& cert_sct,
-      const std::string& signature,
-      const ProofVerifyContext* context,
-      std::string* error_details,
+      const std::string& hostname, const uint16_t port,
+      const std::string& server_config, QuicTransportVersion transport_version,
+      absl::string_view chlo_hash, const std::vector<std::string>& certs,
+      const std::string& cert_sct, const std::string& signature,
+      const ProofVerifyContext* context, std::string* error_details,
       std::unique_ptr<ProofVerifyDetails>* details,
       std::unique_ptr<ProofVerifierCallback> callback) override {
     QuicAsyncStatus process_certs_result = ProcessCerts(certs, cert_sct);
@@ -73,15 +68,11 @@ class RecordingProofVerifier : public ProofVerifier {
   }
 
   QuicAsyncStatus VerifyCertChain(
-      const std::string& /*hostname*/,
-      const uint16_t /*port*/,
+      const std::string& /*hostname*/, const uint16_t /*port*/,
       const std::vector<std::string>& certs,
-      const std::string& /*ocsp_response*/,
-      const std::string& cert_sct,
-      const ProofVerifyContext* /*context*/,
-      std::string* /*error_details*/,
-      std::unique_ptr<ProofVerifyDetails>* /*details*/,
-      uint8_t* /*out_alert*/,
+      const std::string& /*ocsp_response*/, const std::string& cert_sct,
+      const ProofVerifyContext* /*context*/, std::string* /*error_details*/,
+      std::unique_ptr<ProofVerifyDetails>* /*details*/, uint8_t* /*out_alert*/,
       std::unique_ptr<ProofVerifierCallback> /*callback*/) override {
     return ProcessCerts(certs, cert_sct);
   }
@@ -142,17 +133,17 @@ class RecordingProofVerifier : public ProofVerifier {
 };
 }  // namespace
 
-class MockableQuicClientEpollNetworkHelper
-    : public QuicClientEpollNetworkHelper {
+class MockableQuicClientDefaultNetworkHelper
+    : public QuicClientDefaultNetworkHelper {
  public:
-  using QuicClientEpollNetworkHelper::QuicClientEpollNetworkHelper;
-  ~MockableQuicClientEpollNetworkHelper() override = default;
+  using QuicClientDefaultNetworkHelper::QuicClientDefaultNetworkHelper;
+  ~MockableQuicClientDefaultNetworkHelper() override = default;
 
   void ProcessPacket(const QuicSocketAddress& self_address,
                      const QuicSocketAddress& peer_address,
                      const QuicReceivedPacket& packet) override {
-    QuicClientEpollNetworkHelper::ProcessPacket(self_address, peer_address,
-                                                packet);
+    QuicClientDefaultNetworkHelper::ProcessPacket(self_address, peer_address,
+                                                  packet);
     if (track_last_incoming_packet_) {
       last_incoming_packet_ = packet.Clone();
     }
@@ -160,7 +151,7 @@ class MockableQuicClientEpollNetworkHelper
 
   QuicPacketWriter* CreateQuicPacketWriter() override {
     QuicPacketWriter* writer =
-        QuicClientEpollNetworkHelper::CreateQuicPacketWriter();
+        QuicClientDefaultNetworkHelper::CreateQuicPacketWriter();
     if (!test_writer_) {
       return writer;
     }
@@ -195,60 +186,35 @@ class MockableQuicClientEpollNetworkHelper
 };
 
 MockableQuicClient::MockableQuicClient(
-    QuicSocketAddress server_address,
-    const QuicServerId& server_id,
+    QuicSocketAddress server_address, const QuicServerId& server_id,
     const ParsedQuicVersionVector& supported_versions,
-    QuicEpollServer* epoll_server)
-    : MockableQuicClient(server_address,
-                         server_id,
-                         QuicConfig(),
-                         supported_versions,
-                         epoll_server) {}
+    QuicEventLoop* event_loop)
+    : MockableQuicClient(server_address, server_id, QuicConfig(),
+                         supported_versions, event_loop) {}
 
 MockableQuicClient::MockableQuicClient(
-    QuicSocketAddress server_address,
-    const QuicServerId& server_id,
-    const QuicConfig& config,
-    const ParsedQuicVersionVector& supported_versions,
-    QuicEpollServer* epoll_server)
-    : MockableQuicClient(server_address,
-                         server_id,
-                         config,
-                         supported_versions,
-                         epoll_server,
-                         nullptr) {}
+    QuicSocketAddress server_address, const QuicServerId& server_id,
+    const QuicConfig& config, const ParsedQuicVersionVector& supported_versions,
+    QuicEventLoop* event_loop)
+    : MockableQuicClient(server_address, server_id, config, supported_versions,
+                         event_loop, nullptr) {}
 
 MockableQuicClient::MockableQuicClient(
-    QuicSocketAddress server_address,
-    const QuicServerId& server_id,
-    const QuicConfig& config,
-    const ParsedQuicVersionVector& supported_versions,
-    QuicEpollServer* epoll_server,
-    std::unique_ptr<ProofVerifier> proof_verifier)
-    : MockableQuicClient(server_address,
-                         server_id,
-                         config,
-                         supported_versions,
-                         epoll_server,
-                         std::move(proof_verifier),
-                         nullptr) {}
+    QuicSocketAddress server_address, const QuicServerId& server_id,
+    const QuicConfig& config, const ParsedQuicVersionVector& supported_versions,
+    QuicEventLoop* event_loop, std::unique_ptr<ProofVerifier> proof_verifier)
+    : MockableQuicClient(server_address, server_id, config, supported_versions,
+                         event_loop, std::move(proof_verifier), nullptr) {}
 
 MockableQuicClient::MockableQuicClient(
-    QuicSocketAddress server_address,
-    const QuicServerId& server_id,
-    const QuicConfig& config,
-    const ParsedQuicVersionVector& supported_versions,
-    QuicEpollServer* epoll_server,
-    std::unique_ptr<ProofVerifier> proof_verifier,
+    QuicSocketAddress server_address, const QuicServerId& server_id,
+    const QuicConfig& config, const ParsedQuicVersionVector& supported_versions,
+    QuicEventLoop* event_loop, std::unique_ptr<ProofVerifier> proof_verifier,
     std::unique_ptr<SessionCache> session_cache)
-    : QuicClient(
-          server_address,
-          server_id,
-          supported_versions,
-          config,
-          epoll_server,
-          std::make_unique<MockableQuicClientEpollNetworkHelper>(epoll_server,
-                                                                 this),
+    : QuicDefaultClient(
+          server_address, server_id, supported_versions, config, event_loop,
+          std::make_unique<MockableQuicClientDefaultNetworkHelper>(event_loop,
+                                                                   this),
           std::make_unique<RecordingProofVerifier>(std::move(proof_verifier)),
           std::move(session_cache)),
       override_server_connection_id_(EmptyQuicConnectionId()),
@@ -262,16 +228,16 @@ MockableQuicClient::~MockableQuicClient() {
   }
 }
 
-MockableQuicClientEpollNetworkHelper*
+MockableQuicClientDefaultNetworkHelper*
 MockableQuicClient::mockable_network_helper() {
-  return static_cast<MockableQuicClientEpollNetworkHelper*>(
-      epoll_network_helper());
+  return static_cast<MockableQuicClientDefaultNetworkHelper*>(
+      default_network_helper());
 }
 
-const MockableQuicClientEpollNetworkHelper*
+const MockableQuicClientDefaultNetworkHelper*
 MockableQuicClient::mockable_network_helper() const {
-  return static_cast<const MockableQuicClientEpollNetworkHelper*>(
-      epoll_network_helper());
+  return static_cast<const MockableQuicClientDefaultNetworkHelper*>(
+      default_network_helper());
 }
 
 QuicConnectionId MockableQuicClient::GenerateNewConnectionId() {
@@ -282,7 +248,7 @@ QuicConnectionId MockableQuicClient::GenerateNewConnectionId() {
     return QuicUtils::CreateRandomConnectionId(
         override_server_connection_id_length_);
   }
-  return QuicClient::GenerateNewConnectionId();
+  return QuicDefaultClient::GenerateNewConnectionId();
 }
 
 void MockableQuicClient::UseConnectionId(
@@ -304,7 +270,7 @@ QuicConnectionId MockableQuicClient::GetClientConnectionId() {
     return QuicUtils::CreateRandomConnectionId(
         override_client_connection_id_length_);
   }
-  return QuicClient::GetClientConnectionId();
+  return QuicDefaultClient::GetClientConnectionId();
 }
 
 void MockableQuicClient::UseClientConnectionId(
@@ -338,58 +304,59 @@ void MockableQuicClient::set_track_last_incoming_packet(bool track) {
 }
 
 QuicTestClient::QuicTestClient(
-    QuicSocketAddress server_address,
-    const std::string& server_hostname,
+    QuicSocketAddress server_address, const std::string& server_hostname,
     const ParsedQuicVersionVector& supported_versions)
-    : QuicTestClient(server_address,
-                     server_hostname,
-                     QuicConfig(),
+    : QuicTestClient(server_address, server_hostname, QuicConfig(),
                      supported_versions) {}
 
 QuicTestClient::QuicTestClient(
-    QuicSocketAddress server_address,
-    const std::string& server_hostname,
-    const QuicConfig& config,
-    const ParsedQuicVersionVector& supported_versions)
-    : client_(new MockableQuicClient(
+    QuicSocketAddress server_address, const std::string& server_hostname,
+    const QuicConfig& config, const ParsedQuicVersionVector& supported_versions)
+    : event_loop_(GetDefaultEventLoop()->Create(QuicDefaultClock::Get())),
+      client_(new MockableQuicClient(
           server_address,
-          QuicServerId(server_hostname, server_address.port(), false),
-          config,
-          supported_versions,
-          &epoll_server_)) {
+          QuicServerId(server_hostname, server_address.port(), false), config,
+          supported_versions, event_loop_.get())) {
   Initialize();
 }
 
 QuicTestClient::QuicTestClient(
-    QuicSocketAddress server_address,
-    const std::string& server_hostname,
-    const QuicConfig& config,
-    const ParsedQuicVersionVector& supported_versions,
+    QuicSocketAddress server_address, const std::string& server_hostname,
+    const QuicConfig& config, const ParsedQuicVersionVector& supported_versions,
     std::unique_ptr<ProofVerifier> proof_verifier)
-    : client_(new MockableQuicClient(
+    : event_loop_(GetDefaultEventLoop()->Create(QuicDefaultClock::Get())),
+      client_(new MockableQuicClient(
           server_address,
-          QuicServerId(server_hostname, server_address.port(), false),
-          config,
-          supported_versions,
-          &epoll_server_,
-          std::move(proof_verifier))) {
+          QuicServerId(server_hostname, server_address.port(), false), config,
+          supported_versions, event_loop_.get(), std::move(proof_verifier))) {
   Initialize();
 }
 
 QuicTestClient::QuicTestClient(
-    QuicSocketAddress server_address,
-    const std::string& server_hostname,
-    const QuicConfig& config,
-    const ParsedQuicVersionVector& supported_versions,
+    QuicSocketAddress server_address, const std::string& server_hostname,
+    const QuicConfig& config, const ParsedQuicVersionVector& supported_versions,
     std::unique_ptr<ProofVerifier> proof_verifier,
     std::unique_ptr<SessionCache> session_cache)
-    : client_(new MockableQuicClient(
+    : event_loop_(GetDefaultEventLoop()->Create(QuicDefaultClock::Get())),
+      client_(new MockableQuicClient(
           server_address,
-          QuicServerId(server_hostname, server_address.port(), false),
-          config,
-          supported_versions,
-          &epoll_server_,
-          std::move(proof_verifier),
+          QuicServerId(server_hostname, server_address.port(), false), config,
+          supported_versions, event_loop_.get(), std::move(proof_verifier),
+          std::move(session_cache))) {
+  Initialize();
+}
+
+QuicTestClient::QuicTestClient(
+    QuicSocketAddress server_address, const std::string& server_hostname,
+    const QuicConfig& config, const ParsedQuicVersionVector& supported_versions,
+    std::unique_ptr<ProofVerifier> proof_verifier,
+    std::unique_ptr<SessionCache> session_cache,
+    std::unique_ptr<QuicEventLoop> event_loop)
+    : event_loop_(std::move(event_loop)),
+      client_(new MockableQuicClient(
+          server_address,
+          QuicServerId(server_hostname, server_address.port(), false), config,
+          supported_versions, event_loop_.get(), std::move(proof_verifier),
           std::move(session_cache))) {
   Initialize();
 }
@@ -422,7 +389,7 @@ void QuicTestClient::SetUserAgentID(const std::string& user_agent_id) {
 }
 
 ssize_t QuicTestClient::SendRequest(const std::string& uri) {
-  spdy::SpdyHeaderBlock headers;
+  spdy::Http2HeaderBlock headers;
   if (!PopulateHeaderBlockFromUrl(uri, &headers)) {
     return 0;
   }
@@ -430,7 +397,7 @@ ssize_t QuicTestClient::SendRequest(const std::string& uri) {
 }
 
 ssize_t QuicTestClient::SendRequestAndRstTogether(const std::string& uri) {
-  spdy::SpdyHeaderBlock headers;
+  spdy::Http2HeaderBlock headers;
   if (!PopulateHeaderBlockFromUrl(uri, &headers)) {
     return 0;
   }
@@ -455,20 +422,18 @@ void QuicTestClient::SendRequestsAndWaitForResponses(
 }
 
 ssize_t QuicTestClient::GetOrCreateStreamAndSendRequest(
-    const spdy::SpdyHeaderBlock* headers,
-    absl::string_view body,
-    bool fin,
-    QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener) {
+    const spdy::Http2HeaderBlock* headers, absl::string_view body, bool fin,
+    quiche::QuicheReferenceCountedPointer<QuicAckListenerInterface>
+        ack_listener) {
   if (headers) {
     QuicClientPushPromiseIndex::TryHandle* handle;
     QuicAsyncStatus rv =
         client()->push_promise_index()->Try(*headers, this, &handle);
-    if (rv == QUIC_SUCCESS)
-      return 1;
+    if (rv == QUIC_SUCCESS) return 1;
     if (rv == QUIC_PENDING) {
       // May need to retry request if asynchronous rendezvous fails.
-      std::unique_ptr<spdy::SpdyHeaderBlock> new_headers(
-          new spdy::SpdyHeaderBlock(headers->Clone()));
+      std::unique_ptr<spdy::Http2HeaderBlock> new_headers(
+          new spdy::Http2HeaderBlock(headers->Clone()));
       push_promise_data_to_resend_ = std::make_unique<TestClientDataToResend>(
           std::move(new_headers), body, fin, this, std::move(ack_listener));
       return 1;
@@ -486,7 +451,7 @@ ssize_t QuicTestClient::GetOrCreateStreamAndSendRequest(
 
   ssize_t ret = 0;
   if (headers != nullptr) {
-    spdy::SpdyHeaderBlock spdy_headers(headers->Clone());
+    spdy::Http2HeaderBlock spdy_headers(headers->Clone());
     if (spdy_headers[":authority"].as_string().empty()) {
       spdy_headers[":authority"] = client_->server_id().host();
     }
@@ -499,20 +464,18 @@ ssize_t QuicTestClient::GetOrCreateStreamAndSendRequest(
   return ret;
 }
 
-ssize_t QuicTestClient::SendMessage(const spdy::SpdyHeaderBlock& headers,
+ssize_t QuicTestClient::SendMessage(const spdy::Http2HeaderBlock& headers,
                                     absl::string_view body) {
   return SendMessage(headers, body, /*fin=*/true);
 }
 
-ssize_t QuicTestClient::SendMessage(const spdy::SpdyHeaderBlock& headers,
-                                    absl::string_view body,
-                                    bool fin) {
+ssize_t QuicTestClient::SendMessage(const spdy::Http2HeaderBlock& headers,
+                                    absl::string_view body, bool fin) {
   return SendMessage(headers, body, fin, /*flush=*/true);
 }
 
-ssize_t QuicTestClient::SendMessage(const spdy::SpdyHeaderBlock& headers,
-                                    absl::string_view body,
-                                    bool fin,
+ssize_t QuicTestClient::SendMessage(const spdy::Http2HeaderBlock& headers,
+                                    absl::string_view body, bool fin,
                                     bool flush) {
   // Always force creation of a stream for SendMessage.
   latest_created_stream_ = nullptr;
@@ -530,36 +493,29 @@ ssize_t QuicTestClient::SendData(const std::string& data, bool last_data) {
 }
 
 ssize_t QuicTestClient::SendData(
-    const std::string& data,
-    bool last_data,
-    QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener) {
+    const std::string& data, bool last_data,
+    quiche::QuicheReferenceCountedPointer<QuicAckListenerInterface>
+        ack_listener) {
   return GetOrCreateStreamAndSendRequest(nullptr, absl::string_view(data),
                                          last_data, std::move(ack_listener));
 }
 
-bool QuicTestClient::response_complete() const {
-  return response_complete_;
-}
+bool QuicTestClient::response_complete() const { return response_complete_; }
 
 int64_t QuicTestClient::response_body_size() const {
   return response_body_size_;
 }
 
-bool QuicTestClient::buffer_body() const {
-  return buffer_body_;
-}
+bool QuicTestClient::buffer_body() const { return buffer_body_; }
 
 void QuicTestClient::set_buffer_body(bool buffer_body) {
   buffer_body_ = buffer_body;
 }
 
-const std::string& QuicTestClient::response_body() const {
-  return response_;
-}
+const std::string& QuicTestClient::response_body() const { return response_; }
 
 std::string QuicTestClient::SendCustomSynchronousRequest(
-    const spdy::SpdyHeaderBlock& headers,
-    const std::string& body) {
+    const spdy::Http2HeaderBlock& headers, const std::string& body) {
   // Clear connection state here and only track this synchronous request.
   ClearPerConnectionState();
   if (SendMessage(headers, body) == 0) {
@@ -574,7 +530,7 @@ std::string QuicTestClient::SendCustomSynchronousRequest(
 }
 
 std::string QuicTestClient::SendSynchronousRequest(const std::string& uri) {
-  spdy::SpdyHeaderBlock headers;
+  spdy::Http2HeaderBlock headers;
   if (!PopulateHeaderBlockFromUrl(uri, &headers)) {
     return "";
   }
@@ -640,9 +596,7 @@ const QuicTagValueMap& QuicTestClient::GetServerConfig() const {
   return handshake_msg->tag_value_map();
 }
 
-bool QuicTestClient::connected() const {
-  return client_->connected();
-}
+bool QuicTestClient::connected() const { return client_->connected(); }
 
 void QuicTestClient::Connect() {
   if (connected()) {
@@ -698,24 +652,15 @@ bool QuicTestClient::HaveActiveStream() {
 }
 
 bool QuicTestClient::WaitUntil(int timeout_ms, std::function<bool()> trigger) {
-  int64_t timeout_us = timeout_ms * kNumMicrosPerMilli;
-  int64_t old_timeout_us = epoll_server()->timeout_in_us_for_test();
-  if (timeout_us > 0) {
-    epoll_server()->set_timeout_in_us(timeout_us);
-  }
-  const QuicClock* clock =
-      QuicConnectionPeer::GetHelper(client()->session()->connection())
-          ->GetClock();
-  QuicTime end_waiting_time =
-      clock->Now() + QuicTime::Delta::FromMicroseconds(timeout_us);
-  while (HaveActiveStream() && !(trigger && trigger()) &&
-         (timeout_us < 0 || clock->Now() < end_waiting_time)) {
-    client_->WaitForEvents();
+  QuicTime::Delta timeout = QuicTime::Delta::FromMilliseconds(timeout_ms);
+  const QuicClock* clock = client()->session()->connection()->clock();
+  QuicTime end_waiting_time = clock->Now() + timeout;
+  while (connected() && !(trigger && trigger()) &&
+         (timeout_ms < 0 || clock->Now() < end_waiting_time)) {
+    event_loop_->RunEventLoopOnce(timeout);
+    client_->WaitForEventsPostprocessing();
   }
   ReadNextResponse();
-  if (timeout_us > 0) {
-    epoll_server()->set_timeout_in_us(old_timeout_us);
-  }
   if (trigger && !trigger()) {
     QUIC_VLOG(1) << "Client WaitUntil returning with trigger returning false.";
     return false;
@@ -736,7 +681,7 @@ bool QuicTestClient::response_headers_complete() const {
   return response_headers_complete_;
 }
 
-const spdy::SpdyHeaderBlock* QuicTestClient::response_headers() const {
+const spdy::Http2HeaderBlock* QuicTestClient::response_headers() const {
   for (std::pair<QuicStreamId, QuicSpdyClientStream*> stream : open_streams_) {
     if (stream.second->headers_decompressed()) {
       response_headers_ = stream.second->response_headers().Clone();
@@ -746,7 +691,7 @@ const spdy::SpdyHeaderBlock* QuicTestClient::response_headers() const {
   return &response_headers_;
 }
 
-const spdy::SpdyHeaderBlock* QuicTestClient::preliminary_headers() const {
+const spdy::Http2HeaderBlock* QuicTestClient::preliminary_headers() const {
   for (std::pair<QuicStreamId, QuicSpdyClientStream*> stream : open_streams_) {
     size_t bytes_read =
         stream.second->stream_bytes_read() + stream.second->header_bytes_read();
@@ -758,13 +703,11 @@ const spdy::SpdyHeaderBlock* QuicTestClient::preliminary_headers() const {
   return &preliminary_headers_;
 }
 
-const spdy::SpdyHeaderBlock& QuicTestClient::response_trailers() const {
+const spdy::Http2HeaderBlock& QuicTestClient::response_trailers() const {
   return response_trailers_;
 }
 
-int64_t QuicTestClient::response_size() const {
-  return bytes_read();
-}
+int64_t QuicTestClient::response_size() const { return bytes_read(); }
 
 size_t QuicTestClient::bytes_read() const {
   for (std::pair<QuicStreamId, QuicSpdyClientStream*> stream : open_streams_) {
@@ -825,9 +768,9 @@ void QuicTestClient::OnClose(QuicSpdyStream* stream) {
 }
 
 bool QuicTestClient::CheckVary(
-    const spdy::SpdyHeaderBlock& /*client_request*/,
-    const spdy::SpdyHeaderBlock& /*promise_request*/,
-    const spdy::SpdyHeaderBlock& /*promise_response*/) {
+    const spdy::Http2HeaderBlock& /*client_request*/,
+    const spdy::Http2HeaderBlock& /*promise_request*/,
+    const spdy::Http2HeaderBlock& /*promise_response*/) {
   return true;
 }
 
@@ -873,8 +816,7 @@ bool QuicTestClient::MigrateSocket(const QuicIpAddress& new_host) {
 }
 
 bool QuicTestClient::MigrateSocketWithSpecifiedPort(
-    const QuicIpAddress& new_host,
-    int port) {
+    const QuicIpAddress& new_host, int port) {
   client_->set_local_port(port);
   return client_->MigrateSocket(new_host);
 }
@@ -898,12 +840,11 @@ void QuicTestClient::WaitForWriteToFlush() {
 }
 
 QuicTestClient::TestClientDataToResend::TestClientDataToResend(
-    std::unique_ptr<spdy::SpdyHeaderBlock> headers,
-    absl::string_view body,
-    bool fin,
-    QuicTestClient* test_client,
-    QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener)
-    : QuicClient::QuicDataToResend(std::move(headers), body, fin),
+    std::unique_ptr<spdy::Http2HeaderBlock> headers, absl::string_view body,
+    bool fin, QuicTestClient* test_client,
+    quiche::QuicheReferenceCountedPointer<QuicAckListenerInterface>
+        ack_listener)
+    : QuicDefaultClient::QuicDataToResend(std::move(headers), body, fin),
       test_client_(test_client),
       ack_listener_(std::move(ack_listener)) {}
 
@@ -928,16 +869,13 @@ QuicTestClient::PerStreamState::PerStreamState(const PerStreamState& other)
       response_body_size(other.response_body_size) {}
 
 QuicTestClient::PerStreamState::PerStreamState(
-    QuicRstStreamErrorCode stream_error,
-    bool response_complete,
+    QuicRstStreamErrorCode stream_error, bool response_complete,
     bool response_headers_complete,
-    const spdy::SpdyHeaderBlock& response_headers,
-    const spdy::SpdyHeaderBlock& preliminary_headers,
+    const spdy::Http2HeaderBlock& response_headers,
+    const spdy::Http2HeaderBlock& preliminary_headers,
     const std::string& response,
-    const spdy::SpdyHeaderBlock& response_trailers,
-    uint64_t bytes_read,
-    uint64_t bytes_written,
-    int64_t response_body_size)
+    const spdy::Http2HeaderBlock& response_trailers, uint64_t bytes_read,
+    uint64_t bytes_written, int64_t response_body_size)
     : stream_error(stream_error),
       response_complete(response_complete),
       response_headers_complete(response_headers_complete),
@@ -952,8 +890,7 @@ QuicTestClient::PerStreamState::PerStreamState(
 QuicTestClient::PerStreamState::~PerStreamState() = default;
 
 bool QuicTestClient::PopulateHeaderBlockFromUrl(
-    const std::string& uri,
-    spdy::SpdyHeaderBlock* headers) {
+    const std::string& uri, spdy::Http2HeaderBlock* headers) {
   std::string url;
   if (absl::StartsWith(uri, "https://") || absl::StartsWith(uri, "http://")) {
     url = uri;

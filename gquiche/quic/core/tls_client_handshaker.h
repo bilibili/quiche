@@ -29,8 +29,7 @@ class QUIC_EXPORT_PRIVATE TlsClientHandshaker
       public TlsClientConnection::Delegate {
  public:
   // |crypto_config| must outlive TlsClientHandshaker.
-  TlsClientHandshaker(const QuicServerId& server_id,
-                      QuicCryptoStream* stream,
+  TlsClientHandshaker(const QuicServerId& server_id, QuicCryptoStream* stream,
                       QuicSession* session,
                       std::unique_ptr<ProofVerifyContext> verify_context,
                       QuicCryptoClientConfig* crypto_config,
@@ -55,13 +54,16 @@ class QUIC_EXPORT_PRIVATE TlsClientHandshaker
 
   // From QuicCryptoClientStream::HandshakerInterface and TlsHandshaker
   bool encryption_established() const override;
+  bool IsCryptoFrameExpectedForEncryptionLevel(
+      EncryptionLevel level) const override;
+  EncryptionLevel GetEncryptionLevelToSendCryptoDataOfSpace(
+      PacketNumberSpace space) const override;
   bool one_rtt_keys_available() const override;
   const QuicCryptoNegotiatedParameters& crypto_negotiated_params()
       const override;
   CryptoMessageParser* crypto_message_parser() override;
   HandshakeState GetHandshakeState() const override;
   size_t BufferSizeLimitForLevel(EncryptionLevel level) const override;
-  bool KeyUpdateSupportedLocally() const override;
   std::unique_ptr<QuicDecrypter> AdvanceKeysAndCreateCurrentOneRttDecrypter()
       override;
   std::unique_ptr<QuicEncrypter> CreateCurrentOneRttEncrypter() override;
@@ -71,9 +73,8 @@ class QUIC_EXPORT_PRIVATE TlsClientHandshaker
                           ConnectionCloseSource source) override;
   void OnHandshakeDoneReceived() override;
   void OnNewTokenReceived(absl::string_view token) override;
-  void SetWriteSecret(EncryptionLevel level,
-                      const SSL_CIPHER* cipher,
-                      const std::vector<uint8_t>& write_secret) override;
+  void SetWriteSecret(EncryptionLevel level, const SSL_CIPHER* cipher,
+                      absl::Span<const uint8_t> write_secret) override;
 
   // Override to drop initial keys if trying to write ENCRYPTION_HANDSHAKE data.
   void WriteMessage(EncryptionLevel level, absl::string_view data) override;
@@ -98,10 +99,8 @@ class QUIC_EXPORT_PRIVATE TlsClientHandshaker
   void ProcessPostHandshakeMessage() override;
   bool ShouldCloseConnectionOnUnexpectedError(int ssl_error) override;
   QuicAsyncStatus VerifyCertChain(
-      const std::vector<std::string>& certs,
-      std::string* error_details,
-      std::unique_ptr<ProofVerifyDetails>* details,
-      uint8_t* out_alert,
+      const std::vector<std::string>& certs, std::string* error_details,
+      std::unique_ptr<ProofVerifyDetails>* details, uint8_t* out_alert,
       std::unique_ptr<ProofVerifierCallback> callback) override;
   void OnProofVerifyDetailsAvailable(
       const ProofVerifyDetails& verify_details) override;
@@ -150,7 +149,7 @@ class QUIC_EXPORT_PRIVATE TlsClientHandshaker
   HandshakeState state_ = HANDSHAKE_START;
   bool encryption_established_ = false;
   bool initial_keys_dropped_ = false;
-  QuicReferenceCountedPointer<QuicCryptoNegotiatedParameters>
+  quiche::QuicheReferenceCountedPointer<QuicCryptoNegotiatedParameters>
       crypto_negotiated_params_;
 
   bool allow_empty_alpn_for_tests_ = false;
@@ -160,8 +159,6 @@ class QUIC_EXPORT_PRIVATE TlsClientHandshaker
   // Contains the state for performing a resumption, if one is attempted. This
   // will always be non-null if a 0-RTT resumption is attempted.
   std::unique_ptr<QuicResumptionState> cached_state_;
-
-  QuicCryptoClientConfig* crypto_config_;  // Not owned.
 
   TlsClientConnection tls_connection_;
 

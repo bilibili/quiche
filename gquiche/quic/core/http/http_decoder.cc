@@ -51,8 +51,7 @@ HttpDecoder::HttpDecoder(Visitor* visitor, Options options)
 HttpDecoder::~HttpDecoder() {}
 
 // static
-bool HttpDecoder::DecodeSettings(const char* data,
-                                 QuicByteCount len,
+bool HttpDecoder::DecodeSettings(const char* data, QuicByteCount len,
                                  SettingsFrame* frame) {
   QuicDataReader reader(data, len);
   uint64_t frame_type;
@@ -529,8 +528,8 @@ bool HttpDecoder::ParseEntirePayload(QuicDataReader* reader) {
       return visitor_->OnGoAwayFrame(frame);
     }
     case static_cast<uint64_t>(HttpFrameType::MAX_PUSH_ID): {
-      MaxPushIdFrame frame;
-      if (!reader->ReadVarInt62(&frame.push_id)) {
+      uint64_t unused;
+      if (!reader->ReadVarInt62(&unused)) {
         RaiseError(QUIC_HTTP_FRAME_ERROR,
                    "Unable to read MAX_PUSH_ID push_id.");
         return false;
@@ -540,7 +539,7 @@ bool HttpDecoder::ParseEntirePayload(QuicDataReader* reader) {
                    "Superfluous data in MAX_PUSH_ID frame.");
         return false;
       }
-      return visitor_->OnMaxPushIdFrame(frame);
+      return visitor_->OnMaxPushIdFrame();
     }
     case static_cast<uint64_t>(HttpFrameType::PRIORITY_UPDATE_REQUEST_STREAM): {
       PriorityUpdateFrame frame;
@@ -616,7 +615,7 @@ bool HttpDecoder::ParseSettingsFrame(QuicDataReader* reader,
 }
 
 bool HttpDecoder::ParsePriorityUpdateFrame(QuicDataReader* reader,
-                                              PriorityUpdateFrame* frame) {
+                                           PriorityUpdateFrame* frame) {
   frame->prioritized_element_type = REQUEST_STREAM;
 
   if (!reader->ReadVarInt62(&frame->prioritized_element_id)) {
@@ -658,9 +657,9 @@ QuicByteCount HttpDecoder::MaxFrameLength(uint64_t frame_type) {
     case static_cast<uint64_t>(HttpFrameType::SETTINGS):
       return kPayloadLengthLimit;
     case static_cast<uint64_t>(HttpFrameType::GOAWAY):
-      return VARIABLE_LENGTH_INTEGER_LENGTH_8;
+      return quiche::VARIABLE_LENGTH_INTEGER_LENGTH_8;
     case static_cast<uint64_t>(HttpFrameType::MAX_PUSH_ID):
-      return VARIABLE_LENGTH_INTEGER_LENGTH_8;
+      return quiche::VARIABLE_LENGTH_INTEGER_LENGTH_8;
     case static_cast<uint64_t>(HttpFrameType::PRIORITY_UPDATE_REQUEST_STREAM):
       return kPayloadLengthLimit;
     case static_cast<uint64_t>(HttpFrameType::ACCEPT_CH):

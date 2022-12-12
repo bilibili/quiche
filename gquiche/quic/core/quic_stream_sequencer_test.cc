@@ -33,14 +33,10 @@ class MockStream : public QuicStreamSequencer::StreamInterface {
  public:
   MOCK_METHOD(void, OnFinRead, (), (override));
   MOCK_METHOD(void, OnDataAvailable, (), (override));
-  MOCK_METHOD(void,
-              OnUnrecoverableError,
-              (QuicErrorCode error, const std::string& details),
-              (override));
-  MOCK_METHOD(void,
-              OnUnrecoverableError,
-              (QuicErrorCode error,
-               QuicIetfTransportErrorCodes ietf_error,
+  MOCK_METHOD(void, OnUnrecoverableError,
+              (QuicErrorCode error, const std::string& details), (override));
+  MOCK_METHOD(void, OnUnrecoverableError,
+              (QuicErrorCode error, QuicIetfTransportErrorCodes ietf_error,
                const std::string& details),
               (override));
   MOCK_METHOD(void, ResetWithError, (QuicResetStreamError error), (override));
@@ -83,8 +79,7 @@ class QuicStreamSequencerTest : public QuicTest {
     return VerifyReadableRegions(*sequencer_, expected);
   }
 
-  bool VerifyIovecs(iovec* iovecs,
-                    size_t num_iovecs,
+  bool VerifyIovecs(iovec* iovecs, size_t num_iovecs,
                     const std::vector<std::string>& expected) {
     return VerifyIovecs(*sequencer_, iovecs, num_iovecs, expected);
   }
@@ -110,8 +105,7 @@ class QuicStreamSequencerTest : public QuicTest {
            VerifyIovecs(sequencer, iovecs, num_iovecs, expected);
   }
 
-  bool VerifyIovecs(const QuicStreamSequencer& /*sequencer*/,
-                    iovec* iovecs,
+  bool VerifyIovecs(const QuicStreamSequencer& /*sequencer*/, iovec* iovecs,
                     size_t num_iovecs,
                     const std::vector<std::string>& expected) {
     int start_position = 0;
@@ -229,8 +223,10 @@ TEST_F(QuicStreamSequencerTest, BlockedThenFullFrameConsumed) {
     ConsumeData(3);
   }));
   EXPECT_FALSE(sequencer_->IsClosed());
+  EXPECT_FALSE(sequencer_->IsAllDataAvailable());
   OnFinFrame(3, "def");
   EXPECT_TRUE(sequencer_->IsClosed());
+  EXPECT_TRUE(sequencer_->IsAllDataAvailable());
 }
 
 TEST_F(QuicStreamSequencerTest, BlockedThenFullFrameAndFinConsumed) {
@@ -245,6 +241,7 @@ TEST_F(QuicStreamSequencerTest, BlockedThenFullFrameAndFinConsumed) {
     ConsumeData(3);
   }));
   EXPECT_FALSE(sequencer_->IsClosed());
+  EXPECT_TRUE(sequencer_->IsAllDataAvailable());
   sequencer_->SetUnblocked();
   EXPECT_TRUE(sequencer_->IsClosed());
   EXPECT_EQ(0u, NumBufferedBytes());
@@ -266,6 +263,7 @@ TEST_F(QuicStreamSequencerTest, EmptyFinFrame) {
   OnFinFrame(0, "");
   EXPECT_EQ(0u, NumBufferedBytes());
   EXPECT_EQ(0u, sequencer_->NumBytesConsumed());
+  EXPECT_TRUE(sequencer_->IsAllDataAvailable());
 }
 
 TEST_F(QuicStreamSequencerTest, PartialFrameConsumed) {
@@ -566,11 +564,14 @@ TEST_F(QuicStreamSequencerTest, MarkConsumedError) {
 
   // Now, attempt to mark consumed more data than was readable and expect the
   // stream to be closed.
-  EXPECT_CALL(stream_, ResetWithError(QuicResetStreamError::FromInternal(
-                           QUIC_ERROR_PROCESSING_STREAM)));
-  EXPECT_QUIC_BUG(sequencer_->MarkConsumed(4),
-                  "Invalid argument to MarkConsumed."
-                  " expect to consume: 4, but not enough bytes available.");
+  EXPECT_QUIC_BUG(
+      {
+        EXPECT_CALL(stream_, ResetWithError(QuicResetStreamError::FromInternal(
+                                 QUIC_ERROR_PROCESSING_STREAM)));
+        sequencer_->MarkConsumed(4);
+      },
+      "Invalid argument to MarkConsumed."
+      " expect to consume: 4, but not enough bytes available.");
 }
 
 TEST_F(QuicStreamSequencerTest, MarkConsumedWithMissingPacket) {

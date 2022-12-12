@@ -19,14 +19,12 @@ class RttStats;
 
 // Factory for send side congestion control algorithm.
 SendAlgorithmInterface* SendAlgorithmInterface::Create(
-    const QuicClock* clock,
-    const RttStats* rtt_stats,
+    const QuicClock* clock, const RttStats* rtt_stats,
     const QuicUnackedPacketMap* unacked_packets,
-    CongestionControlType congestion_control_type,
-    QuicRandom* random,
-    QuicConnectionStats* stats,
-    QuicPacketCount initial_congestion_window,
-    SendAlgorithmInterface* old_send_algorithm) {
+    CongestionControlType congestion_control_type, QuicRandom* random,
+    QuicConnectionStats* stats, QuicPacketCount initial_congestion_window,
+    SendAlgorithmInterface* old_send_algorithm,
+    float extra_loss_threshold) {
   QuicPacketCount max_congestion_window =
       GetQuicFlag(FLAGS_quic_max_congestion_window);
   switch (congestion_control_type) {
@@ -42,7 +40,7 @@ SendAlgorithmInterface* SendAlgorithmInterface::Create(
           old_send_algorithm &&
                   old_send_algorithm->GetCongestionControlType() == kBBR
               ? static_cast<BbrSender*>(old_send_algorithm)
-              : nullptr);
+              : nullptr, extra_loss_threshold);
     case kPCC:
       // PCC is currently not supported, fall back to CUBIC instead.
       ABSL_FALLTHROUGH_INTENDED;

@@ -23,29 +23,23 @@ class MockPacketProcessorStats : public QbonePacketProcessor::StatsInterface {
  public:
   MockPacketProcessorStats() {}
 
-  MOCK_METHOD(void,
-              OnPacketForwarded,
-              (QbonePacketProcessor::Direction),
+  MOCK_METHOD(void, OnPacketForwarded, (QbonePacketProcessor::Direction),
               (override));
-  MOCK_METHOD(void,
-              OnPacketDroppedSilently,
-              (QbonePacketProcessor::Direction),
+  MOCK_METHOD(void, OnPacketDroppedSilently, (QbonePacketProcessor::Direction),
               (override));
-  MOCK_METHOD(void,
-              OnPacketDroppedWithIcmp,
-              (QbonePacketProcessor::Direction),
+  MOCK_METHOD(void, OnPacketDroppedWithIcmp, (QbonePacketProcessor::Direction),
               (override));
-  MOCK_METHOD(void,
-              OnPacketDroppedWithTcpReset,
-              (QbonePacketProcessor::Direction),
-              (override));
-  MOCK_METHOD(void,
-              OnPacketDeferred,
-              (QbonePacketProcessor::Direction),
+  MOCK_METHOD(void, OnPacketDroppedWithTcpReset,
+              (QbonePacketProcessor::Direction), (override));
+  MOCK_METHOD(void, OnPacketDeferred, (QbonePacketProcessor::Direction),
               (override));
 };
 
 std::string PrependIPv6HeaderForTest(const std::string& body, int hops);
+
+// Returns true if the hop limit was decremented. Returns false if the packet is
+// too short, not IPv6, or already has a hop limit of zero.
+bool DecrementIPv6HopLimit(std::string& packet);
 
 }  // namespace quic
 

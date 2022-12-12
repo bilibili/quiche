@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef QUICHE_QUIC_PLATFORM_IMPL_BATCH_WRITER_QUIC_BATCH_WRITER_BUFFER_H_
-#define QUICHE_QUIC_PLATFORM_IMPL_BATCH_WRITER_QUIC_BATCH_WRITER_BUFFER_H_
+#ifndef QUICHE_QUIC_CORE_BATCH_WRITER_QUIC_BATCH_WRITER_BUFFER_H_
+#define QUICHE_QUIC_CORE_BATCH_WRITER_QUIC_BATCH_WRITER_BUFFER_H_
 
 #include "absl/base/optimization.h"
 #include "gquiche/quic/core/quic_linux_socket_utils.h"
@@ -40,8 +40,7 @@ class QUIC_EXPORT_PRIVATE QuicBatchWriterBuffer {
     bool buffer_copied;
   };
 
-  PushResult PushBufferedWrite(const char* buffer,
-                               size_t buf_len,
+  PushResult PushBufferedWrite(const char* buffer, size_t buf_len,
                                const QuicIpAddress& self_address,
                                const QuicSocketAddress& peer_address,
                                const PerPacketOptions* options,
@@ -92,4 +91,4 @@ class QUIC_EXPORT_PRIVATE QuicBatchWriterBuffer {
 
 }  // namespace quic
 
-#endif  // QUICHE_QUIC_PLATFORM_IMPL_BATCH_WRITER_QUIC_BATCH_WRITER_BUFFER_H_
+#endif  // QUICHE_QUIC_CORE_BATCH_WRITER_QUIC_BATCH_WRITER_BUFFER_H_

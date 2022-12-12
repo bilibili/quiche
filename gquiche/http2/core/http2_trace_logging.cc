@@ -6,6 +6,7 @@
 #include "absl/strings/string_view.h"
 #include "gquiche/common/platform/api/quiche_bug_tracker.h"
 #include "gquiche/common/platform/api/quiche_logging.h"
+#include "gquiche/spdy/core/http2_header_block.h"
 #include "gquiche/spdy/core/spdy_protocol.h"
 
 // Convenience macros for printing function arguments in log lines in the
@@ -58,12 +59,12 @@ auto LogContainer(const T& container, ItemLogger item_logger)
 
 namespace http2 {
 
+using spdy::Http2HeaderBlock;
 using spdy::SettingsMap;
 using spdy::SpdyAltSvcIR;
 using spdy::SpdyContinuationIR;
 using spdy::SpdyDataIR;
 using spdy::SpdyGoAwayIR;
-using spdy::SpdyHeaderBlock;
 using spdy::SpdyHeadersIR;
 using spdy::SpdyPingIR;
 using spdy::SpdyPriorityIR;
@@ -76,10 +77,10 @@ using spdy::SpdyWindowUpdateIR;
 
 namespace {
 
-// Defines how elements of SpdyHeaderBlocks are logged.
+// Defines how elements of Http2HeaderBlocks are logged.
 struct LogHeaderBlockEntry {
   void Log(std::ostream& out,
-           const SpdyHeaderBlock::value_type& entry) const {  // NOLINT
+           const Http2HeaderBlock::value_type& entry) const {  // NOLINT
     out << "\"" << entry.first << "\": \"" << entry.second << "\"";
   }
 };
@@ -147,7 +148,7 @@ void Http2TraceLogger::OnCommonHeader(SpdyStreamId stream_id, size_t length,
 }
 
 void Http2TraceLogger::OnDataFrameHeader(SpdyStreamId stream_id, size_t length,
-                                        bool fin) {
+                                         bool fin) {
   HTTP2_TRACE_LOG(perspective_, is_enabled_)
       << "OnDataFrameHeader:" << FORMAT_ARG(connection_id_)
       << FORMAT_ARG(stream_id) << FORMAT_ARG(length) << FORMAT_ARG(fin);
@@ -155,7 +156,7 @@ void Http2TraceLogger::OnDataFrameHeader(SpdyStreamId stream_id, size_t length,
 }
 
 void Http2TraceLogger::OnStreamFrameData(SpdyStreamId stream_id,
-                                        const char* data, size_t len) {
+                                         const char* data, size_t len) {
   HTTP2_TRACE_LOG(perspective_, is_enabled_)
       << "OnStreamFrameData:" << FORMAT_ARG(connection_id_)
       << FORMAT_ARG(stream_id) << FORMAT_ARG(len);
@@ -189,9 +190,13 @@ spdy::SpdyHeadersHandlerInterface* Http2TraceLogger::OnHeaderFrameStart(
       << FORMAT_ARG(stream_id);
   spdy::SpdyHeadersHandlerInterface* result =
       wrapped_->OnHeaderFrameStart(stream_id);
-  recording_headers_handler_ =
-      absl::make_unique<spdy::RecordingHeadersHandler>(result);
-  result = recording_headers_handler_.get();
+  if (is_enabled_()) {
+    recording_headers_handler_ =
+        absl::make_unique<spdy::RecordingHeadersHandler>(result);
+    result = recording_headers_handler_.get();
+  } else {
+    recording_headers_handler_ = nullptr;
+  }
   return result;
 }
 
@@ -205,7 +210,7 @@ void Http2TraceLogger::OnHeaderFrameEnd(SpdyStreamId stream_id) {
 }
 
 void Http2TraceLogger::OnRstStream(SpdyStreamId stream_id,
-                                  SpdyErrorCode error_code) {
+                                   SpdyErrorCode error_code) {
   HTTP2_TRACE_LOG(perspective_, is_enabled_)
       << "OnRstStream:" << FORMAT_ARG(connection_id_) << FORMAT_ARG(stream_id)
       << " error_code=" << spdy::ErrorCodeToString(error_code);
@@ -241,7 +246,7 @@ void Http2TraceLogger::OnPing(SpdyPingId unique_id, bool is_ack) {
 }
 
 void Http2TraceLogger::OnGoAway(SpdyStreamId last_accepted_stream_id,
-                               SpdyErrorCode error_code) {
+                                SpdyErrorCode error_code) {
   HTTP2_TRACE_LOG(perspective_, is_enabled_)
       << "OnGoAway:" << FORMAT_ARG(connection_id_)
       << FORMAT_ARG(last_accepted_stream_id)
@@ -253,20 +258,21 @@ bool Http2TraceLogger::OnGoAwayFrameData(const char* goaway_data, size_t len) {
   return wrapped_->OnGoAwayFrameData(goaway_data, len);
 }
 
-void Http2TraceLogger::OnHeaders(SpdyStreamId stream_id, bool has_priority,
-                                int weight, SpdyStreamId parent_stream_id,
-                                bool exclusive, bool fin, bool end) {
+void Http2TraceLogger::OnHeaders(SpdyStreamId stream_id, size_t payload_length,
+                                 bool has_priority, int weight,
+                                 SpdyStreamId parent_stream_id, bool exclusive,
+                                 bool fin, bool end) {
   HTTP2_TRACE_LOG(perspective_, is_enabled_)
       << "OnHeaders:" << FORMAT_ARG(connection_id_) << FORMAT_ARG(stream_id)
-      << FORMAT_ARG(has_priority) << FORMAT_INT_ARG(weight)
-      << FORMAT_ARG(parent_stream_id) << FORMAT_ARG(exclusive)
-      << FORMAT_ARG(fin) << FORMAT_ARG(end);
-  wrapped_->OnHeaders(stream_id, has_priority, weight, parent_stream_id,
-                      exclusive, fin, end);
+      << FORMAT_ARG(payload_length) << FORMAT_ARG(has_priority)
+      << FORMAT_INT_ARG(weight) << FORMAT_ARG(parent_stream_id)
+      << FORMAT_ARG(exclusive) << FORMAT_ARG(fin) << FORMAT_ARG(end);
+  wrapped_->OnHeaders(stream_id, payload_length, has_priority, weight,
+                      parent_stream_id, exclusive, fin, end);
 }
 
 void Http2TraceLogger::OnWindowUpdate(SpdyStreamId stream_id,
-                                     int delta_window_size) {
+                                      int delta_window_size) {
   HTTP2_TRACE_LOG(perspective_, is_enabled_)
       << "OnWindowUpdate:" << FORMAT_ARG(connection_id_)
       << FORMAT_ARG(stream_id) << FORMAT_ARG(delta_window_size);
@@ -274,7 +280,8 @@ void Http2TraceLogger::OnWindowUpdate(SpdyStreamId stream_id,
 }
 
 void Http2TraceLogger::OnPushPromise(SpdyStreamId original_stream_id,
-                                    SpdyStreamId promised_stream_id, bool end) {
+                                     SpdyStreamId promised_stream_id,
+                                     bool end) {
   HTTP2_TRACE_LOG(perspective_, is_enabled_)
       << "OnPushPromise:" << FORMAT_ARG(connection_id_)
       << FORMAT_ARG(original_stream_id) << FORMAT_ARG(promised_stream_id)
@@ -282,11 +289,12 @@ void Http2TraceLogger::OnPushPromise(SpdyStreamId original_stream_id,
   wrapped_->OnPushPromise(original_stream_id, promised_stream_id, end);
 }
 
-void Http2TraceLogger::OnContinuation(SpdyStreamId stream_id, bool end) {
+void Http2TraceLogger::OnContinuation(SpdyStreamId stream_id,
+                                      size_t payload_length, bool end) {
   HTTP2_TRACE_LOG(perspective_, is_enabled_)
       << "OnContinuation:" << FORMAT_ARG(connection_id_)
-      << FORMAT_ARG(stream_id) << FORMAT_ARG(end);
-  wrapped_->OnContinuation(stream_id, end);
+      << FORMAT_ARG(stream_id) << FORMAT_ARG(payload_length) << FORMAT_ARG(end);
+  wrapped_->OnContinuation(stream_id, payload_length, end);
 }
 
 void Http2TraceLogger::OnAltSvc(
@@ -300,8 +308,8 @@ void Http2TraceLogger::OnAltSvc(
 }
 
 void Http2TraceLogger::OnPriority(SpdyStreamId stream_id,
-                                 SpdyStreamId parent_stream_id, int weight,
-                                 bool exclusive) {
+                                  SpdyStreamId parent_stream_id, int weight,
+                                  bool exclusive) {
   HTTP2_TRACE_LOG(perspective_, is_enabled_)
       << "OnPriority:" << FORMAT_ARG(connection_id_) << FORMAT_ARG(stream_id)
       << FORMAT_ARG(parent_stream_id) << FORMAT_INT_ARG(weight)
@@ -319,16 +327,35 @@ void Http2TraceLogger::OnPriorityUpdate(
 }
 
 bool Http2TraceLogger::OnUnknownFrame(SpdyStreamId stream_id,
-                                     uint8_t frame_type) {
+                                      uint8_t frame_type) {
   HTTP2_TRACE_LOG(perspective_, is_enabled_)
       << "OnUnknownFrame:" << FORMAT_ARG(connection_id_)
       << FORMAT_ARG(stream_id) << FORMAT_INT_ARG(frame_type);
   return wrapped_->OnUnknownFrame(stream_id, frame_type);
 }
 
+void Http2TraceLogger::OnUnknownFrameStart(spdy::SpdyStreamId stream_id,
+                                           size_t length, uint8_t type,
+                                           uint8_t flags) {
+  HTTP2_TRACE_LOG(perspective_, is_enabled_)
+      << "OnUnknownFrameStart:" << FORMAT_ARG(connection_id_)
+      << FORMAT_ARG(stream_id) << FORMAT_ARG(length) << FORMAT_INT_ARG(type)
+      << FORMAT_INT_ARG(flags);
+  wrapped_->OnUnknownFrameStart(stream_id, length, type, flags);
+}
+
+void Http2TraceLogger::OnUnknownFramePayload(spdy::SpdyStreamId stream_id,
+                                             absl::string_view payload) {
+  HTTP2_TRACE_LOG(perspective_, is_enabled_)
+      << "OnUnknownFramePayload:" << FORMAT_ARG(connection_id_)
+      << FORMAT_ARG(stream_id) << " length=" << payload.size();
+  wrapped_->OnUnknownFramePayload(stream_id, payload);
+}
+
 void Http2TraceLogger::LogReceivedHeaders() const {
   if (recording_headers_handler_ == nullptr) {
-    QUICHE_BUG(bug_2794_1) << "Cannot log headers before creating handler.";
+    // Trace logging was not enabled when the start of the header block was
+    // received.
     return;
   }
   HTTP2_TRACE_LOG(perspective_, is_enabled_)

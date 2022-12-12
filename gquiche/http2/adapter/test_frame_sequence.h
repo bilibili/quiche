@@ -8,13 +8,14 @@
 
 #include "gquiche/http2/adapter/http2_protocol.h"
 #include "gquiche/common/platform/api/quiche_export.h"
+#include "gquiche/spdy/core/http2_header_block.h"
 #include "gquiche/spdy/core/spdy_protocol.h"
 
 namespace http2 {
 namespace adapter {
 namespace test {
 
-std::vector<const Header> QUICHE_NO_EXPORT ToHeaders(
+std::vector<Header> QUICHE_NO_EXPORT ToHeaders(
     absl::Span<const std::pair<absl::string_view, absl::string_view>> headers);
 
 class QUICHE_NO_EXPORT TestFrameSequence {
@@ -25,8 +26,7 @@ class QUICHE_NO_EXPORT TestFrameSequence {
       absl::Span<const Http2Setting> settings = {});
   TestFrameSequence& ServerPreface(
       absl::Span<const Http2Setting> settings = {});
-  TestFrameSequence& Data(Http2StreamId stream_id,
-                          absl::string_view payload,
+  TestFrameSequence& Data(Http2StreamId stream_id, absl::string_view payload,
                           bool fin = false,
                           absl::optional<int> padding_length = absl::nullopt);
   TestFrameSequence& RstStream(Http2StreamId stream_id, Http2ErrorCode error);
@@ -52,16 +52,13 @@ class QUICHE_NO_EXPORT TestFrameSequence {
                              bool add_continuation = false);
   TestFrameSequence& WindowUpdate(Http2StreamId stream_id, int32_t delta);
   TestFrameSequence& Priority(Http2StreamId stream_id,
-                              Http2StreamId parent_stream_id,
-                              int weight,
+                              Http2StreamId parent_stream_id, int weight,
                               bool exclusive);
   TestFrameSequence& Metadata(Http2StreamId stream_id,
                               absl::string_view payload,
                               bool multiple_frames = false);
 
   std::string Serialize();
-
-  static std::string MetadataBlockForPayload(absl::string_view);
 
  private:
   std::string preface_;

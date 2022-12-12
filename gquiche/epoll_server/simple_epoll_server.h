@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef QUICHE_EPOLL_SERVER_H_
-#define QUICHE_EPOLL_SERVER_H_
+#ifndef QUICHE_EPOLL_SERVER_SIMPLE_EPOLL_SERVER_H_
+#define QUICHE_EPOLL_SERVER_SIMPLE_EPOLL_SERVER_H_
 
 #include <fcntl.h>
 #include <stddef.h>
@@ -37,7 +37,6 @@
 
 #include <sys/epoll.h>
 
-#include "gquiche/epoll_server/platform/api/epoll_export.h"
 #include "gquiche/epoll_server/platform/api/epoll_logging.h"
 
 namespace epoll_server {
@@ -122,7 +121,7 @@ class EpollCallbackInterface {
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
-class EPOLL_EXPORT_PRIVATE SimpleEpollServer {
+class SimpleEpollServer {
  public:
   typedef EpollAlarmCallbackInterface AlarmCB;
   typedef EpollCallbackInterface CB;
@@ -1011,7 +1010,7 @@ class EpollAlarmCallbackInterface {
 // Any classes overriding these functions must either call the implementation
 // of the parent class, or is must otherwise make sure that the 'registered_'
 // boolean and the token, 'token_', are updated appropriately.
-class EPOLL_EXPORT_PRIVATE EpollAlarm : public EpollAlarmCallbackInterface {
+class EpollAlarm : public EpollAlarmCallbackInterface {
  public:
   EpollAlarm();
 
@@ -1049,4 +1048,4 @@ class EPOLL_EXPORT_PRIVATE EpollAlarm : public EpollAlarmCallbackInterface {
 
 }  // namespace epoll_server
 
-#endif  // QUICHE_EPOLL_SERVER_H_
+#endif  // QUICHE_EPOLL_SERVER_SIMPLE_EPOLL_SERVER_H_

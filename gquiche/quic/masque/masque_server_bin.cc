@@ -14,62 +14,54 @@
 #include "gquiche/quic/platform/api/quic_flags.h"
 #include "gquiche/quic/platform/api/quic_logging.h"
 #include "gquiche/quic/platform/api/quic_socket_address.h"
-#include "gquiche/quic/platform/api/quic_system_event_loop.h"
+#include "gquiche/common/platform/api/quiche_command_line_flags.h"
+#include "gquiche/common/platform/api/quiche_system_event_loop.h"
 
-DEFINE_QUIC_COMMAND_LINE_FLAG(int32_t,
-                              port,
-                              9661,
-                              "The port the MASQUE server will listen on.");
+DEFINE_QUICHE_COMMAND_LINE_FLAG(int32_t, port, 9661,
+                                "The port the MASQUE server will listen on.");
 
-DEFINE_QUIC_COMMAND_LINE_FLAG(
-    std::string,
-    cache_dir,
-    "",
+DEFINE_QUICHE_COMMAND_LINE_FLAG(
+    std::string, cache_dir, "",
     "Specifies the directory used during QuicHttpResponseCache "
     "construction to seed the cache. Cache directory can be "
     "generated using `wget -p --save-headers <url>`");
 
-DEFINE_QUIC_COMMAND_LINE_FLAG(
-    std::string,
-    server_authority,
-    "",
+DEFINE_QUICHE_COMMAND_LINE_FLAG(
+    std::string, server_authority, "",
     "Specifies the authority over which the server will accept MASQUE "
     "requests. Defaults to empty which allows all authorities.");
 
-DEFINE_QUIC_COMMAND_LINE_FLAG(std::string,
-                              masque_mode,
-                              "",
-                              "Allows setting MASQUE mode, valid values are "
-                              "open and legacy. Defaults to open.");
+DEFINE_QUICHE_COMMAND_LINE_FLAG(
+    std::string, masque_mode, "",
+    "Allows setting MASQUE mode, currently only valid value is \"open\".");
 
 int main(int argc, char* argv[]) {
-  QuicSystemEventLoop event_loop("masque_server");
+  quiche::QuicheSystemEventLoop event_loop("masque_server");
   const char* usage = "Usage: masque_server [options]";
   std::vector<std::string> non_option_args =
-      quic::QuicParseCommandLineFlags(usage, argc, argv);
+      quiche::QuicheParseCommandLineFlags(usage, argc, argv);
   if (!non_option_args.empty()) {
-    quic::QuicPrintCommandLineFlagHelp(usage);
+    quiche::QuichePrintCommandLineFlagHelp(usage);
     return 0;
   }
 
   quic::MasqueMode masque_mode = quic::MasqueMode::kOpen;
-  std::string mode_string = GetQuicFlag(FLAGS_masque_mode);
-  if (mode_string == "legacy") {
-    masque_mode = quic::MasqueMode::kLegacy;
-  } else if (!mode_string.empty() && mode_string != "open") {
+  std::string mode_string = quiche::GetQuicheCommandLineFlag(FLAGS_masque_mode);
+  if (!mode_string.empty() && mode_string != "open") {
     std::cerr << "Invalid masque_mode \"" << mode_string << "\"" << std::endl;
     return 1;
   }
 
   auto backend = std::make_unique<quic::MasqueServerBackend>(
-      masque_mode, GetQuicFlag(FLAGS_server_authority),
-      GetQuicFlag(FLAGS_cache_dir));
+      masque_mode, quiche::GetQuicheCommandLineFlag(FLAGS_server_authority),
+      quiche::GetQuicheCommandLineFlag(FLAGS_cache_dir));
 
   auto server =
       std::make_unique<quic::MasqueEpollServer>(masque_mode, backend.get());
 
   if (!server->CreateUDPSocketAndListen(quic::QuicSocketAddress(
-          quic::QuicIpAddress::Any6(), GetQuicFlag(FLAGS_port)))) {
+          quic::QuicIpAddress::Any6(),
+          quiche::GetQuicheCommandLineFlag(FLAGS_port)))) {
     return 1;
   }
 

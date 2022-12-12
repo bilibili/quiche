@@ -22,9 +22,7 @@ Netlink::Netlink(KernelInterface* kernel) : kernel_(kernel) {
   seq_ = QuicRandom::GetInstance()->RandUint64();
 }
 
-Netlink::~Netlink() {
-  CloseSocket();
-}
+Netlink::~Netlink() { CloseSocket(); }
 
 void Netlink::ResetRecvBuf(size_t size) {
   if (size != 0) {
@@ -198,8 +196,7 @@ namespace {
 
 class LocalAddressParser : public NetlinkParserInterface {
  public:
-  LocalAddressParser(int interface_index,
-                     uint8_t unwanted_flags,
+  LocalAddressParser(int interface_index, uint8_t unwanted_flags,
                      std::vector<Netlink::AddressInfo>* local_addresses,
                      int* num_ipv6_nodad_dadfailed_addresses)
       : interface_index_(interface_index),
@@ -306,8 +303,7 @@ class LocalAddressParser : public NetlinkParserInterface {
 
 }  // namespace
 
-bool Netlink::GetAddresses(int interface_index,
-                           uint8_t unwanted_flags,
+bool Netlink::GetAddresses(int interface_index, uint8_t unwanted_flags,
                            std::vector<AddressInfo>* addresses,
                            int* num_ipv6_nodad_dadfailed_addresses) {
   // the message doesn't contain the index, we'll have to do the filtering while
@@ -353,12 +349,8 @@ class UnknownParser : public NetlinkParserInterface {
 }  // namespace
 
 bool Netlink::ChangeLocalAddress(
-    uint32_t interface_index,
-    Verb verb,
-    const QuicIpAddress& address,
-    uint8_t prefix_length,
-    uint8_t ifa_flags,
-    uint8_t ifa_scope,
+    uint32_t interface_index, Verb verb, const QuicIpAddress& address,
+    uint8_t prefix_length, uint8_t ifa_flags, uint8_t ifa_scope,
     const std::vector<struct rtattr*>& additional_attributes) {
   if (verb == Verb::kReplace) {
     return false;
@@ -430,6 +422,7 @@ class RoutingRuleParser : public NetlinkParserInterface {
     Netlink::RoutingRule rule;
     rule.scope = route->rtm_scope;
     rule.table = route->rtm_table;
+    rule.init_cwnd = Netlink::kUnspecifiedInitCwnd;
 
     struct rtattr* rta;
     for (rta = RTM_RTA(route); RTA_OK(rta, payload_length);
@@ -454,6 +447,25 @@ class RoutingRuleParser : public NetlinkParserInterface {
         }
         case RTA_OIF: {
           rule.out_interface = *reinterpret_cast<int*>(RTA_DATA(rta));
+          break;
+        }
+        case RTA_METRICS: {
+          struct rtattr* rtax;
+          int rta_payload_length = RTA_PAYLOAD(rta);
+          for (rtax = reinterpret_cast<struct rtattr*>(RTA_DATA(rta));
+               RTA_OK(rtax, rta_payload_length);
+               rtax = RTA_NEXT(rtax, rta_payload_length)) {
+            switch (rtax->rta_type) {
+              case RTAX_INITCWND: {
+                rule.init_cwnd = *reinterpret_cast<uint32_t*>(RTA_DATA(rtax));
+                break;
+              }
+              default: {
+                QUIC_VLOG(2) << absl::StrCat(
+                    "Uninteresting RTA_METRICS attribute: ", rtax->rta_type);
+              }
+            }
+          }
           break;
         }
         default: {
@@ -494,12 +506,10 @@ bool Netlink::GetRouteInfo(std::vector<Netlink::RoutingRule>* routing_rules) {
   return true;
 }
 
-bool Netlink::ChangeRoute(Netlink::Verb verb,
-                          uint32_t table,
-                          const IpRange& destination_subnet,
-                          uint8_t scope,
+bool Netlink::ChangeRoute(Netlink::Verb verb, uint32_t table,
+                          const IpRange& destination_subnet, uint8_t scope,
                           QuicIpAddress preferred_source,
-                          int32_t interface_index) {
+                          int32_t interface_index, uint32_t init_cwnd) {
   if (!destination_subnet.prefix().IsInitialized()) {
     return false;
   }
@@ -560,6 +570,15 @@ bool Netlink::ChangeRoute(Netlink::Verb verb,
       RouteMessage::New(operation, flags, seq_, getpid(), &route_message);
 
   message.AppendAttribute(RTA_TABLE, &table, sizeof(table));
+
+  if (init_cwnd != kUnspecifiedInitCwnd) {
+    char data[RTA_LENGTH(sizeof(uint32_t))];
+    struct rtattr* rta = reinterpret_cast<struct rtattr*>(data);
+    rta->rta_type = RTAX_INITCWND;
+    rta->rta_len = sizeof(data);
+    *reinterpret_cast<uint32_t*>(RTA_DATA(rta)) = init_cwnd;
+    message.AppendAttribute(RTA_METRICS, data, sizeof(data));
+  }
 
   // RTA_OIF is the target interface for this rule.
   message.AppendAttribute(RTA_OIF, &interface_index, sizeof(interface_index));

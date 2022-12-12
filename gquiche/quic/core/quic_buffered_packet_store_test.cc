@@ -5,11 +5,16 @@
 #include "gquiche/quic/core/quic_buffered_packet_store.h"
 
 #include <list>
+#include <memory>
 #include <string>
 
+#include "gquiche/quic/core/crypto/transport_parameters.h"
+#include "gquiche/quic/core/quic_connection_id.h"
+#include "gquiche/quic/core/quic_error_codes.h"
+#include "gquiche/quic/core/quic_types.h"
 #include "gquiche/quic/core/quic_versions.h"
-#include "gquiche/quic/platform/api/quic_flags.h"
 #include "gquiche/quic/platform/api/quic_test.h"
+#include "gquiche/quic/test_tools/first_flight.h"
 #include "gquiche/quic/test_tools/mock_clock.h"
 #include "gquiche/quic/test_tools/quic_buffered_packet_store_peer.h"
 #include "gquiche/quic/test_tools/quic_test_utils.h"
@@ -29,6 +34,14 @@ const absl::optional<ParsedClientHello> kDefaultParsedChlo =
 using BufferedPacket = QuicBufferedPacketStore::BufferedPacket;
 using BufferedPacketList = QuicBufferedPacketStore::BufferedPacketList;
 using EnqueuePacketResult = QuicBufferedPacketStore::EnqueuePacketResult;
+using ::testing::A;
+using ::testing::Conditional;
+using ::testing::Each;
+using ::testing::ElementsAre;
+using ::testing::Ne;
+using ::testing::SizeIs;
+using ::testing::Truly;
+
 class QuicBufferedPacketStoreVisitor
     : public QuicBufferedPacketStore::VisitorInterface {
  public:
@@ -447,6 +460,141 @@ TEST_F(QuicBufferedPacketStoreTest, DiscardPacketsEmpty) {
   EXPECT_FALSE(store_.HasChlosBuffered());
 }
 
+TEST_F(QuicBufferedPacketStoreTest, IngestPacketForTlsChloExtraction) {
+  QuicConnectionId connection_id = TestConnectionId(1);
+  std::vector<std::string> alpns;
+  std::string sni;
+  bool resumption_attempted = false;
+  bool early_data_attempted = false;
+  QuicConfig config;
+  absl::optional<uint8_t> tls_alert;
+
+  EXPECT_FALSE(store_.HasBufferedPackets(connection_id));
+  store_.EnqueuePacket(connection_id, false, packet_, self_address_,
+                       peer_address_, valid_version_, kNoParsedChlo);
+  EXPECT_TRUE(store_.HasBufferedPackets(connection_id));
+
+  // The packet in 'packet_' is not a TLS CHLO packet.
+  EXPECT_FALSE(store_.IngestPacketForTlsChloExtraction(
+      connection_id, valid_version_, packet_, &alpns, &sni,
+      &resumption_attempted, &early_data_attempted, &tls_alert));
+
+  store_.DiscardPackets(connection_id);
+
+  // Force the TLS CHLO to span multiple packets.
+  constexpr auto kCustomParameterId =
+      static_cast<TransportParameters::TransportParameterId>(0xff33);
+  std::string kCustomParameterValue(2000, '-');
+  config.custom_transport_parameters_to_send()[kCustomParameterId] =
+      kCustomParameterValue;
+  auto packets = GetFirstFlightOfPackets(valid_version_, config);
+  ASSERT_EQ(packets.size(), 2u);
+
+  store_.EnqueuePacket(connection_id, false, *packets[0], self_address_,
+                       peer_address_, valid_version_, kNoParsedChlo);
+  store_.EnqueuePacket(connection_id, false, *packets[1], self_address_,
+                       peer_address_, valid_version_, kNoParsedChlo);
+
+  EXPECT_TRUE(store_.HasBufferedPackets(connection_id));
+  EXPECT_FALSE(store_.IngestPacketForTlsChloExtraction(
+      connection_id, valid_version_, *packets[0], &alpns, &sni,
+      &resumption_attempted, &early_data_attempted, &tls_alert));
+  EXPECT_TRUE(store_.IngestPacketForTlsChloExtraction(
+      connection_id, valid_version_, *packets[1], &alpns, &sni,
+      &resumption_attempted, &early_data_attempted, &tls_alert));
+
+  EXPECT_THAT(alpns, ElementsAre(AlpnForVersion(valid_version_)));
+  EXPECT_EQ(sni, TestHostname());
+
+  EXPECT_FALSE(resumption_attempted);
+  EXPECT_FALSE(early_data_attempted);
+}
+
+TEST_F(QuicBufferedPacketStoreTest, DeliverInitialPacketsFirst) {
+  QuicConfig config;
+  QuicConnectionId connection_id = TestConnectionId(1);
+
+  // Force the TLS CHLO to span multiple packets.
+  constexpr auto kCustomParameterId =
+      static_cast<TransportParameters::TransportParameterId>(0xff33);
+  std::string custom_parameter_value(2000, '-');
+  config.custom_transport_parameters_to_send()[kCustomParameterId] =
+      custom_parameter_value;
+  auto initial_packets = GetFirstFlightOfPackets(valid_version_, config);
+  ASSERT_THAT(initial_packets, SizeIs(2));
+
+  // Verify that the packets generated are INITIAL packets.
+  EXPECT_THAT(
+      initial_packets,
+      Each(Truly([](const std::unique_ptr<QuicReceivedPacket>& packet) {
+        QuicLongHeaderType long_packet_type = INVALID_PACKET_TYPE;
+        PacketHeaderFormat unused_format;
+        bool unused_version_flag;
+        bool unused_use_length_prefix;
+        QuicVersionLabel unused_version_label;
+        ParsedQuicVersion unused_parsed_version = UnsupportedQuicVersion();
+        QuicConnectionId unused_destination_connection_id;
+        QuicConnectionId unused_source_connection_id;
+        absl::optional<absl::string_view> unused_retry_token;
+        std::string unused_detailed_error;
+        QuicErrorCode error_code = QuicFramer::ParsePublicHeaderDispatcher(
+            *packet, kQuicDefaultConnectionIdLength, &unused_format,
+            &long_packet_type, &unused_version_flag, &unused_use_length_prefix,
+            &unused_version_label, &unused_parsed_version,
+            &unused_destination_connection_id, &unused_source_connection_id,
+            &unused_retry_token, &unused_detailed_error);
+        return error_code == QUIC_NO_ERROR && long_packet_type == INITIAL;
+      })));
+
+  QuicLongHeaderType long_packet_type = INVALID_PACKET_TYPE;
+  PacketHeaderFormat unused_format;
+  bool unused_version_flag;
+  bool unused_use_length_prefix;
+  QuicVersionLabel unused_version_label;
+  ParsedQuicVersion unused_parsed_version = UnsupportedQuicVersion();
+  QuicConnectionId unused_destination_connection_id;
+  QuicConnectionId unused_source_connection_id;
+  absl::optional<absl::string_view> unused_retry_token;
+  std::string unused_detailed_error;
+  QuicErrorCode error_code = QUIC_NO_ERROR;
+
+  // Verify that packet_ is not an INITIAL packet.
+  error_code = QuicFramer::ParsePublicHeaderDispatcher(
+      packet_, kQuicDefaultConnectionIdLength, &unused_format,
+      &long_packet_type, &unused_version_flag, &unused_use_length_prefix,
+      &unused_version_label, &unused_parsed_version,
+      &unused_destination_connection_id, &unused_source_connection_id,
+      &unused_retry_token, &unused_detailed_error);
+  EXPECT_THAT(error_code, IsQuicNoError());
+  EXPECT_NE(long_packet_type, INITIAL);
+
+  store_.EnqueuePacket(connection_id, false, packet_, self_address_,
+                       peer_address_, valid_version_, kNoParsedChlo);
+  store_.EnqueuePacket(connection_id, false, *initial_packets[0], self_address_,
+                       peer_address_, valid_version_, kNoParsedChlo);
+  store_.EnqueuePacket(connection_id, false, *initial_packets[1], self_address_,
+                       peer_address_, valid_version_, kNoParsedChlo);
+
+  BufferedPacketList delivered_packets = store_.DeliverPackets(connection_id);
+  EXPECT_THAT(delivered_packets.buffered_packets, SizeIs(3));
+
+  QuicLongHeaderType previous_packet_type = INITIAL;
+  for (const auto& packet : delivered_packets.buffered_packets) {
+    error_code = QuicFramer::ParsePublicHeaderDispatcher(
+        *packet.packet, kQuicDefaultConnectionIdLength, &unused_format,
+        &long_packet_type, &unused_version_flag, &unused_use_length_prefix,
+        &unused_version_label, &unused_parsed_version,
+        &unused_destination_connection_id, &unused_source_connection_id,
+        &unused_retry_token, &unused_detailed_error);
+    EXPECT_THAT(error_code, IsQuicNoError());
+
+    // INITIAL packets should not follow a non-INITIAL packet.
+    EXPECT_THAT(long_packet_type,
+                Conditional(previous_packet_type == INITIAL,
+                            A<QuicLongHeaderType>(), Ne(INITIAL)));
+    previous_packet_type = long_packet_type;
+  }
+}
 }  // namespace
 }  // namespace test
 }  // namespace quic

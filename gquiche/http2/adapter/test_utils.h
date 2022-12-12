@@ -12,7 +12,7 @@
 #include "gquiche/http2/adapter/mock_http2_visitor.h"
 #include "gquiche/common/platform/api/quiche_export.h"
 #include "gquiche/common/platform/api/quiche_test.h"
-#include "gquiche/spdy/core/spdy_header_block.h"
+#include "gquiche/spdy/core/http2_header_block.h"
 #include "gquiche/spdy/core/spdy_protocol.h"
 
 namespace http2 {
@@ -103,13 +103,14 @@ class QUICHE_NO_EXPORT TestDataFrameSource : public DataFrameSource {
 
 class QUICHE_NO_EXPORT TestMetadataSource : public MetadataSource {
  public:
-  explicit TestMetadataSource(const spdy::SpdyHeaderBlock& entries);
+  explicit TestMetadataSource(const spdy::Http2HeaderBlock& entries);
 
   size_t NumFrames(size_t max_frame_size) const override {
     // Round up to the next frame.
     return (encoded_entries_.size() + max_frame_size - 1) / max_frame_size;
   }
   std::pair<int64_t, bool> Pack(uint8_t* dest, size_t dest_len) override;
+  void OnFailure() override {}
 
  private:
   const std::string encoded_entries_;

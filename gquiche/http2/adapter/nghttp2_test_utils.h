@@ -31,11 +31,13 @@ class QUICHE_NO_EXPORT TestDataSource {
   }
 
   nghttp2_data_provider MakeDataProvider() {
+    nghttp2_data_source s;
+    s.ptr = this;
     return nghttp2_data_provider{
-        .source = {.ptr = this},
-        .read_callback = [](nghttp2_session*, int32_t, uint8_t*, size_t length,
-                            uint32_t* data_flags, nghttp2_data_source* source,
-                            void*) -> ssize_t {
+        s,
+        [](nghttp2_session*, int32_t, uint8_t*, size_t length,
+           uint32_t* data_flags, nghttp2_data_source* source,
+           void*) -> ssize_t {
           *data_flags |= NGHTTP2_DATA_FLAG_NO_COPY;
           auto* s = static_cast<TestDataSource*>(source->ptr);
           if (!s->is_data_available()) {
@@ -66,7 +68,8 @@ testing::Matcher<const nghttp2_frame_hd&> HasFrameHeaderRef(
 
 testing::Matcher<const nghttp2_frame*> IsData(
     const testing::Matcher<uint32_t> stream_id,
-    const testing::Matcher<size_t> length, const testing::Matcher<int> flags);
+    const testing::Matcher<size_t> length, const testing::Matcher<int> flags,
+    const testing::Matcher<size_t> padding = testing::_);
 
 testing::Matcher<const nghttp2_frame*> IsHeaders(
     const testing::Matcher<uint32_t> stream_id,

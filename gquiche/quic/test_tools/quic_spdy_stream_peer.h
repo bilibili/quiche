@@ -7,7 +7,6 @@
 
 #include "gquiche/quic/core/quic_ack_listener_interface.h"
 #include "gquiche/quic/core/quic_interval_set.h"
-#include "gquiche/quic/platform/api/quic_containers.h"
 
 namespace quic {
 
@@ -20,10 +19,11 @@ class QuicSpdyStreamPeer {
  public:
   static void set_ack_listener(
       QuicSpdyStream* stream,
-      QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener);
+      quiche::QuicheReferenceCountedPointer<QuicAckListenerInterface>
+          ack_listener);
   static const QuicIntervalSet<QuicStreamOffset>& unacked_frame_headers_offsets(
       QuicSpdyStream* stream);
-  static bool use_datagram_contexts(QuicSpdyStream* stream);
+  static bool OnHeadersFrameEnd(QuicSpdyStream* stream);
 };
 
 }  // namespace test

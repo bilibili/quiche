@@ -13,20 +13,10 @@
 #include "gquiche/quic/core/quic_error_codes.h"
 #include "gquiche/quic/platform/api/quic_test.h"
 #include "gquiche/quic/test_tools/qpack/qpack_test_utils.h"
-#include "gquiche/spdy/core/spdy_header_block.h"
+#include "gquiche/spdy/core/http2_header_block.h"
 
 namespace quic {
 namespace test {
-
-// QpackDecoder::EncoderStreamErrorDelegate implementation that does nothing.
-class NoopEncoderStreamErrorDelegate
-    : public QpackDecoder::EncoderStreamErrorDelegate {
- public:
-  ~NoopEncoderStreamErrorDelegate() override = default;
-
-  void OnEncoderStreamError(QuicErrorCode error_code,
-                            absl::string_view error_message) override;
-};
 
 // Mock QpackDecoder::EncoderStreamErrorDelegate implementation.
 class MockEncoderStreamErrorDelegate
@@ -34,8 +24,7 @@ class MockEncoderStreamErrorDelegate
  public:
   ~MockEncoderStreamErrorDelegate() override = default;
 
-  MOCK_METHOD(void,
-              OnEncoderStreamError,
+  MOCK_METHOD(void, OnEncoderStreamError,
               (QuicErrorCode error_code, absl::string_view error_message),
               (override));
 };
@@ -78,10 +67,8 @@ class MockHeadersHandler
   MockHeadersHandler& operator=(const MockHeadersHandler&) = delete;
   ~MockHeadersHandler() override = default;
 
-  MOCK_METHOD(void,
-              OnHeaderDecoded,
-              (absl::string_view name, absl::string_view value),
-              (override));
+  MOCK_METHOD(void, OnHeaderDecoded,
+              (absl::string_view name, absl::string_view value), (override));
   MOCK_METHOD(void, OnDecodingCompleted, (), (override));
   MOCK_METHOD(void, OnDecodingErrorDetected,
               (QuicErrorCode error_code, absl::string_view error_message),
@@ -101,8 +88,7 @@ class NoOpHeadersHandler
 };
 
 void QpackDecode(
-    uint64_t maximum_dynamic_table_capacity,
-    uint64_t maximum_blocked_streams,
+    uint64_t maximum_dynamic_table_capacity, uint64_t maximum_blocked_streams,
     QpackDecoder::EncoderStreamErrorDelegate* encoder_stream_error_delegate,
     QpackStreamSenderDelegate* decoder_stream_sender_delegate,
     QpackProgressiveDecoder::HeadersHandlerInterface* handler,

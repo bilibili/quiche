@@ -17,7 +17,7 @@
 #include "absl/strings/escaping.h"
 #include "gquiche/http2/hpack/decoder/hpack_decoder_state.h"
 #include "gquiche/http2/hpack/decoder/hpack_decoder_tables.h"
-#include "gquiche/http2/hpack/tools/hpack_block_builder.h"
+#include "gquiche/http2/test_tools/hpack_block_builder.h"
 #include "gquiche/http2/test_tools/http2_random.h"
 #include "gquiche/common/platform/api/quiche_logging.h"
 #include "gquiche/common/platform/api/quiche_test.h"
@@ -26,7 +26,7 @@
 #include "gquiche/spdy/core/hpack/hpack_encoder.h"
 #include "gquiche/spdy/core/hpack/hpack_output_stream.h"
 #include "gquiche/spdy/core/recording_headers_handler.h"
-#include "gquiche/spdy/core/spdy_test_utils.h"
+#include "gquiche/spdy/test_tools/spdy_test_utils.h"
 
 using ::http2::HpackEntryType;
 using ::http2::HpackStringPair;
@@ -112,7 +112,7 @@ const char* kCookieKey = "cookie";
 enum StartChoice { START_WITH_HANDLER, START_WITHOUT_HANDLER, NO_START };
 
 class HpackDecoderAdapterTest
-    : public QuicheTestWithParam<std::tuple<StartChoice, bool>> {
+    : public quiche::test::QuicheTestWithParam<std::tuple<StartChoice, bool>> {
  protected:
   HpackDecoderAdapterTest() : decoder_(), decoder_peer_(&decoder_) {}
 
@@ -197,7 +197,7 @@ class HpackDecoderAdapterTest
     return DecodeHeaderBlock(hbb.buffer());
   }
 
-  const SpdyHeaderBlock& decoded_block() const {
+  const Http2HeaderBlock& decoded_block() const {
     if (start_choice_ == START_WITH_HANDLER) {
       return handler_.decoded_block();
     } else {
@@ -205,7 +205,7 @@ class HpackDecoderAdapterTest
     }
   }
 
-  static size_t SizeOfHeaders(const SpdyHeaderBlock& headers) {
+  static size_t SizeOfHeaders(const Http2HeaderBlock& headers) {
     size_t size = 0;
     for (const auto& kv : headers) {
       if (kv.first == kCookieKey) {
@@ -221,14 +221,12 @@ class HpackDecoderAdapterTest
     return size;
   }
 
-  const SpdyHeaderBlock& DecodeBlockExpectingSuccess(absl::string_view str) {
+  const Http2HeaderBlock& DecodeBlockExpectingSuccess(absl::string_view str) {
     EXPECT_TRUE(DecodeHeaderBlock(str));
     return decoded_block();
   }
 
-  void expectEntry(size_t index,
-                   size_t size,
-                   const std::string& name,
+  void expectEntry(size_t index, size_t size, const std::string& name,
                    const std::string& value) {
     const HpackStringPair* entry = decoder_peer_.GetTableEntry(index);
     EXPECT_EQ(name, entry->name) << "index " << index;
@@ -236,9 +234,9 @@ class HpackDecoderAdapterTest
     EXPECT_EQ(size, entry->size());
   }
 
-  SpdyHeaderBlock MakeHeaderBlock(
+  Http2HeaderBlock MakeHeaderBlock(
       const std::vector<std::pair<std::string, std::string>>& headers) {
-    SpdyHeaderBlock result;
+    Http2HeaderBlock result;
     for (const auto& kv : headers) {
       result.AppendValueOrAddHeader(kv.first, kv.second);
     }
@@ -256,14 +254,12 @@ class HpackDecoderAdapterTest
 };
 
 INSTANTIATE_TEST_SUITE_P(
-    NoHandler,
-    HpackDecoderAdapterTest,
+    NoHandler, HpackDecoderAdapterTest,
     ::testing::Combine(::testing::Values(START_WITHOUT_HANDLER, NO_START),
                        ::testing::Bool()));
 
 INSTANTIATE_TEST_SUITE_P(
-    WithHandler,
-    HpackDecoderAdapterTest,
+    WithHandler, HpackDecoderAdapterTest,
     ::testing::Combine(::testing::Values(START_WITH_HANDLER),
                        ::testing::Bool()));
 
@@ -293,7 +289,7 @@ TEST_P(HpackDecoderAdapterTest,
   EXPECT_TRUE(HandleControlFrameHeadersData(s.substr(s.size() / 2)));
 
   EXPECT_FALSE(HandleControlFrameHeadersData(s));
-  SpdyHeaderBlock expected_block = MakeHeaderBlock({{"a", a_value}});
+  Http2HeaderBlock expected_block = MakeHeaderBlock({{"a", a_value}});
   EXPECT_EQ(expected_block, decoded_block());
 }
 
@@ -369,7 +365,7 @@ TEST_P(HpackDecoderAdapterTest, DecodeWithIncompleteData) {
   std::vector<std::pair<std::string, std::string>> expected_headers = {
       {":method", "GET"}, {":path", "/index.html"}, {":method", "GET"}};
 
-  SpdyHeaderBlock expected_block1 = MakeHeaderBlock(expected_headers);
+  Http2HeaderBlock expected_block1 = MakeHeaderBlock(expected_headers);
   EXPECT_EQ(expected_block1, decoded_block());
 
   // Full and partial headers, won't add partial to the headers.
@@ -379,7 +375,7 @@ TEST_P(HpackDecoderAdapterTest, DecodeWithIncompleteData) {
   expected_headers.push_back({"goo", "gar"});
   expected_headers.push_back({"goo", "gar"});
 
-  SpdyHeaderBlock expected_block2 = MakeHeaderBlock(expected_headers);
+  Http2HeaderBlock expected_block2 = MakeHeaderBlock(expected_headers);
   EXPECT_EQ(expected_block2, decoded_block());
 
   // Add the needed data.
@@ -389,7 +385,7 @@ TEST_P(HpackDecoderAdapterTest, DecodeWithIncompleteData) {
 
   expected_headers.push_back({"spam", "gggs"});
 
-  SpdyHeaderBlock expected_block3 = MakeHeaderBlock(expected_headers);
+  Http2HeaderBlock expected_block3 = MakeHeaderBlock(expected_headers);
   EXPECT_EQ(expected_block3, decoded_block());
 }
 
@@ -441,44 +437,44 @@ TEST_P(HpackDecoderAdapterTest, HandleHeaderRepresentation) {
 // Decoding indexed static table field should work.
 TEST_P(HpackDecoderAdapterTest, IndexedHeaderStatic) {
   // Reference static table entries #2 and #5.
-  const SpdyHeaderBlock& header_set1 = DecodeBlockExpectingSuccess("\x82\x85");
-  SpdyHeaderBlock expected_header_set1;
+  const Http2HeaderBlock& header_set1 = DecodeBlockExpectingSuccess("\x82\x85");
+  Http2HeaderBlock expected_header_set1;
   expected_header_set1[":method"] = "GET";
   expected_header_set1[":path"] = "/index.html";
   EXPECT_EQ(expected_header_set1, header_set1);
 
   // Reference static table entry #2.
-  const SpdyHeaderBlock& header_set2 = DecodeBlockExpectingSuccess("\x82");
-  SpdyHeaderBlock expected_header_set2;
+  const Http2HeaderBlock& header_set2 = DecodeBlockExpectingSuccess("\x82");
+  Http2HeaderBlock expected_header_set2;
   expected_header_set2[":method"] = "GET";
   EXPECT_EQ(expected_header_set2, header_set2);
 }
 
 TEST_P(HpackDecoderAdapterTest, IndexedHeaderDynamic) {
   // First header block: add an entry to header table.
-  const SpdyHeaderBlock& header_set1 = DecodeBlockExpectingSuccess(
+  const Http2HeaderBlock& header_set1 = DecodeBlockExpectingSuccess(
       "\x40\x03"
       "foo"
       "\x03"
       "bar");
-  SpdyHeaderBlock expected_header_set1;
+  Http2HeaderBlock expected_header_set1;
   expected_header_set1["foo"] = "bar";
   EXPECT_EQ(expected_header_set1, header_set1);
 
   // Second header block: add another entry to header table.
-  const SpdyHeaderBlock& header_set2 = DecodeBlockExpectingSuccess(
+  const Http2HeaderBlock& header_set2 = DecodeBlockExpectingSuccess(
       "\xbe\x40\x04"
       "spam"
       "\x04"
       "eggs");
-  SpdyHeaderBlock expected_header_set2;
+  Http2HeaderBlock expected_header_set2;
   expected_header_set2["foo"] = "bar";
   expected_header_set2["spam"] = "eggs";
   EXPECT_EQ(expected_header_set2, header_set2);
 
   // Third header block: refer to most recently added entry.
-  const SpdyHeaderBlock& header_set3 = DecodeBlockExpectingSuccess("\xbe");
-  SpdyHeaderBlock expected_header_set3;
+  const Http2HeaderBlock& header_set3 = DecodeBlockExpectingSuccess("\xbe");
+  Http2HeaderBlock expected_header_set3;
   expected_header_set3["spam"] = "eggs";
   EXPECT_EQ(expected_header_set3, header_set3);
 }
@@ -612,10 +608,10 @@ TEST_P(HpackDecoderAdapterTest, LiteralHeaderNoIndexing) {
   // First header with indexed name, second header with string literal
   // name.
   const char input[] = "\x04\x0c/sample/path\x00\x06:path2\x0e/sample/path/2";
-  const SpdyHeaderBlock& header_set = DecodeBlockExpectingSuccess(
+  const Http2HeaderBlock& header_set = DecodeBlockExpectingSuccess(
       absl::string_view(input, ABSL_ARRAYSIZE(input) - 1));
 
-  SpdyHeaderBlock expected_header_set;
+  Http2HeaderBlock expected_header_set;
   expected_header_set[":path"] = "/sample/path";
   expected_header_set[":path2"] = "/sample/path/2";
   EXPECT_EQ(expected_header_set, header_set);
@@ -625,10 +621,10 @@ TEST_P(HpackDecoderAdapterTest, LiteralHeaderNoIndexing) {
 // indexing and string literal names should work.
 TEST_P(HpackDecoderAdapterTest, LiteralHeaderIncrementalIndexing) {
   const char input[] = "\x44\x0c/sample/path\x40\x06:path2\x0e/sample/path/2";
-  const SpdyHeaderBlock& header_set = DecodeBlockExpectingSuccess(
+  const Http2HeaderBlock& header_set = DecodeBlockExpectingSuccess(
       absl::string_view(input, ABSL_ARRAYSIZE(input) - 1));
 
-  SpdyHeaderBlock expected_header_set;
+  Http2HeaderBlock expected_header_set;
   expected_header_set[":path"] = "/sample/path";
   expected_header_set[":path2"] = "/sample/path/2";
   EXPECT_EQ(expected_header_set, header_set);
@@ -709,7 +705,7 @@ TEST_P(HpackDecoderAdapterTest, HuffmanEOSError) {
 TEST_P(HpackDecoderAdapterTest, BasicC31) {
   HpackEncoder encoder;
 
-  SpdyHeaderBlock expected_header_set;
+  Http2HeaderBlock expected_header_set;
   expected_header_set[":method"] = "GET";
   expected_header_set[":scheme"] = "http";
   expected_header_set[":path"] = "/";
@@ -748,7 +744,7 @@ TEST_P(HpackDecoderAdapterTest, SectionC4RequestHuffmanExamples) {
   //                                         | -> :authority: www.example.com
   std::string first =
       absl::HexStringToBytes("828684418cf1e3c2e5f23a6ba0ab90f4ff");
-  const SpdyHeaderBlock& first_header_set = DecodeBlockExpectingSuccess(first);
+  const Http2HeaderBlock& first_header_set = DecodeBlockExpectingSuccess(first);
 
   EXPECT_THAT(first_header_set,
               ElementsAre(
@@ -785,7 +781,7 @@ TEST_P(HpackDecoderAdapterTest, SectionC4RequestHuffmanExamples) {
   //                                         | -> cache-control: no-cache
 
   std::string second = absl::HexStringToBytes("828684be5886a8eb10649cbf");
-  const SpdyHeaderBlock& second_header_set =
+  const Http2HeaderBlock& second_header_set =
       DecodeBlockExpectingSuccess(second);
 
   EXPECT_THAT(second_header_set,
@@ -828,7 +824,7 @@ TEST_P(HpackDecoderAdapterTest, SectionC4RequestHuffmanExamples) {
   //                                         | -> custom-key: custom-value
   std::string third = absl::HexStringToBytes(
       "828785bf408825a849e95ba97d7f8925a849e95bb8e8b4bf");
-  const SpdyHeaderBlock& third_header_set = DecodeBlockExpectingSuccess(third);
+  const Http2HeaderBlock& third_header_set = DecodeBlockExpectingSuccess(third);
 
   EXPECT_THAT(
       third_header_set,
@@ -901,7 +897,7 @@ TEST_P(HpackDecoderAdapterTest, SectionC6ResponseHuffmanExamples) {
       "941054d444a8200595040b8166e082a6"
       "2d1bff6e919d29ad171863c78f0b97c8"
       "e9ae82ae43d3");
-  const SpdyHeaderBlock& first_header_set = DecodeBlockExpectingSuccess(first);
+  const Http2HeaderBlock& first_header_set = DecodeBlockExpectingSuccess(first);
 
   EXPECT_THAT(first_header_set,
               ElementsAre(
@@ -940,7 +936,7 @@ TEST_P(HpackDecoderAdapterTest, SectionC6ResponseHuffmanExamples) {
   //                                         | -> location:
   //                                         |   https://www.example.com
   std::string second = absl::HexStringToBytes("4883640effc1c0bf");
-  const SpdyHeaderBlock& second_header_set =
+  const Http2HeaderBlock& second_header_set =
       DecodeBlockExpectingSuccess(second);
 
   EXPECT_THAT(second_header_set,
@@ -1017,7 +1013,7 @@ TEST_P(HpackDecoderAdapterTest, SectionC6ResponseHuffmanExamples) {
       "77ad94e7821dd7f2e6c7b335dfdfcd5b"
       "3960d5af27087f3672c1ab270fb5291f"
       "9587316065c003ed4ee5b1063d5007");
-  const SpdyHeaderBlock& third_header_set = DecodeBlockExpectingSuccess(third);
+  const Http2HeaderBlock& third_header_set = DecodeBlockExpectingSuccess(third);
 
   EXPECT_THAT(third_header_set,
               ElementsAre(
@@ -1081,12 +1077,12 @@ TEST_P(HpackDecoderAdapterTest, ReuseNameOfEvictedEntry) {
   hbb.AppendIndexedHeader(62);
 
   // Can't have DecodeHeaderBlock do the default check for size of the decoded
-  // data because SpdyHeaderBlock will join multiple headers with the same
+  // data because Http2HeaderBlock will join multiple headers with the same
   // name into a single entry, thus we won't see repeated occurrences of the
   // name, instead seeing separators between values.
   EXPECT_TRUE(DecodeHeaderBlock(hbb.buffer(), kNoCheckDecodedSize));
 
-  SpdyHeaderBlock expected_header_set;
+  Http2HeaderBlock expected_header_set;
   expected_header_set.AppendValueOrAddHeader(name, value1);
   expected_header_set.AppendValueOrAddHeader(name, value1);
   expected_header_set.AppendValueOrAddHeader(name, value2);
@@ -1094,7 +1090,7 @@ TEST_P(HpackDecoderAdapterTest, ReuseNameOfEvictedEntry) {
   expected_header_set.AppendValueOrAddHeader(name, value3);
   expected_header_set.AppendValueOrAddHeader(name, value3);
 
-  // SpdyHeaderBlock stores these 6 strings as '\0' separated values.
+  // Http2HeaderBlock stores these 6 strings as '\0' separated values.
   // Make sure that is what happened.
   std::string joined_values = expected_header_set[name].as_string();
   EXPECT_EQ(joined_values.size(),
@@ -1111,7 +1107,7 @@ TEST_P(HpackDecoderAdapterTest, ReuseNameOfEvictedEntry) {
 
 // Regression test for https://crbug.com/747395.
 TEST_P(HpackDecoderAdapterTest, Cookies) {
-  SpdyHeaderBlock expected_header_set;
+  Http2HeaderBlock expected_header_set;
   expected_header_set["cookie"] = "foo; bar";
 
   EXPECT_TRUE(DecodeHeaderBlock(absl::HexStringToBytes("608294e76003626172")));

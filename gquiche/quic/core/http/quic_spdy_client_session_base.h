@@ -10,8 +10,8 @@
 #include "absl/container/flat_hash_map.h"
 #include "gquiche/quic/core/http/quic_spdy_session.h"
 #include "gquiche/quic/core/quic_crypto_client_stream.h"
-#include "gquiche/quic/platform/api/quic_containers.h"
 #include "gquiche/quic/platform/api/quic_export.h"
+#include "gquiche/spdy/core/http2_header_block.h"
 
 namespace quic {
 
@@ -54,15 +54,14 @@ class QUIC_EXPORT_PRIVATE QuicSpdyClientSessionBase
   // Called by |headers_stream_| when push promise headers have been
   // completely received.
   void OnPromiseHeaderList(QuicStreamId stream_id,
-                           QuicStreamId promised_stream_id,
-                           size_t frame_len,
+                           QuicStreamId promised_stream_id, size_t frame_len,
                            const QuicHeaderList& header_list) override;
 
   // Called by |QuicSpdyClientStream| on receipt of response headers,
   // needed to detect promised server push streams, as part of
   // client-request to push-stream rendezvous.
   void OnInitialHeadersComplete(QuicStreamId stream_id,
-                                const spdy::SpdyHeaderBlock& response_headers);
+                                const spdy::Http2HeaderBlock& response_headers);
 
   // Called by |QuicSpdyClientStream| on receipt of PUSH_PROMISE, does
   // some session level validation and creates the
@@ -71,7 +70,7 @@ class QUIC_EXPORT_PRIVATE QuicSpdyClientSessionBase
   // stream and returns false otherwise.
   virtual bool HandlePromised(QuicStreamId associated_id,
                               QuicStreamId promised_id,
-                              const spdy::SpdyHeaderBlock& headers);
+                              const spdy::Http2HeaderBlock& headers);
 
   // For cross-origin server push, this should verify the server is
   // authoritative per [RFC2818], Section 3.  Roughly, subjectAltName

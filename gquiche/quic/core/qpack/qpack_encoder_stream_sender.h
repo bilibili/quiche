@@ -27,8 +27,7 @@ class QUIC_EXPORT_PRIVATE QpackEncoderStreamSender {
   // https://quicwg.org/base-drafts/draft-ietf-quic-qpack.html#rfc.section.5.2
 
   // 5.2.1. Insert With Name Reference
-  void SendInsertWithNameReference(bool is_static,
-                                   uint64_t name_index,
+  void SendInsertWithNameReference(bool is_static, uint64_t name_index,
                                    absl::string_view value);
   // 5.2.2. Insert Without Name Reference
   void SendInsertWithoutNameReference(absl::string_view name,
@@ -38,8 +37,17 @@ class QUIC_EXPORT_PRIVATE QpackEncoderStreamSender {
   // 5.2.4. Set Dynamic Table Capacity
   void SendSetDynamicTableCapacity(uint64_t capacity);
 
-  // Returns number of buffered bytes.
+  // Returns number of bytes buffered by this object.
+  // There is no limit on how much data this object is willing to buffer.
   QuicByteCount BufferedByteCount() const { return buffer_.size(); }
+
+  // Returns whether writing to the encoder stream is allowed.  Writing is
+  // disallowed if the amount of data buffered by the underlying stream exceeds
+  // a hardcoded limit, in order to limit memory consumption in case the encoder
+  // stream is blocked.  CanWrite() returning true does not mean that the
+  // encoder stream is not blocked, it just means the blocked data does not
+  // exceed the threshold.
+  bool CanWrite() const;
 
   // Writes all buffered instructions on the encoder stream.
   void Flush();

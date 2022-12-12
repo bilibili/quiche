@@ -29,15 +29,14 @@
 #include "gquiche/quic/test_tools/simulator/simulator.h"
 #include "gquiche/quic/test_tools/simulator/switch.h"
 #include "gquiche/quic/test_tools/simulator/traffic_policer.h"
+#include "gquiche/common/platform/api/quiche_command_line_flags.h"
 
 using testing::AllOf;
 using testing::Ge;
 using testing::Le;
 
-DEFINE_QUIC_COMMAND_LINE_FLAG(
-    std::string,
-    quic_bbr2_test_regression_mode,
-    "",
+DEFINE_QUICHE_COMMAND_LINE_FLAG(
+    std::string, quic_bbr2_test_regression_mode, "",
     "One of a) 'record' to record test result (one file per test), or "
     "b) 'regress' to regress against recorded results, or "
     "c) <anything else> for non-regression mode.");
@@ -128,7 +127,8 @@ class Bbr2SimulatorTest : public QuicTest {
   }
 
   void SetUp() override {
-    if (GetQuicFlag(FLAGS_quic_bbr2_test_regression_mode) == "regress") {
+    if (quiche::GetQuicheCommandLineFlag(
+            FLAGS_quic_bbr2_test_regression_mode) == "regress") {
       SendAlgorithmTestResult expected;
       ASSERT_TRUE(LoadSendAlgorithmTestResult(&expected));
       random_seed_ = expected.random_seed();
@@ -141,7 +141,7 @@ class Bbr2SimulatorTest : public QuicTest {
 
   ~Bbr2SimulatorTest() override {
     const std::string regression_mode =
-        GetQuicFlag(FLAGS_quic_bbr2_test_regression_mode);
+        quiche::GetQuicheCommandLineFlag(FLAGS_quic_bbr2_test_regression_mode);
     const QuicTime::Delta simulated_duration =
         SimulatedNow() - QuicTime::Zero();
     if (regression_mode == "record") {
@@ -162,16 +162,10 @@ class Bbr2SimulatorTest : public QuicTest {
 class Bbr2DefaultTopologyTest : public Bbr2SimulatorTest {
  protected:
   Bbr2DefaultTopologyTest()
-      : sender_endpoint_(&simulator_,
-                         "Sender",
-                         "Receiver",
-                         Perspective::IS_CLIENT,
-                         TestConnectionId(42)),
-        receiver_endpoint_(&simulator_,
-                           "Receiver",
-                           "Sender",
-                           Perspective::IS_SERVER,
-                           TestConnectionId(42)) {
+      : sender_endpoint_(&simulator_, "Sender", "Receiver",
+                         Perspective::IS_CLIENT, TestConnectionId(42)),
+        receiver_endpoint_(&simulator_, "Receiver", "Sender",
+                           Perspective::IS_SERVER, TestConnectionId(42)) {
     sender_ = SetupBbr2Sender(&sender_endpoint_, /*old_sender=*/nullptr);
   }
 
@@ -266,10 +260,8 @@ class Bbr2DefaultTopologyTest : public Bbr2SimulatorTest {
 
   // Send |bytes|-sized bursts of data |number_of_bursts| times, waiting for
   // |wait_time| between each burst.
-  void SendBursts(const DefaultTopologyParams& params,
-                  size_t number_of_bursts,
-                  QuicByteCount bytes,
-                  QuicTime::Delta wait_time) {
+  void SendBursts(const DefaultTopologyParams& params, size_t number_of_bursts,
+                  QuicByteCount bytes, QuicTime::Delta wait_time) {
     ASSERT_EQ(0u, sender_endpoint_.bytes_to_transfer());
     for (size_t i = 0; i < number_of_bursts; i++) {
       sender_endpoint_.AddBytesToTransfer(bytes);
@@ -567,7 +559,6 @@ TEST_F(Bbr2DefaultTopologyTest, SimpleTransferB207) {
 }
 
 TEST_F(Bbr2DefaultTopologyTest, SimpleTransferBBRB) {
-  SetQuicReloadableFlag(quic_bbr_use_send_rate_in_max_ack_height_tracker, true);
   SetConnectionOption(kBBRB);
   DefaultTopologyParams params;
   CreateNetwork(params);
@@ -609,6 +600,25 @@ TEST_F(Bbr2DefaultTopologyTest, SimpleTransferBBR4) {
 TEST_F(Bbr2DefaultTopologyTest, SimpleTransferBBR5) {
   SetQuicReloadableFlag(quic_bbr2_extra_acked_window, true);
   SetConnectionOption(kBBR5);
+  DefaultTopologyParams params;
+  CreateNetwork(params);
+
+  // Transfer 12MB.
+  DoSimpleTransfer(12 * 1024 * 1024, QuicTime::Delta::FromSeconds(35));
+  EXPECT_TRUE(Bbr2ModeIsOneOf({Bbr2Mode::PROBE_BW, Bbr2Mode::PROBE_RTT}));
+
+  EXPECT_APPROX_EQ(params.BottleneckBandwidth(),
+                   sender_->ExportDebugState().bandwidth_hi, 0.01f);
+
+  EXPECT_LE(sender_loss_rate_in_packets(), 0.05);
+  // The margin here is high, because the aggregation greatly increases
+  // smoothed rtt.
+  EXPECT_GE(params.RTT() * 4, rtt_stats()->smoothed_rtt());
+  EXPECT_APPROX_EQ(params.RTT(), rtt_stats()->min_rtt(), 0.2f);
+}
+
+TEST_F(Bbr2DefaultTopologyTest, SimpleTransferBBQ1) {
+  SetConnectionOption(kBBQ1);
   DefaultTopologyParams params;
   CreateNetwork(params);
 
@@ -785,8 +795,6 @@ TEST_F(Bbr2DefaultTopologyTest, QUIC_SLOW_TEST(BandwidthIncrease)) {
 
 // Test Bbr2's reaction to a 100x bandwidth increase during a transfer with BBQ0
 TEST_F(Bbr2DefaultTopologyTest, QUIC_SLOW_TEST(BandwidthIncreaseBBQ0)) {
-  SetQuicReloadableFlag(quic_bbr2_add_bytes_acked_after_inflight_hi_limited,
-                        true);
   SetConnectionOption(kBBQ0);
   DefaultTopologyParams params;
   params.local_link.bandwidth = QuicBandwidth::FromKBitsPerSecond(15000);
@@ -820,8 +828,6 @@ TEST_F(Bbr2DefaultTopologyTest, QUIC_SLOW_TEST(BandwidthIncreaseBBQ0)) {
 // in the presence of ACK aggregation.
 TEST_F(Bbr2DefaultTopologyTest,
        QUIC_SLOW_TEST(BandwidthIncreaseBBQ0Aggregation)) {
-  SetQuicReloadableFlag(quic_bbr2_add_bytes_acked_after_inflight_hi_limited,
-                        true);
   SetConnectionOption(kBBQ0);
   DefaultTopologyParams params;
   params.local_link.bandwidth = QuicBandwidth::FromKBitsPerSecond(15000);
@@ -1227,11 +1233,14 @@ TEST_F(Bbr2DefaultTopologyTest, ApplicationLimitedBursts) {
   DefaultTopologyParams params;
   CreateNetwork(params);
 
+  EXPECT_FALSE(sender_->HasGoodBandwidthEstimateForResumption());
   DriveOutOfStartup(params);
   EXPECT_FALSE(sender_->ExportDebugState().last_sample_is_app_limited);
+  EXPECT_TRUE(sender_->HasGoodBandwidthEstimateForResumption());
 
   SendBursts(params, 20, 512, QuicTime::Delta::FromSeconds(3));
   EXPECT_TRUE(sender_->ExportDebugState().last_sample_is_app_limited);
+  EXPECT_TRUE(sender_->HasGoodBandwidthEstimateForResumption());
   EXPECT_APPROX_EQ(params.BottleneckBandwidth(),
                    sender_->ExportDebugState().bandwidth_hi, 0.01f);
 }

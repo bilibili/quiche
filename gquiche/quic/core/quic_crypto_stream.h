@@ -46,8 +46,7 @@ class QUIC_EXPORT_PRIVATE QuicCryptoStream : public QuicStream {
   // Returns the per-packet framing overhead associated with sending a
   // handshake message for |version|.
   static QuicByteCount CryptoMessageFramingOverhead(
-      QuicTransportVersion version,
-      QuicConnectionId connection_id);
+      QuicTransportVersion version, QuicConnectionId connection_id);
 
   // QuicStream implementation
   void OnStreamFrame(const QuicStreamFrame& frame) override;
@@ -149,9 +148,6 @@ class QUIC_EXPORT_PRIVATE QuicCryptoStream : public QuicStream {
   // encryption level |level|.
   virtual size_t BufferSizeLimitForLevel(EncryptionLevel level) const;
 
-  // Returns whether the implementation supports key update.
-  virtual bool KeyUpdateSupportedLocally() const = 0;
-
   // Called to generate a decrypter for the next key phase. Each call should
   // generate the key for phase n+1.
   virtual std::unique_ptr<QuicDecrypter>
@@ -187,16 +183,13 @@ class QUIC_EXPORT_PRIVATE QuicCryptoStream : public QuicStream {
   void WritePendingRetransmission() override;
 
   // Override to send unacked crypto data with the appropriate encryption level.
-  bool RetransmitStreamData(QuicStreamOffset offset,
-                            QuicByteCount data_length,
-                            bool fin,
-                            TransmissionType type) override;
+  bool RetransmitStreamData(QuicStreamOffset offset, QuicByteCount data_length,
+                            bool fin, TransmissionType type) override;
 
   // Sends stream retransmission data at |encryption_level|.
   QuicConsumedData RetransmitStreamDataAtLevel(
       QuicStreamOffset retransmission_offset,
-      QuicByteCount retransmission_length,
-      EncryptionLevel encryption_level,
+      QuicByteCount retransmission_length, EncryptionLevel encryption_level,
       TransmissionType type);
 
   // Returns the number of bytes of handshake data that have been received from
@@ -207,21 +200,24 @@ class QUIC_EXPORT_PRIVATE QuicCryptoStream : public QuicStream {
   // the peer in CRYPTO frames at a particular encryption level.
   QuicByteCount BytesReadOnLevel(EncryptionLevel level) const;
 
+  // Returns the number of bytes of handshake data that have been sent to
+  // the peer in CRYPTO frames at a particular encryption level.
+  QuicByteCount BytesSentOnLevel(EncryptionLevel level) const;
+
   // Writes |data_length| of data of a crypto frame to |writer|. The data
   // written is from the send buffer for encryption level |level| and starts at
   // |offset|.
-  bool WriteCryptoFrame(EncryptionLevel level,
-                        QuicStreamOffset offset,
-                        QuicByteCount data_length,
-                        QuicDataWriter* writer);
+  bool WriteCryptoFrame(EncryptionLevel level, QuicStreamOffset offset,
+                        QuicByteCount data_length, QuicDataWriter* writer);
 
   // Called when data from a CRYPTO frame is considered lost. The lost data is
   // identified by the encryption level, offset, and length in |crypto_frame|.
   void OnCryptoFrameLost(QuicCryptoFrame* crypto_frame);
 
   // Called to retransmit any outstanding data in the range indicated by the
-  // encryption level, offset, and length in |crypto_frame|.
-  void RetransmitData(QuicCryptoFrame* crypto_frame, TransmissionType type);
+  // encryption level, offset, and length in |crypto_frame|. Returns true if all
+  // data gets retransmitted.
+  bool RetransmitData(QuicCryptoFrame* crypto_frame, TransmissionType type);
 
   // Called to write buffered crypto frames.
   void WriteBufferedCryptoFrames();
@@ -231,8 +227,7 @@ class QUIC_EXPORT_PRIVATE QuicCryptoStream : public QuicStream {
 
   // Returns true if any portion of the data at encryption level |level|
   // starting at |offset| for |length| bytes is outstanding.
-  bool IsFrameOutstanding(EncryptionLevel level,
-                          size_t offset,
+  bool IsFrameOutstanding(EncryptionLevel level, size_t offset,
                           size_t length) const;
 
   // Returns true if the crypto handshake is still waiting for acks of sent
@@ -245,13 +240,27 @@ class QUIC_EXPORT_PRIVATE QuicCryptoStream : public QuicStream {
   virtual void OnDataAvailableInSequencer(QuicStreamSequencer* sequencer,
                                           EncryptionLevel level);
 
+  QuicStreamSequencer* GetStreamSequencerForPacketNumberSpace(
+      PacketNumberSpace packet_number_space) {
+    return &substreams_[packet_number_space].sequencer;
+  }
+
+  // Called by OnCryptoFrame to check if a CRYPTO frame is received at an
+  // expected `level`.
+  virtual bool IsCryptoFrameExpectedForEncryptionLevel(
+      EncryptionLevel level) const = 0;
+
+  // Called to determine the encryption level to send/retransmit crypto data.
+  virtual EncryptionLevel GetEncryptionLevelToSendCryptoDataOfSpace(
+      PacketNumberSpace space) const = 0;
+
  private:
-  // Data sent and received in CRYPTO frames is sent at multiple encryption
-  // levels. Some of the state for the single logical crypto stream is split
-  // across encryption levels, and a CryptoSubstream is used to manage that
-  // state for a particular encryption level.
+  // Data sent and received in CRYPTO frames is sent at multiple packet number
+  // spaces. Some of the state for the single logical crypto stream is split
+  // across packet number spaces, and a CryptoSubstream is used to manage that
+  // state for a particular packet number space.
   struct QUIC_EXPORT_PRIVATE CryptoSubstream {
-    CryptoSubstream(QuicCryptoStream* crypto_stream, EncryptionLevel);
+    CryptoSubstream(QuicCryptoStream* crypto_stream);
 
     QuicStreamSequencer sequencer;
     QuicStreamSendBuffer send_buffer;
@@ -262,9 +271,9 @@ class QUIC_EXPORT_PRIVATE QuicCryptoStream : public QuicStream {
   // TLS 1.3, which never encrypts crypto data.
   QuicIntervalSet<QuicStreamOffset> bytes_consumed_[NUM_ENCRYPTION_LEVELS];
 
-  // Keeps state for data sent/received in CRYPTO frames at each encryption
-  // level.
-  std::array<CryptoSubstream, NUM_ENCRYPTION_LEVELS> substreams_;
+  // Keeps state for data sent/received in CRYPTO frames at each packet number
+  // space;
+  std::array<CryptoSubstream, NUM_PACKET_NUMBER_SPACES> substreams_;
 };
 
 }  // namespace quic

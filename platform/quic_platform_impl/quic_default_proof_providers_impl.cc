@@ -1,14 +1,16 @@
 #include "platform/quic_platform_impl/quic_default_proof_providers_impl.h"
 #include "gquiche/quic/core/crypto/proof_source_x509.h"
 #include "base/files/file_util.h"
+#include "gquiche/common/platform/api/quiche_command_line_flags.h"
+#include "gquiche/common/platform/api/quiche_reference_counted.h"
 #include <utility>
 
-DEFINE_QUIC_COMMAND_LINE_FLAG(std::string,
+DEFINE_QUICHE_COMMAND_LINE_FLAG(std::string,
                               certificate_file,
                               "",
                               "Path to the certificate chain.");
 
-DEFINE_QUIC_COMMAND_LINE_FLAG(std::string,
+DEFINE_QUICHE_COMMAND_LINE_FLAG(std::string,
                               key_file,
                               "",
                               "Path to the pkcs8 private key.");
@@ -43,7 +45,7 @@ std::unique_ptr<ProofSource> CreateDefaultProofSourceImpl() {
   std::stringstream cert_stream(cert_data);
   std::vector<std::string> certs = CertificateView::LoadPemFromStream(&cert_stream);
 
-  auto default_chain = QuicReferenceCountedPointer<ProofSource::Chain>(new ProofSource::Chain(certs));
+  auto default_chain = quiche::QuicheReferenceCountedPointer<ProofSource::Chain>(new ProofSource::Chain(certs));
 
   std::string key_data;
   if (!base::ReadFileToString(key_path, &key_data)) {

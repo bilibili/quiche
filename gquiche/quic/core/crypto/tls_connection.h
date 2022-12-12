@@ -46,18 +46,16 @@ class QUIC_EXPORT_PRIVATE TlsConnection {
     // TLS 1.3 key schedule (RFC 8446 section 7.1), in particular the handshake
     // traffic secrets and application traffic secrets. The provided write
     // secret must be used with the provided cipher suite |cipher|.
-    virtual void SetWriteSecret(EncryptionLevel level,
-                                const SSL_CIPHER* cipher,
-                                const std::vector<uint8_t>& write_secret) = 0;
+    virtual void SetWriteSecret(EncryptionLevel level, const SSL_CIPHER* cipher,
+                                absl::Span<const uint8_t> write_secret) = 0;
 
     // SetReadSecret is similar to SetWriteSecret, except that it is used for
     // decrypting messages. SetReadSecret at a particular level is always called
     // after SetWriteSecret for that level, except for ENCRYPTION_ZERO_RTT,
     // where the EncryptionLevel for SetWriteSecret is
     // ENCRYPTION_FORWARD_SECURE.
-    virtual bool SetReadSecret(EncryptionLevel level,
-                               const SSL_CIPHER* cipher,
-                               const std::vector<uint8_t>& read_secret) = 0;
+    virtual bool SetReadSecret(EncryptionLevel level, const SSL_CIPHER* cipher,
+                               absl::Span<const uint8_t> read_secret) = 0;
 
     // WriteMessage is called when there is |data| from the TLS stack ready for
     // the QUIC stack to write in a crypto frame. The data must be transmitted
@@ -89,6 +87,11 @@ class QUIC_EXPORT_PRIVATE TlsConnection {
 
   // Configure the SSL such that delegate_->InfoCallback will be called.
   void EnableInfoCallback();
+
+  // Configure the SSL to disable session ticket support. Note that, this
+  // function simply sets the |SSL_OP_NO_TICKET| option on the SSL object, it
+  // does not check whether it is too late to do so.
+  void DisableTicketSupport();
 
   // Functions to convert between BoringSSL's enum ssl_encryption_level_t and
   // QUIC's EncryptionLevel.
@@ -128,23 +131,16 @@ class QUIC_EXPORT_PRIVATE TlsConnection {
   static const SSL_QUIC_METHOD kSslQuicMethod;
 
   // The following static functions make up the members of kSslQuicMethod:
-  static int SetReadSecretCallback(SSL* ssl,
-                                   enum ssl_encryption_level_t level,
+  static int SetReadSecretCallback(SSL* ssl, enum ssl_encryption_level_t level,
                                    const SSL_CIPHER* cipher,
-                                   const uint8_t* secret,
-                                   size_t secret_len);
-  static int SetWriteSecretCallback(SSL* ssl,
-                                    enum ssl_encryption_level_t level,
+                                   const uint8_t* secret, size_t secret_len);
+  static int SetWriteSecretCallback(SSL* ssl, enum ssl_encryption_level_t level,
                                     const SSL_CIPHER* cipher,
-                                    const uint8_t* secret,
-                                    size_t secret_len);
-  static int WriteMessageCallback(SSL* ssl,
-                                  enum ssl_encryption_level_t level,
-                                  const uint8_t* data,
-                                  size_t len);
+                                    const uint8_t* secret, size_t secret_len);
+  static int WriteMessageCallback(SSL* ssl, enum ssl_encryption_level_t level,
+                                  const uint8_t* data, size_t len);
   static int FlushFlightCallback(SSL* ssl);
-  static int SendAlertCallback(SSL* ssl,
-                               enum ssl_encryption_level_t level,
+  static int SendAlertCallback(SSL* ssl, enum ssl_encryption_level_t level,
                                uint8_t desc);
 
   Delegate* delegate_;

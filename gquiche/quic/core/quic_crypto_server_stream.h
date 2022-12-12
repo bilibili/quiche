@@ -12,6 +12,7 @@
 #include "gquiche/quic/core/quic_crypto_handshaker.h"
 #include "gquiche/quic/core/quic_crypto_server_stream_base.h"
 #include "gquiche/quic/core/quic_session.h"
+#include "gquiche/quic/core/quic_types.h"
 #include "gquiche/quic/platform/api/quic_export.h"
 
 namespace quic {
@@ -34,9 +35,11 @@ class QUIC_EXPORT_PRIVATE QuicCryptoServerStream
   bool GetBase64SHA256ClientChannelID(std::string* output) const override;
   void SendServerConfigUpdate(
       const CachedNetworkParameters* cached_network_params) override;
+  bool DisableResumption() override;
   bool IsZeroRtt() const override;
   bool IsResumption() const override;
   bool ResumptionAttempted() const override;
+  bool EarlyDataAttempted() const override;
   int NumServerConfigUpdateMessagesSent() const override;
   const CachedNetworkParameters* PreviousCachedNetworkParams() const override;
   void SetPreviousCachedNetworkParams(
@@ -66,11 +69,14 @@ class QUIC_EXPORT_PRIVATE QuicCryptoServerStream
   void SetServerApplicationStateForResumption(
       std::unique_ptr<ApplicationState> state) override;
   size_t BufferSizeLimitForLevel(EncryptionLevel level) const override;
-  bool KeyUpdateSupportedLocally() const override;
   std::unique_ptr<QuicDecrypter> AdvanceKeysAndCreateCurrentOneRttDecrypter()
       override;
   std::unique_ptr<QuicEncrypter> CreateCurrentOneRttEncrypter() override;
   SSL* GetSsl() const override;
+  bool IsCryptoFrameExpectedForEncryptionLevel(
+      EncryptionLevel level) const override;
+  EncryptionLevel GetEncryptionLevelToSendCryptoDataOfSpace(
+      PacketNumberSpace space) const override;
 
   // From QuicCryptoHandshaker
   void OnHandshakeMessage(const CryptoHandshakeMessage& message) override;
@@ -91,10 +97,11 @@ class QUIC_EXPORT_PRIVATE QuicCryptoServerStream
                          QuicCryptoServerStreamBase::Helper* helper);
 
   virtual void ProcessClientHello(
-      QuicReferenceCountedPointer<ValidateClientHelloResultCallback::Result>
+      quiche::QuicheReferenceCountedPointer<
+          ValidateClientHelloResultCallback::Result>
           result,
       std::unique_ptr<ProofSource::Details> proof_source_details,
-      std::unique_ptr<ProcessClientHelloResultCallback> done_cb);
+      std::shared_ptr<ProcessClientHelloResultCallback> done_cb);
 
   // Hook that allows the server to set QuicConfig defaults just
   // before going through the parameter negotiation step.
@@ -127,7 +134,7 @@ class QUIC_EXPORT_PRIVATE QuicCryptoServerStream
     void Cancel();
 
     // From ValidateClientHelloResultCallback
-    void Run(QuicReferenceCountedPointer<Result> result,
+    void Run(quiche::QuicheReferenceCountedPointer<Result> result,
              std::unique_ptr<ProofSource::Details> details) override;
 
    private:
@@ -156,7 +163,8 @@ class QUIC_EXPORT_PRIVATE QuicCryptoServerStream
   // the client hello is complete.  Finishes processing of the client
   // hello message and handles handshake success/failure.
   void FinishProcessingHandshakeMessage(
-      QuicReferenceCountedPointer<ValidateClientHelloResultCallback::Result>
+      quiche::QuicheReferenceCountedPointer<
+          ValidateClientHelloResultCallback::Result>
           result,
       std::unique_ptr<ProofSource::Details> details);
 
@@ -167,8 +175,7 @@ class QUIC_EXPORT_PRIVATE QuicCryptoServerStream
   // ProcessClientHello has been called.
   void FinishProcessingHandshakeMessageAfterProcessClientHello(
       const ValidateClientHelloResultCallback::Result& result,
-      QuicErrorCode error,
-      const std::string& error_details,
+      QuicErrorCode error, const std::string& error_details,
       std::unique_ptr<CryptoHandshakeMessage> reply,
       std::unique_ptr<DiversificationNonce> diversification_nonce,
       std::unique_ptr<ProofSource::Details> proof_source_details);
@@ -197,7 +204,7 @@ class QUIC_EXPORT_PRIVATE QuicCryptoServerStream
 
   // Server's certificate chain and signature of the server config, as provided
   // by ProofSource::GetProof.
-  QuicReferenceCountedPointer<QuicSignedServerConfig> signed_config_;
+  quiche::QuicheReferenceCountedPointer<QuicSignedServerConfig> signed_config_;
 
   // Hash of the last received CHLO message which can be used for generating
   // server config update messages.
@@ -247,7 +254,7 @@ class QUIC_EXPORT_PRIVATE QuicCryptoServerStream
   // ProcessClientHello and forward it to
   // FinishProcessingHandshakeMessageAfterProcessClientHello.  Note that this
   // field is mutually exclusive with validate_client_hello_cb_.
-  ProcessClientHelloCallback* process_client_hello_cb_;
+  std::weak_ptr<ProcessClientHelloCallback> process_client_hello_cb_;
 
   // The ProofSource::Details from this connection.
   std::unique_ptr<ProofSource::Details> proof_source_details_;
@@ -255,9 +262,7 @@ class QUIC_EXPORT_PRIVATE QuicCryptoServerStream
   bool encryption_established_;
   bool one_rtt_keys_available_;
   bool one_rtt_packet_decrypted_;
-  const bool noop_if_disconnected_after_process_chlo_ = GetQuicReloadableFlag(
-      quic_crypto_noop_if_disconnected_after_process_chlo);
-  QuicReferenceCountedPointer<QuicCryptoNegotiatedParameters>
+  quiche::QuicheReferenceCountedPointer<QuicCryptoNegotiatedParameters>
       crypto_negotiated_params_;
 };
 

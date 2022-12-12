@@ -16,7 +16,8 @@
 #include "gquiche/quic/core/quic_datagram_queue.h"
 #include "gquiche/quic/core/quic_types.h"
 #include "gquiche/quic/platform/api/quic_export.h"
-#include "gquiche/spdy/core/spdy_header_block.h"
+#include "gquiche/common/platform/api/quiche_mem_slice.h"
+#include "gquiche/spdy/core/http2_header_block.h"
 
 namespace quic {
 
@@ -93,7 +94,7 @@ class QUIC_EXPORT_PRIVATE WebTransportVisitor {
 
   // Notifies the visitor when the session is ready to exchange application
   // data.
-  virtual void OnSessionReady(const spdy::SpdyHeaderBlock& headers) = 0;
+  virtual void OnSessionReady(const spdy::Http2HeaderBlock& headers) = 0;
 
   // Notifies the visitor when the session has been closed.
   virtual void OnSessionClosed(WebTransportSessionError error_code,
@@ -137,7 +138,8 @@ class QUIC_EXPORT_PRIVATE WebTransportSession {
   virtual WebTransportStream* OpenOutgoingBidirectionalStream() = 0;
   virtual WebTransportStream* OpenOutgoingUnidirectionalStream() = 0;
 
-  virtual MessageStatus SendOrQueueDatagram(QuicMemSlice datagram) = 0;
+  virtual MessageStatus SendOrQueueDatagram(
+      quiche::QuicheMemSlice datagram) = 0;
   // Returns a conservative estimate of the largest datagram size that the
   // session would be able to send.
   virtual QuicByteCount GetMaxDatagramSize() const = 0;

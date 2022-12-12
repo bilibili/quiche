@@ -11,9 +11,11 @@
 
 #include "absl/base/attributes.h"
 #include "gquiche/quic/core/quic_alarm.h"
+#include "gquiche/quic/core/quic_alarm_factory.h"
 #include "gquiche/quic/core/quic_clock.h"
+#include "gquiche/quic/core/quic_connection.h"
 #include "gquiche/quic/core/quic_packet_writer_wrapper.h"
-#include "gquiche/quic/test_tools/quic_test_client.h"
+#include "gquiche/quic/platform/api/quic_mutex.h"
 #include "gquiche/quic/test_tools/quic_test_utils.h"
 
 namespace quic {
@@ -44,8 +46,7 @@ class PacketDroppingTestWriter : public QuicPacketWriterWrapper {
                   std::unique_ptr<Delegate> on_can_write);
 
   // QuicPacketWriter methods:
-  WriteResult WritePacket(const char* buffer,
-                          size_t buf_len,
+  WriteResult WritePacket(const char* buffer, size_t buf_len,
                           const QuicIpAddress& self_address,
                           const QuicSocketAddress& peer_address,
                           PerPacketOptions* options) override;
@@ -138,12 +139,10 @@ class PacketDroppingTestWriter : public QuicPacketWriterWrapper {
   // A single packet which will be sent at the supplied send_time.
   struct DelayedWrite {
    public:
-    DelayedWrite(const char* buffer,
-                 size_t buf_len,
+    DelayedWrite(const char* buffer, size_t buf_len,
                  const QuicIpAddress& self_address,
                  const QuicSocketAddress& peer_address,
-                 std::unique_ptr<PerPacketOptions> options,
-                 QuicTime send_time);
+                 std::unique_ptr<PerPacketOptions> options, QuicTime send_time);
     DelayedWrite(const DelayedWrite&) = delete;
     DelayedWrite(DelayedWrite&&) = default;
     DelayedWrite& operator=(const DelayedWrite&) = delete;

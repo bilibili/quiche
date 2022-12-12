@@ -46,8 +46,7 @@ class Netlink : public NetlinkInterface {
   //
   // This is a synchronous communication. This should not be a problem since the
   // kernel should answer immediately.
-  bool GetAddresses(int interface_index,
-                    uint8_t unwanted_flags,
+  bool GetAddresses(int interface_index, uint8_t unwanted_flags,
                     std::vector<AddressInfo>* addresses,
                     int* num_ipv6_nodad_dadfailed_addresses) override;
 
@@ -59,12 +58,8 @@ class Netlink : public NetlinkInterface {
   // the length of the payload. The caller is responsible for making sure
   // payload bytes are accessible after the RTA header.
   bool ChangeLocalAddress(
-      uint32_t interface_index,
-      Verb verb,
-      const QuicIpAddress& address,
-      uint8_t prefix_length,
-      uint8_t ifa_flags,
-      uint8_t ifa_scope,
+      uint32_t interface_index, Verb verb, const QuicIpAddress& address,
+      uint8_t prefix_length, uint8_t ifa_flags, uint8_t ifa_scope,
       const std::vector<struct rtattr*>& additional_attributes) override;
 
   // Gets the list of routing rules from the main routing table (RT_TABLE_MAIN),
@@ -79,6 +74,8 @@ class Netlink : public NetlinkInterface {
   //
   // preferred_source can be !IsInitialized(), in which case it will be omitted.
   //
+  // init_cwnd will be left unspecified if set to 0.
+  //
   // For Verb::kRemove, rule matching is done by (destination_subnet, scope,
   // preferred_source, interface_index). Return true if a matching rule is
   // found. interface_index can be 0 for wilecard.
@@ -89,12 +86,10 @@ class Netlink : public NetlinkInterface {
   //
   // For Verb::kReplace, rule matching is done by destination_subnet. If no
   // matching rule is found, a new entry will be created.
-  bool ChangeRoute(Netlink::Verb verb,
-                   uint32_t table,
-                   const IpRange& destination_subnet,
-                   uint8_t scope,
-                   QuicIpAddress preferred_source,
-                   int32_t interface_index) override;
+  bool ChangeRoute(Netlink::Verb verb, uint32_t table,
+                   const IpRange& destination_subnet, uint8_t scope,
+                   QuicIpAddress preferred_source, int32_t interface_index,
+                   uint32_t init_cwnd) override;
 
   // Returns the set of all rules in the routing policy database.
   bool GetRuleInfo(std::vector<Netlink::IpRule>* ip_rules) override;

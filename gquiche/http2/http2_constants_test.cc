@@ -4,14 +4,13 @@
 
 #include "gquiche/http2/http2_constants.h"
 
-#include "gquiche/http2/platform/api/http2_test_helpers.h"
 #include "gquiche/common/platform/api/quiche_test.h"
 
 namespace http2 {
 namespace test {
 namespace {
 
-class Http2ConstantsTest : public QuicheTest {};
+class Http2ConstantsTest : public quiche::test::QuicheTest {};
 
 TEST(Http2ConstantsTest, Http2FrameType) {
   EXPECT_EQ(Http2FrameType::DATA, static_cast<Http2FrameType>(0));

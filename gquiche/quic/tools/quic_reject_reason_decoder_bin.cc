@@ -11,6 +11,7 @@
 #include "gquiche/quic/core/crypto/crypto_handshake.h"
 #include "gquiche/quic/core/crypto/crypto_utils.h"
 #include "gquiche/quic/platform/api/quic_flags.h"
+#include "gquiche/common/platform/api/quiche_command_line_flags.h"
 #include "gquiche/common/quiche_text_utils.h"
 
 using quic::CryptoUtils;
@@ -20,7 +21,7 @@ using quic::MAX_FAILURE_REASON;
 int main(int argc, char* argv[]) {
   const char* usage = "Usage: quic_reject_reason_decoder <packed_reason>";
   std::vector<std::string> args =
-      quic::QuicParseCommandLineFlags(usage, argc, argv);
+      quiche::QuicheParseCommandLineFlags(usage, argc, argv);
 
   if (args.size() != 1) {
     std::cerr << usage << std::endl;

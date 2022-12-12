@@ -11,7 +11,6 @@
 #include "gquiche/quic/core/http/quic_header_list.h"
 #include "gquiche/quic/core/quic_packets.h"
 #include "gquiche/quic/core/quic_stream.h"
-#include "gquiche/quic/platform/api/quic_containers.h"
 #include "gquiche/quic/platform/api/quic_export.h"
 #include "gquiche/spdy/core/spdy_framer.h"
 
@@ -39,10 +38,8 @@ class QUIC_EXPORT_PRIVATE QuicHeadersStream : public QuicStream {
   // Release underlying buffer if allowed.
   void MaybeReleaseSequencerBuffer();
 
-  bool OnStreamFrameAcked(QuicStreamOffset offset,
-                          QuicByteCount data_length,
-                          bool fin_acked,
-                          QuicTime::Delta ack_delay_time,
+  bool OnStreamFrameAcked(QuicStreamOffset offset, QuicByteCount data_length,
+                          bool fin_acked, QuicTime::Delta ack_delay_time,
                           QuicTime receive_timestamp,
                           QuicByteCount* newly_acked_length) override;
 
@@ -59,9 +56,9 @@ class QUIC_EXPORT_PRIVATE QuicHeadersStream : public QuicStream {
   // offset in headers stream, unacked length and ack listener of this header.
   struct QUIC_EXPORT_PRIVATE CompressedHeaderInfo {
     CompressedHeaderInfo(
-        QuicStreamOffset headers_stream_offset,
-        QuicStreamOffset full_length,
-        QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener);
+        QuicStreamOffset headers_stream_offset, QuicStreamOffset full_length,
+        quiche::QuicheReferenceCountedPointer<QuicAckListenerInterface>
+            ack_listener);
     CompressedHeaderInfo(const CompressedHeaderInfo& other);
     ~CompressedHeaderInfo();
 
@@ -73,7 +70,8 @@ class QUIC_EXPORT_PRIVATE QuicHeadersStream : public QuicStream {
     QuicByteCount unacked_length;
     // Ack listener of this header, and it is notified once any of the bytes has
     // been acked or retransmitted.
-    QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener;
+    quiche::QuicheReferenceCountedPointer<QuicAckListenerInterface>
+        ack_listener;
   };
 
   // Returns true if the session is still connected.
@@ -83,10 +81,9 @@ class QUIC_EXPORT_PRIVATE QuicHeadersStream : public QuicStream {
   // ack_listener is notified once data within [offset, offset + length] is
   // acked or retransmitted.
   void OnDataBuffered(
-      QuicStreamOffset offset,
-      QuicByteCount data_length,
-      const QuicReferenceCountedPointer<QuicAckListenerInterface>& ack_listener)
-      override;
+      QuicStreamOffset offset, QuicByteCount data_length,
+      const quiche::QuicheReferenceCountedPointer<QuicAckListenerInterface>&
+          ack_listener) override;
 
   QuicSpdySession* spdy_session_;
 

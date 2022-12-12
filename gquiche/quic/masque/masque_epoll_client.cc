@@ -9,17 +9,18 @@
 #include "absl/memory/memory.h"
 #include "gquiche/quic/masque/masque_client_session.h"
 #include "gquiche/quic/masque/masque_utils.h"
+#include "gquiche/quic/tools/quic_name_lookup.h"
 #include "gquiche/quic/tools/quic_url.h"
 
 namespace quic {
 
 MasqueEpollClient::MasqueEpollClient(
     QuicSocketAddress server_address, const QuicServerId& server_id,
-    MasqueMode masque_mode, QuicEpollServer* epoll_server,
+    MasqueMode masque_mode, QuicEventLoop* event_loop,
     std::unique_ptr<ProofVerifier> proof_verifier,
     const std::string& uri_template)
-    : QuicClient(server_address, server_id, MasqueSupportedVersions(),
-                 epoll_server, std::move(proof_verifier)),
+    : QuicDefaultClient(server_address, server_id, MasqueSupportedVersions(),
+                        event_loop, std::move(proof_verifier)),
       masque_mode_(masque_mode),
       uri_template_(uri_template) {}
 
@@ -34,7 +35,7 @@ std::unique_ptr<QuicSession> MasqueEpollClient::CreateQuicClientSession(
 }
 
 MasqueClientSession* MasqueEpollClient::masque_client_session() {
-  return static_cast<MasqueClientSession*>(QuicClient::session());
+  return static_cast<MasqueClientSession*>(QuicDefaultClient::session());
 }
 
 QuicConnectionId MasqueEpollClient::connection_id() {
@@ -49,8 +50,7 @@ std::string MasqueEpollClient::authority() const {
 // static
 std::unique_ptr<MasqueEpollClient> MasqueEpollClient::Create(
     const std::string& uri_template, MasqueMode masque_mode,
-    QuicEpollServer* epoll_server,
-    std::unique_ptr<ProofVerifier> proof_verifier) {
+    QuicEventLoop* event_loop, std::unique_ptr<ProofVerifier> proof_verifier) {
   QuicUrl url(uri_template);
   std::string host = url.host();
   uint16_t port = url.port();
@@ -65,7 +65,7 @@ std::unique_ptr<MasqueEpollClient> MasqueEpollClient::Create(
   // std::make_unique<MasqueEpollClient>(...) because the constructor for
   // MasqueEpollClient is private and therefore not accessible from make_unique.
   auto masque_client = absl::WrapUnique(
-      new MasqueEpollClient(addr, server_id, masque_mode, epoll_server,
+      new MasqueEpollClient(addr, server_id, masque_mode, event_loop,
                             std::move(proof_verifier), uri_template));
 
   if (masque_client == nullptr) {
@@ -91,66 +91,16 @@ std::unique_ptr<MasqueEpollClient> MasqueEpollClient::Create(
     return nullptr;
   }
 
-  if (masque_client->masque_mode() == MasqueMode::kLegacy) {
-    // Construct the legacy mode init request.
-    spdy::Http2HeaderBlock header_block;
-    header_block[":method"] = "POST";
-    header_block[":scheme"] = "https";
-    header_block[":authority"] = masque_client->authority();
-    header_block[":path"] = "/.well-known/masque/init";
-    std::string body = "foo";
-
-    // Make sure to store the response, for later output.
-    masque_client->set_store_response(true);
-
-    // Send the MASQUE init command.
-    masque_client->SendRequestAndWaitForResponse(header_block, body,
-                                                 /*fin=*/true);
-
-    if (!masque_client->connected()) {
-      QUIC_LOG(ERROR)
-          << "MASQUE init request caused connection failure. Error: "
-          << QuicErrorCodeToString(masque_client->session()->error());
-      return nullptr;
-    }
-
-    const int response_code = masque_client->latest_response_code();
-    if (response_code != 200) {
-      QUIC_LOG(ERROR) << "MASQUE init request failed with HTTP response code "
-                      << response_code;
-      return nullptr;
-    }
-  }
   return masque_client;
 }
 
-void MasqueEpollClient::OnSettingsReceived() {
-  settings_received_ = true;
-}
+void MasqueEpollClient::OnSettingsReceived() { settings_received_ = true; }
 
 bool MasqueEpollClient::WaitUntilSettingsReceived() {
   while (connected() && !settings_received_) {
     network_helper()->RunEventLoop();
   }
   return connected() && settings_received_;
-}
-
-void MasqueEpollClient::UnregisterClientConnectionId(
-    QuicConnectionId client_connection_id) {
-  std::string body(client_connection_id.data(), client_connection_id.length());
-
-  // Construct a GET or POST request for supplied URL.
-  spdy::Http2HeaderBlock header_block;
-  header_block[":method"] = "POST";
-  header_block[":scheme"] = "https";
-  header_block[":authority"] = authority();
-  header_block[":path"] = "/.well-known/masque/unregister";
-
-  // Make sure to store the response, for later output.
-  set_store_response(true);
-
-  // Send the MASQUE unregister command.
-  SendRequest(header_block, body, /*fin=*/true);
 }
 
 }  // namespace quic

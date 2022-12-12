@@ -10,21 +10,17 @@
 namespace quic {
 
 QuicSimpleDispatcher::QuicSimpleDispatcher(
-    const QuicConfig* config,
-    const QuicCryptoServerConfig* crypto_config,
+    const QuicConfig* config, const QuicCryptoServerConfig* crypto_config,
     QuicVersionManager* version_manager,
     std::unique_ptr<QuicConnectionHelperInterface> helper,
     std::unique_ptr<QuicCryptoServerStreamBase::Helper> session_helper,
     std::unique_ptr<QuicAlarmFactory> alarm_factory,
     QuicSimpleServerBackend* quic_simple_server_backend,
-    uint8_t expected_server_connection_id_length)
-    : QuicDispatcher(config,
-                     crypto_config,
-                     version_manager,
-                     std::move(helper),
-                     std::move(session_helper),
-                     std::move(alarm_factory),
-                     expected_server_connection_id_length),
+    uint8_t expected_server_connection_id_length,
+    ConnectionIdGeneratorInterface& generator)
+    : QuicDispatcher(config, crypto_config, version_manager, std::move(helper),
+                     std::move(session_helper), std::move(alarm_factory),
+                     expected_server_connection_id_length, generator),
       quic_simple_server_backend_(quic_simple_server_backend) {}
 
 QuicSimpleDispatcher::~QuicSimpleDispatcher() = default;
@@ -54,11 +50,11 @@ std::unique_ptr<QuicSession> QuicSimpleDispatcher::CreateQuicSession(
     const ParsedQuicVersion& version,
     const ParsedClientHello& /*parsed_chlo*/) {
   // The QuicServerSessionBase takes ownership of |connection| below.
-  QuicConnection* connection =
-      new QuicConnection(connection_id, self_address, peer_address, helper(),
-                         alarm_factory(), writer(),
-                         /* owns_writer= */ false, Perspective::IS_SERVER,
-                         ParsedQuicVersionVector{version});
+  QuicConnection* connection = new QuicConnection(
+      connection_id, self_address, peer_address, helper(), alarm_factory(),
+      writer(),
+      /* owns_writer= */ false, Perspective::IS_SERVER,
+      ParsedQuicVersionVector{version}, connection_id_generator());
 
   auto session = std::make_unique<QuicSimpleServerSession>(
       config(), GetSupportedVersions(), connection, this, session_helper(),

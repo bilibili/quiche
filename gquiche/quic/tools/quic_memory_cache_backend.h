@@ -13,11 +13,11 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/strings/string_view.h"
 #include "gquiche/quic/core/http/spdy_utils.h"
-#include "gquiche/quic/platform/api/quic_containers.h"
 #include "gquiche/quic/platform/api/quic_mutex.h"
 #include "gquiche/quic/tools/quic_backend_response.h"
 #include "gquiche/quic/tools/quic_simple_server_backend.h"
 #include "gquiche/quic/tools/quic_url.h"
+#include "gquiche/spdy/core/http2_header_block.h"
 #include "gquiche/spdy/core/spdy_framer.h"
 
 namespace quic {
@@ -81,10 +81,8 @@ class QuicMemoryCacheBackend : public QuicSimpleServerBackend {
 
   // Adds a simple response to the cache.  The response headers will
   // only contain the "content-length" header with the length of |body|.
-  void AddSimpleResponse(absl::string_view host,
-                         absl::string_view path,
-                         int response_code,
-                         absl::string_view body);
+  void AddSimpleResponse(absl::string_view host, absl::string_view path,
+                         int response_code, absl::string_view body);
 
   // Add a simple response to the cache as AddSimpleResponse() does, and add
   // some server push resources(resource path, corresponding response status and
@@ -92,45 +90,42 @@ class QuicMemoryCacheBackend : public QuicSimpleServerBackend {
   // Push resource implicitly come from the same host.
   // TODO(b/171463363): Remove.
   void AddSimpleResponseWithServerPushResources(
-      absl::string_view host,
-      absl::string_view path,
-      int response_code,
+      absl::string_view host, absl::string_view path, int response_code,
       absl::string_view body,
       std::list<QuicBackendResponse::ServerPushInfo> push_resources);
 
   // Add a response to the cache.
-  void AddResponse(absl::string_view host,
-                   absl::string_view path,
+  void AddResponse(absl::string_view host, absl::string_view path,
                    spdy::Http2HeaderBlock response_headers,
                    absl::string_view response_body);
 
   // Add a response, with trailers, to the cache.
-  void AddResponse(absl::string_view host,
-                   absl::string_view path,
+  void AddResponse(absl::string_view host, absl::string_view path,
                    spdy::Http2HeaderBlock response_headers,
                    absl::string_view response_body,
                    spdy::Http2HeaderBlock response_trailers);
 
   // Add a response, with 103 Early Hints, to the cache.
   void AddResponseWithEarlyHints(
-      absl::string_view host,
-      absl::string_view path,
-      spdy::Http2HeaderBlock response_headers,
-      absl::string_view response_body,
+      absl::string_view host, absl::string_view path,
+      spdy::Http2HeaderBlock response_headers, absl::string_view response_body,
       const std::vector<spdy::Http2HeaderBlock>& early_hints);
 
   // Simulate a special behavior at a particular path.
   void AddSpecialResponse(
-      absl::string_view host,
-      absl::string_view path,
+      absl::string_view host, absl::string_view path,
       QuicBackendResponse::SpecialResponseType response_type);
 
   void AddSpecialResponse(
-      absl::string_view host,
-      absl::string_view path,
-      spdy::Http2HeaderBlock response_headers,
-      absl::string_view response_body,
+      absl::string_view host, absl::string_view path,
+      spdy::Http2HeaderBlock response_headers, absl::string_view response_body,
       QuicBackendResponse::SpecialResponseType response_type);
+
+  // Finds a response with the given host and path, and assign it a simulated
+  // delay. Returns true if the requisite response was found and the delay was
+  // set.
+  bool SetResponseDelay(absl::string_view host, absl::string_view path,
+                        QuicTime::Delta delay);
 
   // Sets a default response in case of cache misses.  Takes ownership of
   // 'response'.
@@ -154,17 +149,16 @@ class QuicMemoryCacheBackend : public QuicSimpleServerBackend {
   void FetchResponseFromBackend(
       const spdy::Http2HeaderBlock& request_headers,
       const std::string& request_body,
-      QuicSimpleServerBackend::RequestHandler* quic_server_stream) override;
+      QuicSimpleServerBackend::RequestHandler* quic_stream) override;
   void CloseBackendResponseStream(
-      QuicSimpleServerBackend::RequestHandler* quic_server_stream) override;
+      QuicSimpleServerBackend::RequestHandler* quic_stream) override;
   WebTransportResponse ProcessWebTransportRequest(
       const spdy::Http2HeaderBlock& request_headers,
       WebTransportSession* session) override;
   bool SupportsWebTransport() override { return enable_webtransport_; }
 
  private:
-  void AddResponseImpl(absl::string_view host,
-                       absl::string_view path,
+  void AddResponseImpl(absl::string_view host, absl::string_view path,
                        QuicBackendResponse::SpecialResponseType response_type,
                        spdy::Http2HeaderBlock response_headers,
                        absl::string_view response_body,
@@ -177,8 +171,7 @@ class QuicMemoryCacheBackend : public QuicSimpleServerBackend {
   // request if these push resources are not associated with this request yet.
   // TODO(b/171463363): Remove.
   void MaybeAddServerPushResources(
-      absl::string_view request_host,
-      absl::string_view request_path,
+      absl::string_view request_host, absl::string_view request_path,
       std::list<QuicBackendResponse::ServerPushInfo> push_resources);
 
   // Check if push resource(push_host/push_path) associated with given request

@@ -6,8 +6,8 @@
 
 #include <utility>
 
-#include "gquiche/http2/http2_structures_test_util.h"
-#include "gquiche/http2/platform/api/http2_logging.h"
+#include "gquiche/http2/test_tools/http2_structures_test_util.h"
+#include "gquiche/common/platform/api/quiche_logging.h"
 #include "gquiche/common/platform/api/quiche_test.h"
 
 namespace http2 {

@@ -6,9 +6,8 @@
 
 #include <functional>
 
-#include "gquiche/http2/platform/api/http2_logging.h"
-#include "gquiche/http2/platform/api/http2_test_helpers.h"
 #include "gquiche/http2/test_tools/http2_random.h"
+#include "gquiche/common/platform/api/quiche_logging.h"
 #include "gquiche/common/platform/api/quiche_test.h"
 
 namespace http2 {
@@ -44,7 +43,7 @@ struct TestStruct {
   TestEnum8 f8;
 };
 
-class DecodeBufferTest : public QuicheTest {
+class DecodeBufferTest : public quiche::test::QuicheTest {
  protected:
   Http2Random random_;
   uint32_t decode_offset_;
@@ -125,16 +124,16 @@ TEST_F(DecodeBufferTest, DecodeBufferSubsetAdvancesCursor) {
 // Make sure that DecodeBuffer ctor complains about bad args.
 #if GTEST_HAS_DEATH_TEST && !defined(NDEBUG)
 TEST(DecodeBufferDeathTest, NonNullBufferRequired) {
-  EXPECT_DEBUG_DEATH({ DecodeBuffer b(nullptr, 3); }, "nullptr");
+  EXPECT_QUICHE_DEBUG_DEATH({ DecodeBuffer b(nullptr, 3); }, "nullptr");
 }
 
 // Make sure that DecodeBuffer ctor complains about bad args.
 TEST(DecodeBufferDeathTest, ModestBufferSizeRequired) {
-  EXPECT_DEBUG_DEATH(
+  EXPECT_QUICHE_DEBUG_DEATH(
       {
-        const char data[] = "abc";
-        size_t len = 0;
-        DecodeBuffer b(data, ~len);
+        constexpr size_t kLength = DecodeBuffer::kMaxDecodeBufferLength + 1;
+        auto data = std::make_unique<char[]>(kLength);
+        DecodeBuffer b(data.get(), kLength);
       },
       "Max.*Length");
 }
@@ -148,14 +147,14 @@ TEST(DecodeBufferDeathTest, LimitedAdvance) {
     b.AdvanceCursor(3);  // OK
     EXPECT_TRUE(b.Empty());
   }
-  EXPECT_DEBUG_DEATH(
+  EXPECT_QUICHE_DEBUG_DEATH(
       {
         // Going beyond is not OK.
         const char data[] = "abc";
         DecodeBuffer b(data, 3);
         b.AdvanceCursor(4);
       },
-      "4 vs. 3");
+      "Remaining");
 }
 
 // Make sure that DecodeBuffer detects decode beyond end, in debug mode.
@@ -164,7 +163,7 @@ TEST(DecodeBufferDeathTest, DecodeUInt8PastEnd) {
   DecodeBuffer b(data, sizeof data);
   EXPECT_EQ(2u, b.FullSize());
   EXPECT_EQ(0x1223, b.DecodeUInt16());
-  EXPECT_DEBUG_DEATH({ b.DecodeUInt8(); }, "1 vs. 0");
+  EXPECT_QUICHE_DEBUG_DEATH({ b.DecodeUInt8(); }, "Remaining");
 }
 
 // Make sure that DecodeBuffer detects decode beyond end, in debug mode.
@@ -173,7 +172,7 @@ TEST(DecodeBufferDeathTest, DecodeUInt16OverEnd) {
   DecodeBuffer b(data, sizeof data);
   EXPECT_EQ(3u, b.FullSize());
   EXPECT_EQ(0x1223, b.DecodeUInt16());
-  EXPECT_DEBUG_DEATH({ b.DecodeUInt16(); }, "2 vs. 1");
+  EXPECT_QUICHE_DEBUG_DEATH({ b.DecodeUInt16(); }, "Remaining");
 }
 
 // Make sure that DecodeBuffer doesn't agree with having two subsets.
@@ -181,8 +180,8 @@ TEST(DecodeBufferSubsetDeathTest, TwoSubsets) {
   const char data[] = "abc";
   DecodeBuffer base(data, 3);
   DecodeBufferSubset subset1(&base, 1);
-  EXPECT_DEBUG_DEATH({ DecodeBufferSubset subset2(&base, 1); },
-                     "There is already a subset");
+  EXPECT_QUICHE_DEBUG_DEATH({ DecodeBufferSubset subset2(&base, 1); },
+                            "There is already a subset");
 }
 
 // Make sure that DecodeBufferSubset notices when the base's cursor has moved.
@@ -190,7 +189,7 @@ TEST(DecodeBufferSubsetDeathTest, BaseCursorAdvanced) {
   const char data[] = "abc";
   DecodeBuffer base(data, 3);
   base.AdvanceCursor(1);
-  EXPECT_DEBUG_DEATH(
+  EXPECT_QUICHE_DEBUG_DEATH(
       {
         DecodeBufferSubset subset1(&base, 2);
         base.AdvanceCursor(1);

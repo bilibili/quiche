@@ -4,10 +4,10 @@
 
 #include "gquiche/http2/core/priority_write_scheduler.h"
 
+#include "gquiche/common/platform/api/quiche_expect_bug.h"
 #include "gquiche/common/platform/api/quiche_test.h"
-#include "gquiche/common/platform/api/quiche_test_helpers.h"
 #include "gquiche/spdy/core/spdy_protocol.h"
-#include "gquiche/spdy/core/spdy_test_utils.h"
+#include "gquiche/spdy/test_tools/spdy_test_utils.h"
 
 namespace http2 {
 namespace test {
@@ -35,7 +35,7 @@ class PriorityWriteSchedulerPeer {
 
 namespace {
 
-class PriorityWriteSchedulerTest : public QuicheTest {
+class PriorityWriteSchedulerTest : public quiche::test::QuicheTest {
  public:
   PriorityWriteSchedulerTest() : peer_(&scheduler_) {}
 

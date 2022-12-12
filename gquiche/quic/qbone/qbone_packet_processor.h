@@ -106,17 +106,16 @@ class QbonePacketProcessor {
     // for filtering from the |ipv6_header| argument.  All of those assume that
     // the header is of valid size, which is true for everything passed into
     // FilterPacket().
-    inline uint8_t TransportProtocolFromHeader(absl::string_view ipv6_header) {
+    uint8_t TransportProtocolFromHeader(absl::string_view ipv6_header) {
       return ipv6_header[6];
     }
-    inline QuicIpAddress SourceIpFromHeader(absl::string_view ipv6_header) {
+    QuicIpAddress SourceIpFromHeader(absl::string_view ipv6_header) {
       QuicIpAddress address;
       address.FromPackedString(&ipv6_header[8],
                                QuicIpAddress::kIPv6AddressSize);
       return address;
     }
-    inline QuicIpAddress DestinationIpFromHeader(
-        absl::string_view ipv6_header) {
+    QuicIpAddress DestinationIpFromHeader(absl::string_view ipv6_header) {
       QuicIpAddress address;
       address.FromPackedString(&ipv6_header[24],
                                QuicIpAddress::kIPv6AddressSize);
@@ -132,10 +131,8 @@ class QbonePacketProcessor {
   // |output| gets notified whenever the processor decides to send a packet, and
   // |stats| gets notified about any decisions that processor makes, without a
   // reference to which packet that decision was made about.
-  QbonePacketProcessor(QuicIpAddress self_ip,
-                       QuicIpAddress client_ip,
-                       size_t client_ip_subnet_length,
-                       OutputInterface* output,
+  QbonePacketProcessor(QuicIpAddress self_ip, QuicIpAddress client_ip,
+                       size_t client_ip_subnet_length, OutputInterface* output,
                        StatsInterface* stats);
   QbonePacketProcessor(const QbonePacketProcessor&) = delete;
   QbonePacketProcessor& operator=(const QbonePacketProcessor&) = delete;
@@ -173,7 +170,7 @@ class QbonePacketProcessor {
   void SendTcpReset(absl::string_view original_packet,
                     Direction original_direction);
 
-  inline bool IsValid() const { return client_ip_ != kInvalidIpAddress; }
+  bool IsValid() const { return client_ip_ != kInvalidIpAddress; }
 
   // IP address of the server.  Used to send ICMP messages.
   in6_addr self_ip_;
@@ -188,8 +185,7 @@ class QbonePacketProcessor {
  private:
   // Performs basic sanity and permission checks on the packet, and decreases
   // the TTL.
-  ProcessingResult ProcessIPv6Header(std::string* packet,
-                                     Direction direction,
+  ProcessingResult ProcessIPv6Header(std::string* packet, Direction direction,
                                      uint8_t* transport_protocol,
                                      char** transport_data,
                                      icmp6_hdr* icmp_header);

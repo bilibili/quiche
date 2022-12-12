@@ -22,8 +22,8 @@ constexpr size_t kQpackEntrySizeOverhead = spdy::kHpackEntrySizeOverhead;
 
 // Encoder needs pointer stability for |dynamic_index_| and
 // |dynamic_name_index_|.  However, it does not need random access.
-// TODO(b/182349990): Change to a more memory efficient container.
-using QpackEncoderDynamicTable = std::deque<QpackEntry>;
+using QpackEncoderDynamicTable =
+    quiche::QuicheCircularDeque<std::unique_ptr<QpackEntry>>;
 
 // Decoder needs random access for LookupEntry().
 // However, it does not need pointer stability.
@@ -149,15 +149,35 @@ QpackHeaderTableBase<DynamicEntryTable>::QpackHeaderTableBase()
 
 template <typename DynamicEntryTable>
 bool QpackHeaderTableBase<DynamicEntryTable>::EntryFitsDynamicTableCapacity(
-    absl::string_view name,
-    absl::string_view value) const {
+    absl::string_view name, absl::string_view value) const {
   return QpackEntry::Size(name, value) <= dynamic_table_capacity_;
 }
 
+namespace internal {
+
+QUIC_NO_EXPORT inline size_t GetSize(const QpackEntry& entry) {
+  return entry.Size();
+}
+
+QUIC_NO_EXPORT inline size_t GetSize(const std::unique_ptr<QpackEntry>& entry) {
+  return entry->Size();
+}
+
+QUIC_NO_EXPORT inline std::unique_ptr<QpackEntry> NewEntry(
+    std::string name, std::string value, QpackEncoderDynamicTable& /*t*/) {
+  return std::make_unique<QpackEntry>(std::move(name), std::move(value));
+}
+
+QUIC_NO_EXPORT inline QpackEntry NewEntry(std::string name, std::string value,
+                                          QpackDecoderDynamicTable& /*t*/) {
+  return QpackEntry{std::move(name), std::move(value)};
+}
+
+}  // namespace internal
+
 template <typename DynamicEntryTable>
 uint64_t QpackHeaderTableBase<DynamicEntryTable>::InsertEntry(
-    absl::string_view name,
-    absl::string_view value) {
+    absl::string_view name, absl::string_view value) {
   QUICHE_DCHECK(EntryFitsDynamicTableCapacity(name, value));
 
   const uint64_t index = dropped_entry_count_ + dynamic_entries_.size();
@@ -165,9 +185,9 @@ uint64_t QpackHeaderTableBase<DynamicEntryTable>::InsertEntry(
   // Copy name and value before modifying the container, because evicting
   // entries or even inserting a new one might invalidate |name| or |value| if
   // they point to an entry.
-  QpackEntry new_entry((std::string(name)), (std::string(value)));
-  const size_t entry_size = new_entry.Size();
-
+  auto new_entry = internal::NewEntry(std::string(name), std::string(value),
+                                      dynamic_entries_);
+  const size_t entry_size = internal::GetSize(new_entry);
   EvictDownToCapacity(dynamic_table_capacity_ - entry_size);
 
   dynamic_table_size_ += entry_size;
@@ -205,7 +225,7 @@ bool QpackHeaderTableBase<DynamicEntryTable>::SetMaximumDynamicTableCapacity(
 
 template <typename DynamicEntryTable>
 void QpackHeaderTableBase<DynamicEntryTable>::RemoveEntryFromEnd() {
-  const uint64_t entry_size = dynamic_entries_.front().Size();
+  const uint64_t entry_size = internal::GetSize(dynamic_entries_.front());
   QUICHE_DCHECK_GE(dynamic_table_size_, entry_size);
   dynamic_table_size_ -= entry_size;
 
@@ -237,10 +257,8 @@ class QUIC_EXPORT_PRIVATE QpackEncoderHeaderTable
   // Returns the absolute index of an entry with matching name and value if such
   // exists, otherwise one with matching name is such exists.  |index| is zero
   // based for both the static and the dynamic table.
-  MatchType FindHeaderField(absl::string_view name,
-                            absl::string_view value,
-                            bool* is_static,
-                            uint64_t* index) const;
+  MatchType FindHeaderField(absl::string_view name, absl::string_view value,
+                            bool* is_static, uint64_t* index) const;
 
   // Returns the size of the largest entry that could be inserted into the
   // dynamic table without evicting entry |index|.  |index| might be larger than

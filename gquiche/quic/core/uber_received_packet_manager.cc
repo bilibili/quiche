@@ -38,8 +38,7 @@ bool UberReceivedPacketManager::IsAwaitingPacket(
 }
 
 const QuicFrame UberReceivedPacketManager::GetUpdatedAckFrame(
-    PacketNumberSpace packet_number_space,
-    QuicTime approximate_now) {
+    PacketNumberSpace packet_number_space, QuicTime approximate_now) {
   if (!supports_multiple_packet_number_spaces_) {
     return received_packet_managers_[0].GetUpdatedAckFrame(approximate_now);
   }
@@ -48,8 +47,7 @@ const QuicFrame UberReceivedPacketManager::GetUpdatedAckFrame(
 }
 
 void UberReceivedPacketManager::RecordPacketReceived(
-    EncryptionLevel decrypted_packet_level,
-    const QuicPacketHeader& header,
+    EncryptionLevel decrypted_packet_level, const QuicPacketHeader& header,
     QuicTime receipt_time) {
   if (!supports_multiple_packet_number_spaces_) {
     received_packet_managers_[0].RecordPacketReceived(header, receipt_time);
@@ -61,8 +59,7 @@ void UberReceivedPacketManager::RecordPacketReceived(
 }
 
 void UberReceivedPacketManager::DontWaitForPacketsBefore(
-    EncryptionLevel decrypted_packet_level,
-    QuicPacketNumber least_unacked) {
+    EncryptionLevel decrypted_packet_level, QuicPacketNumber least_unacked) {
   if (!supports_multiple_packet_number_spaces_) {
     received_packet_managers_[0].DontWaitForPacketsBefore(least_unacked);
     return;
@@ -76,18 +73,19 @@ void UberReceivedPacketManager::MaybeUpdateAckTimeout(
     bool should_last_packet_instigate_acks,
     EncryptionLevel decrypted_packet_level,
     QuicPacketNumber last_received_packet_number,
-    QuicTime now,
+    QuicTime last_packet_receipt_time, QuicTime now,
     const RttStats* rtt_stats) {
   if (!supports_multiple_packet_number_spaces_) {
     received_packet_managers_[0].MaybeUpdateAckTimeout(
-        should_last_packet_instigate_acks, last_received_packet_number, now,
-        rtt_stats);
+        should_last_packet_instigate_acks, last_received_packet_number,
+        last_packet_receipt_time, now, rtt_stats);
     return;
   }
   received_packet_managers_[QuicUtils::GetPacketNumberSpace(
                                 decrypted_packet_level)]
       .MaybeUpdateAckTimeout(should_last_packet_instigate_acks,
-                             last_received_packet_number, now, rtt_stats);
+                             last_received_packet_number,
+                             last_packet_receipt_time, now, rtt_stats);
 }
 
 void UberReceivedPacketManager::ResetAckStates(
@@ -228,7 +226,8 @@ void UberReceivedPacketManager::set_max_ack_ranges(size_t max_ack_ranges) {
 
 void UberReceivedPacketManager::set_save_timestamps(bool save_timestamps) {
   for (auto& received_packet_manager : received_packet_managers_) {
-    received_packet_manager.set_save_timestamps(save_timestamps);
+    received_packet_manager.set_save_timestamps(
+        save_timestamps, supports_multiple_packet_number_spaces_);
   }
 }
 

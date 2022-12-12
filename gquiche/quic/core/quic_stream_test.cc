@@ -24,7 +24,6 @@
 #include "gquiche/quic/platform/api/quic_expect_bug.h"
 #include "gquiche/quic/platform/api/quic_flags.h"
 #include "gquiche/quic/platform/api/quic_logging.h"
-#include "gquiche/quic/platform/api/quic_mem_slice_storage.h"
 #include "gquiche/quic/platform/api/quic_test.h"
 #include "gquiche/quic/test_tools/quic_config_peer.h"
 #include "gquiche/quic/test_tools/quic_connection_peer.h"
@@ -33,6 +32,7 @@
 #include "gquiche/quic/test_tools/quic_stream_peer.h"
 #include "gquiche/quic/test_tools/quic_stream_sequencer_peer.h"
 #include "gquiche/quic/test_tools/quic_test_utils.h"
+#include "gquiche/common/quiche_mem_slice_storage.h"
 
 using testing::_;
 using testing::AnyNumber;
@@ -159,9 +159,8 @@ class QuicStreamTest : public QuicTestWithParam<ParsedQuicVersion> {
   QuicWriteBlockedList* write_blocked_list_;
   QuicTime::Delta zero_;
   ParsedQuicVersionVector supported_versions_;
-  QuicStreamId kTestStreamId =
-      GetNthClientInitiatedBidirectionalStreamId(GetParam().transport_version,
-                                                 1);
+  QuicStreamId kTestStreamId = GetNthClientInitiatedBidirectionalStreamId(
+      GetParam().transport_version, 1);
   const QuicStreamId kTestPendingStreamId =
       GetNthClientInitiatedUnidirectionalStreamId(GetParam().transport_version,
                                                   1);
@@ -347,8 +346,8 @@ TEST_P(QuicStreamTest, WriteAllData) {
               connection_->transport_version(), PACKET_8BYTE_CONNECTION_ID,
               PACKET_0BYTE_CONNECTION_ID, !kIncludeVersion,
               !kIncludeDiversificationNonce, PACKET_4BYTE_PACKET_NUMBER,
-              VARIABLE_LENGTH_INTEGER_LENGTH_0,
-              VARIABLE_LENGTH_INTEGER_LENGTH_0, 0u);
+              quiche::VARIABLE_LENGTH_INTEGER_LENGTH_0,
+              quiche::VARIABLE_LENGTH_INTEGER_LENGTH_0, 0u);
   connection_->SetMaxPacketLength(length);
 
   EXPECT_CALL(*session_, WritevData(kTestStreamId, _, _, _, _, _))
@@ -432,8 +431,8 @@ TEST_P(QuicStreamTest, WriteOrBufferData) {
               connection_->transport_version(), PACKET_8BYTE_CONNECTION_ID,
               PACKET_0BYTE_CONNECTION_ID, !kIncludeVersion,
               !kIncludeDiversificationNonce, PACKET_4BYTE_PACKET_NUMBER,
-              VARIABLE_LENGTH_INTEGER_LENGTH_0,
-              VARIABLE_LENGTH_INTEGER_LENGTH_0, 0u);
+              quiche::VARIABLE_LENGTH_INTEGER_LENGTH_0,
+              quiche::VARIABLE_LENGTH_INTEGER_LENGTH_0, 0u);
   connection_->SetMaxPacketLength(length);
 
   EXPECT_CALL(*session_, WritevData(_, _, _, _, _, _))
@@ -481,9 +480,13 @@ TEST_P(QuicStreamTest, WriteOrBufferDataReachStreamLimit) {
       .WillOnce(Invoke(session_.get(), &MockQuicSession::ConsumeData));
   stream_->WriteOrBufferData(data, false, nullptr);
   EXPECT_TRUE(session_->HasUnackedStreamData());
-  EXPECT_CALL(*connection_, CloseConnection(QUIC_STREAM_LENGTH_OVERFLOW, _, _));
-  EXPECT_QUIC_BUG(stream_->WriteOrBufferData("a", false, nullptr),
-                  "Write too many data via stream");
+  EXPECT_QUIC_BUG(
+      {
+        EXPECT_CALL(*connection_,
+                    CloseConnection(QUIC_STREAM_LENGTH_OVERFLOW, _, _));
+        stream_->WriteOrBufferData("a", false, nullptr);
+      },
+      "Write too many data via stream");
 }
 
 TEST_P(QuicStreamTest, ConnectionCloseAfterStreamClose) {
@@ -790,11 +793,14 @@ TEST_P(QuicStreamTest, OnStreamFrameUpperLimit) {
 
 TEST_P(QuicStreamTest, StreamTooLong) {
   Initialize();
-  EXPECT_CALL(*connection_, CloseConnection(QUIC_STREAM_LENGTH_OVERFLOW, _, _))
-      .Times(1);
   QuicStreamFrame stream_frame(stream_->id(), false, kMaxStreamLength, ".");
   EXPECT_QUIC_PEER_BUG(
-      stream_->OnStreamFrame(stream_frame),
+      {
+        EXPECT_CALL(*connection_,
+                    CloseConnection(QUIC_STREAM_LENGTH_OVERFLOW, _, _))
+            .Times(1);
+        stream_->OnStreamFrame(stream_frame);
+      },
       absl::StrCat("Receive stream frame on stream ", stream_->id(),
                    " reaches max stream length"));
 }
@@ -1171,7 +1177,7 @@ TEST_P(QuicStreamTest, WriteBufferedData) {
   EXPECT_CALL(*session_, WritevData(_, _, _, _, _, _))
       .WillOnce(Return(QuicConsumedData(0, false)));
   struct iovec iov = {const_cast<char*>(data.data()), data.length()};
-  QuicMemSliceStorage storage(
+  quiche::QuicheMemSliceStorage storage(
       &iov, 1, session_->connection()->helper()->GetStreamSendBufferAllocator(),
       1024);
   QuicConsumedData consumed = stream_->WriteMemSlices(storage.ToSpan(), false);
@@ -1184,7 +1190,7 @@ TEST_P(QuicStreamTest, WriteBufferedData) {
   EXPECT_FALSE(stream_->CanWriteNewData());
 
   EXPECT_CALL(*session_, WritevData(_, _, _, _, _, _)).Times(0);
-  QuicMemSliceStorage storage2(
+  quiche::QuicheMemSliceStorage storage2(
       &iov, 1, session_->connection()->helper()->GetStreamSendBufferAllocator(),
       1024);
   consumed = stream_->WriteMemSlices(storage2.ToSpan(), false);
@@ -1210,7 +1216,7 @@ TEST_P(QuicStreamTest, WriteBufferedData) {
 
   EXPECT_CALL(*session_, WritevData(_, _, _, _, _, _)).Times(0);
   // All data can be consumed as buffered data is below upper limit.
-  QuicMemSliceStorage storage3(
+  quiche::QuicheMemSliceStorage storage3(
       &iov, 1, session_->connection()->helper()->GetStreamSendBufferAllocator(),
       1024);
   consumed = stream_->WriteMemSlices(storage3.ToSpan(), false);
@@ -1229,18 +1235,22 @@ TEST_P(QuicStreamTest, WritevDataReachStreamLimit) {
   EXPECT_CALL(*session_, WritevData(_, _, _, _, _, _))
       .WillOnce(Invoke(session_.get(), &MockQuicSession::ConsumeData));
   struct iovec iov = {const_cast<char*>(data.data()), 5u};
-  QuicMemSliceStorage storage(
+  quiche::QuicheMemSliceStorage storage(
       &iov, 1, session_->connection()->helper()->GetStreamSendBufferAllocator(),
       1024);
   QuicConsumedData consumed = stream_->WriteMemSlices(storage.ToSpan(), false);
   EXPECT_EQ(data.length(), consumed.bytes_consumed);
   struct iovec iov2 = {const_cast<char*>(data.data()), 1u};
-  QuicMemSliceStorage storage2(
+  quiche::QuicheMemSliceStorage storage2(
       &iov2, 1,
       session_->connection()->helper()->GetStreamSendBufferAllocator(), 1024);
-  EXPECT_CALL(*connection_, CloseConnection(QUIC_STREAM_LENGTH_OVERFLOW, _, _));
-  EXPECT_QUIC_BUG(stream_->WriteMemSlices(storage2.ToSpan(), false),
-                  "Write too many data via stream");
+  EXPECT_QUIC_BUG(
+      {
+        EXPECT_CALL(*connection_,
+                    CloseConnection(QUIC_STREAM_LENGTH_OVERFLOW, _, _));
+        stream_->WriteMemSlices(storage2.ToSpan(), false);
+      },
+      "Write too many data via stream");
 }
 
 TEST_P(QuicStreamTest, WriteMemSlices) {
@@ -1249,16 +1259,20 @@ TEST_P(QuicStreamTest, WriteMemSlices) {
 
   Initialize();
   constexpr QuicByteCount kDataSize = 1024;
-  QuicBufferAllocator* allocator =
+  quiche::QuicheBufferAllocator* allocator =
       connection_->helper()->GetStreamSendBufferAllocator();
-  std::vector<QuicMemSlice> vector1;
-  vector1.push_back(QuicMemSlice(QuicBuffer(allocator, kDataSize)));
-  vector1.push_back(QuicMemSlice(QuicBuffer(allocator, kDataSize)));
-  std::vector<QuicMemSlice> vector2;
-  vector2.push_back(QuicMemSlice(QuicBuffer(allocator, kDataSize)));
-  vector2.push_back(QuicMemSlice(QuicBuffer(allocator, kDataSize)));
-  absl::Span<QuicMemSlice> span1(vector1);
-  absl::Span<QuicMemSlice> span2(vector2);
+  std::vector<quiche::QuicheMemSlice> vector1;
+  vector1.push_back(
+      quiche::QuicheMemSlice(quiche::QuicheBuffer(allocator, kDataSize)));
+  vector1.push_back(
+      quiche::QuicheMemSlice(quiche::QuicheBuffer(allocator, kDataSize)));
+  std::vector<quiche::QuicheMemSlice> vector2;
+  vector2.push_back(
+      quiche::QuicheMemSlice(quiche::QuicheBuffer(allocator, kDataSize)));
+  vector2.push_back(
+      quiche::QuicheMemSlice(quiche::QuicheBuffer(allocator, kDataSize)));
+  absl::Span<quiche::QuicheMemSlice> span1(vector1);
+  absl::Span<quiche::QuicheMemSlice> span2(vector2);
 
   EXPECT_CALL(*session_, WritevData(_, _, _, _, _, _))
       .WillOnce(InvokeWithoutArgs([this]() {
@@ -1314,7 +1328,7 @@ TEST_P(QuicStreamTest, WriteMemSlicesReachStreamLimit) {
   Initialize();
   QuicStreamPeer::SetStreamBytesWritten(kMaxStreamLength - 5u, stream_);
   std::vector<std::pair<char*, size_t>> buffers;
-  QuicMemSlice slice1 = MemSliceFromString("12345");
+  quiche::QuicheMemSlice slice1 = MemSliceFromString("12345");
   EXPECT_CALL(*session_, WritevData(_, _, _, _, _, _))
       .WillOnce(InvokeWithoutArgs([this]() {
         return session_->ConsumeData(stream_->id(), 5u, 0u, NO_FIN,
@@ -1324,10 +1338,14 @@ TEST_P(QuicStreamTest, WriteMemSlicesReachStreamLimit) {
   QuicConsumedData consumed = stream_->WriteMemSlice(std::move(slice1), false);
   EXPECT_EQ(5u, consumed.bytes_consumed);
 
-  QuicMemSlice slice2 = MemSliceFromString("6");
-  EXPECT_CALL(*connection_, CloseConnection(QUIC_STREAM_LENGTH_OVERFLOW, _, _));
-  EXPECT_QUIC_BUG(stream_->WriteMemSlice(std::move(slice2), false),
-                  "Write too many data via stream");
+  quiche::QuicheMemSlice slice2 = MemSliceFromString("6");
+  EXPECT_QUIC_BUG(
+      {
+        EXPECT_CALL(*connection_,
+                    CloseConnection(QUIC_STREAM_LENGTH_OVERFLOW, _, _));
+        stream_->WriteMemSlice(std::move(slice2), false);
+      },
+      "Write too many data via stream");
 }
 
 TEST_P(QuicStreamTest, StreamDataGetAckedMultipleTimes) {
@@ -1507,8 +1525,7 @@ TEST_P(QuicStreamTest, MarkConnectionLevelWriteBlockedOnWindowUpdateFrame) {
 
   EXPECT_CALL(*session_, WritevData(_, _, _, _, _, _))
       .WillRepeatedly(Invoke(session_.get(), &MockQuicSession::ConsumeData));
-  EXPECT_CALL(*session_, WriteControlFrame(_, _))
-      .WillOnce(Invoke(&ClearControlFrameWithTransmissionType));
+  EXPECT_CALL(*session_, SendBlocked(_, _)).Times(1);
   std::string data(1024, '.');
   stream->WriteOrBufferData(data, false, nullptr);
   EXPECT_FALSE(HasWriteBlockedStreams());
@@ -1541,8 +1558,7 @@ TEST_P(QuicStreamTest,
   std::string data(100, '.');
   EXPECT_CALL(*session_, WritevData(_, _, _, _, _, _))
       .WillRepeatedly(Invoke(session_.get(), &MockQuicSession::ConsumeData));
-  EXPECT_CALL(*session_, WriteControlFrame(_, _))
-      .WillOnce(Invoke(&ClearControlFrameWithTransmissionType));
+  EXPECT_CALL(*session_, SendBlocked(_, _)).Times(1);
   stream->WriteOrBufferData(data, false, nullptr);
   EXPECT_FALSE(HasWriteBlockedStreams());
 

@@ -7,6 +7,7 @@
 
 #include "absl/strings/str_cat.h"
 #include "gquiche/quic/platform/api/quic_ip_address.h"
+#include "gquiche/quic/platform/api/quic_ip_address_family.h"
 
 namespace quic {
 

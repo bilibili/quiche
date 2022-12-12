@@ -15,9 +15,7 @@
 #include "gquiche/quic/platform/api/quic_logging.h"
 #include "gquiche/quic/qbone/platform/kernel_interface.h"
 
-ABSL_FLAG(std::string,
-          qbone_client_tun_device_path,
-          "/dev/net/tun",
+ABSL_FLAG(std::string, qbone_client_tun_device_path, "/dev/net/tun",
           "The path to the QBONE client's TUN device.");
 
 namespace quic {

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "quiche_platform_impl/quiche_time_utils_impl.h"
+#include "platform/quiche_platform_impl/quiche_time_utils_impl.h"
 
 #include "absl/time/civil_time.h"
 #include "absl/time/time.h"
@@ -10,10 +10,8 @@
 namespace quiche {
 
 namespace {
-absl::optional<int64_t> QuicheUtcDateTimeToUnixSecondsInner(int year,
-                                                            int month,
-                                                            int day,
-                                                            int hour,
+absl::optional<int64_t> QuicheUtcDateTimeToUnixSecondsInner(int year, int month,
+                                                            int day, int hour,
                                                             int minute,
                                                             int second) {
   const absl::CivilSecond civil_time(year, month, day, hour, minute, second);
@@ -29,10 +27,8 @@ absl::optional<int64_t> QuicheUtcDateTimeToUnixSecondsInner(int year,
 }
 }  // namespace
 
-absl::optional<int64_t> QuicheUtcDateTimeToUnixSecondsImpl(int year,
-                                                           int month,
-                                                           int day,
-                                                           int hour,
+absl::optional<int64_t> QuicheUtcDateTimeToUnixSecondsImpl(int year, int month,
+                                                           int day, int hour,
                                                            int minute,
                                                            int second) {
   // Handle leap seconds without letting any other irregularities happen.

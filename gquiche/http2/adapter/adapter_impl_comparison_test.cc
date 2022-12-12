@@ -1,8 +1,7 @@
-#include "gquiche/http2/adapter/recording_http2_visitor.h"
-
 #include "gquiche/http2/adapter/http2_protocol.h"
 #include "gquiche/http2/adapter/nghttp2_adapter.h"
 #include "gquiche/http2/adapter/oghttp2_adapter.h"
+#include "gquiche/http2/adapter/recording_http2_visitor.h"
 #include "gquiche/http2/adapter/test_frame_sequence.h"
 #include "gquiche/common/platform/api/quiche_test.h"
 #include "gquiche/spdy/core/spdy_protocol.h"
@@ -18,7 +17,8 @@ TEST(AdapterImplComparisonTest, ClientHandlesFrames) {
       NgHttp2Adapter::CreateClientAdapter(nghttp2_visitor);
 
   RecordingHttp2Visitor oghttp2_visitor;
-  OgHttp2Adapter::Options options{.perspective = Perspective::kClient};
+  OgHttp2Adapter::Options options;
+  options.perspective = Perspective::kClient;
   std::unique_ptr<OgHttp2Adapter> oghttp2_adapter =
       OgHttp2Adapter::Create(oghttp2_visitor, options);
 
@@ -44,7 +44,8 @@ TEST(AdapterImplComparisonTest, ServerHandlesFrames) {
       NgHttp2Adapter::CreateServerAdapter(nghttp2_visitor);
 
   RecordingHttp2Visitor oghttp2_visitor;
-  OgHttp2Adapter::Options options{.perspective = Perspective::kServer};
+  OgHttp2Adapter::Options options;
+  options.perspective = Perspective::kServer;
   std::unique_ptr<OgHttp2Adapter> oghttp2_adapter =
       OgHttp2Adapter::Create(oghttp2_visitor, options);
 

@@ -13,7 +13,8 @@ namespace test {
 // static
 void QuicSpdyStreamPeer::set_ack_listener(
     QuicSpdyStream* stream,
-    QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener) {
+    quiche::QuicheReferenceCountedPointer<QuicAckListenerInterface>
+        ack_listener) {
   stream->set_ack_listener(std::move(ack_listener));
 }
 
@@ -24,8 +25,8 @@ QuicSpdyStreamPeer::unacked_frame_headers_offsets(QuicSpdyStream* stream) {
 }
 
 // static
-bool QuicSpdyStreamPeer::use_datagram_contexts(QuicSpdyStream* stream) {
-  return stream->use_datagram_contexts_;
+bool QuicSpdyStreamPeer::OnHeadersFrameEnd(QuicSpdyStream* stream) {
+  return stream->OnHeadersFrameEnd();
 }
 
 }  // namespace test

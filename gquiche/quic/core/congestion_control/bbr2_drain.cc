@@ -10,8 +10,7 @@
 namespace quic {
 
 Bbr2Mode Bbr2DrainMode::OnCongestionEvent(
-    QuicByteCount /*prior_in_flight*/,
-    QuicTime /*event_time*/,
+    QuicByteCount /*prior_in_flight*/, QuicTime /*event_time*/,
     const AckedPacketVector& /*acked_packets*/,
     const LostPacketVector& /*lost_packets*/,
     const Bbr2CongestionEvent& congestion_event) {
@@ -25,21 +24,21 @@ Bbr2Mode Bbr2DrainMode::OnCongestionEvent(
   if (congestion_event.bytes_in_flight <= drain_target) {
     QUIC_DVLOG(3) << sender_ << " Exiting DRAIN. bytes_in_flight:"
                   << congestion_event.bytes_in_flight
-                  << ", bdp:" << model_->BDP()
+                  << ", bdp:" << model_->BDP(Bbr2Mode::DRAIN)
                   << ", drain_target:" << drain_target << "  @ "
                   << congestion_event.event_time;
     return Bbr2Mode::PROBE_BW;
   }
 
   QUIC_DVLOG(3) << sender_ << " Staying in DRAIN. bytes_in_flight:"
-                << congestion_event.bytes_in_flight << ", bdp:" << model_->BDP()
+                << congestion_event.bytes_in_flight << ", bdp:" << model_->BDP(Bbr2Mode::DRAIN)
                 << ", drain_target:" << drain_target << "  @ "
                 << congestion_event.event_time;
   return Bbr2Mode::DRAIN;
 }
 
 QuicByteCount Bbr2DrainMode::DrainTarget() const {
-  QuicByteCount bdp = model_->BDP();
+  QuicByteCount bdp = model_->BDP(Bbr2Mode::DRAIN);
   return std::max<QuicByteCount>(bdp, sender_->GetMinimumCongestionWindow());
 }
 
@@ -55,8 +54,6 @@ std::ostream& operator<<(std::ostream& os,
   return os;
 }
 
-const Bbr2Params& Bbr2DrainMode::Params() const {
-  return sender_->Params();
-}
+const Bbr2Params& Bbr2DrainMode::Params() const { return sender_->Params(); }
 
 }  // namespace quic

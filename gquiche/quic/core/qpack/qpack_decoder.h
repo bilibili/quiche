@@ -83,8 +83,7 @@ class QUIC_EXPORT_PRIVATE QpackDecoder
       QpackProgressiveDecoder::HeadersHandlerInterface* handler);
 
   // QpackEncoderStreamReceiver::Delegate implementation
-  void OnInsertWithNameReference(bool is_static,
-                                 uint64_t name_index,
+  void OnInsertWithNameReference(bool is_static, uint64_t name_index,
                                  absl::string_view value) override;
   void OnInsertWithoutNameReference(absl::string_view name,
                                     absl::string_view value) override;
@@ -121,6 +120,16 @@ class QUIC_EXPORT_PRIVATE QpackDecoder
   // able to send Insert Count Increment instructions.  See
   // https://quicwg.org/base-drafts/draft-ietf-quic-qpack.html#known-received-count.
   uint64_t known_received_count_;
+};
+
+// QpackDecoder::EncoderStreamErrorDelegate implementation that does nothing.
+class QUIC_EXPORT_PRIVATE NoopEncoderStreamErrorDelegate
+    : public QpackDecoder::EncoderStreamErrorDelegate {
+ public:
+  ~NoopEncoderStreamErrorDelegate() override = default;
+
+  void OnEncoderStreamError(QuicErrorCode /*error_code*/,
+                            absl::string_view /*error_message*/) override {}
 };
 
 }  // namespace quic

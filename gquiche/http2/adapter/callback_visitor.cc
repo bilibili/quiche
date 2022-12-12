@@ -69,7 +69,7 @@ int64_t CallbackVisitor::OnReadyToSend(absl::string_view serialized) {
 }
 
 void CallbackVisitor::OnConnectionError(ConnectionError /*error*/) {
-  QUICHE_LOG(ERROR) << "OnConnectionError not implemented";
+  QUICHE_VLOG(1) << "OnConnectionError not implemented";
 }
 
 bool CallbackVisitor::OnFrameHeader(Http2StreamId stream_id, size_t length,
@@ -143,7 +143,7 @@ void CallbackVisitor::OnSettingsAck() {
 
 bool CallbackVisitor::OnBeginHeadersForStream(Http2StreamId stream_id) {
   auto it = GetStreamInfo(stream_id);
-  if (it->second->received_headers) {
+  if (it->second.received_headers) {
     // At least one headers frame has already been received.
     QUICHE_VLOG(1)
         << "Headers already received for stream " << stream_id
@@ -163,7 +163,7 @@ bool CallbackVisitor::OnBeginHeadersForStream(Http2StreamId stream_id) {
         break;
     }
   }
-  it->second->received_headers = true;
+  it->second.received_headers = true;
   if (callbacks_->on_begin_headers_callback) {
     const int result = callbacks_->on_begin_headers_callback(
         nullptr, &current_frame_, user_data_);
@@ -201,12 +201,23 @@ bool CallbackVisitor::OnEndHeadersForStream(Http2StreamId /*stream_id*/) {
   return true;
 }
 
+bool CallbackVisitor::OnDataPaddingLength(Http2StreamId /*stream_id*/,
+                                          size_t padding_length) {
+  QUICHE_DCHECK_GE(remaining_data_, padding_length);
+  current_frame_.data.padlen = padding_length;
+  remaining_data_ -= padding_length;
+  if (remaining_data_ == 0 && callbacks_->on_frame_recv_callback != nullptr) {
+    const int result = callbacks_->on_frame_recv_callback(
+        nullptr, &current_frame_, user_data_);
+    return result == 0;
+  }
+  return true;
+}
+
 bool CallbackVisitor::OnBeginDataForStream(Http2StreamId /*stream_id*/,
                                            size_t payload_length) {
-  // TODO(b/181586191): Interpret padding, subtract padding from
-  // |remaining_data_|.
   remaining_data_ = payload_length;
-  if (remaining_data_ == 0 && callbacks_->on_frame_recv_callback) {
+  if (remaining_data_ == 0 && callbacks_->on_frame_recv_callback != nullptr) {
     const int result = callbacks_->on_frame_recv_callback(
         nullptr, &current_frame_, user_data_);
     return result == 0;
@@ -243,14 +254,20 @@ void CallbackVisitor::OnRstStream(Http2StreamId /*stream_id*/,
   }
 }
 
-void CallbackVisitor::OnCloseStream(Http2StreamId stream_id,
+bool CallbackVisitor::OnCloseStream(Http2StreamId stream_id,
                                     Http2ErrorCode error_code) {
+  int result = 0;
   if (callbacks_->on_stream_close_callback) {
     QUICHE_VLOG(1) << "OnCloseStream(stream_id: " << stream_id
                    << ", error_code: " << int(error_code) << ")";
-    callbacks_->on_stream_close_callback(
+    result = callbacks_->on_stream_close_callback(
         nullptr, stream_id, static_cast<uint32_t>(error_code), user_data_);
   }
+  stream_map_.erase(stream_id);
+  if (stream_close_listener_) {
+    stream_close_listener_(stream_id);
+  }
+  return result == 0;
 }
 
 void CallbackVisitor::OnPriorityForStream(Http2StreamId /*stream_id*/,
@@ -353,8 +370,8 @@ int CallbackVisitor::OnBeforeFrameSent(uint8_t frame_type,
     // The implementation of the before_frame_send_callback doesn't look at the
     // error code, so for now it's populated with 0.
     PopulateFrame(frame, frame_type, stream_id, length, flags, /*error_code=*/0,
-                  it->second->before_sent_headers);
-    it->second->before_sent_headers = true;
+                  it->second.before_sent_headers);
+    it->second.before_sent_headers = true;
     return callbacks_->before_frame_send_callback(nullptr, &frame, user_data_);
   }
   return 0;
@@ -371,8 +388,8 @@ int CallbackVisitor::OnFrameSent(uint8_t frame_type, Http2StreamId stream_id,
     nghttp2_frame frame;
     auto it = GetStreamInfo(stream_id);
     PopulateFrame(frame, frame_type, stream_id, length, flags, error_code,
-                  it->second->sent_headers);
-    it->second->sent_headers = true;
+                  it->second.sent_headers);
+    it->second.sent_headers = true;
     return callbacks_->on_frame_send_callback(nullptr, &frame, user_data_);
   }
   return 0;
@@ -438,7 +455,7 @@ CallbackVisitor::StreamInfoMap::iterator CallbackVisitor::GetStreamInfo(
     Http2StreamId stream_id) {
   auto it = stream_map_.find(stream_id);
   if (it == stream_map_.end()) {
-    auto p = stream_map_.insert({stream_id, absl::make_unique<StreamInfo>()});
+    auto p = stream_map_.insert({stream_id, {}});
     it = p.first;
   }
   return it;

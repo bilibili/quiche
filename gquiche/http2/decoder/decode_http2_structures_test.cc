@@ -5,7 +5,7 @@
 #include "gquiche/http2/decoder/decode_http2_structures.h"
 
 // Tests decoding all of the fixed size HTTP/2 structures (i.e. those defined
-// in http2/http2_structures.h).
+// in quiche/http2/http2_structures.h).
 
 #include <stddef.h>
 
@@ -15,14 +15,11 @@
 #include "gquiche/http2/decoder/decode_buffer.h"
 #include "gquiche/http2/decoder/decode_status.h"
 #include "gquiche/http2/http2_constants.h"
-#include "gquiche/http2/http2_structures_test_util.h"
-#include "gquiche/http2/platform/api/http2_logging.h"
-#include "gquiche/http2/platform/api/http2_test_helpers.h"
+#include "gquiche/http2/test_tools/http2_frame_builder.h"
 #include "gquiche/http2/test_tools/http2_random.h"
-#include "gquiche/http2/tools/http2_frame_builder.h"
+#include "gquiche/http2/test_tools/http2_structures_test_util.h"
+#include "gquiche/common/platform/api/quiche_logging.h"
 #include "gquiche/common/platform/api/quiche_test.h"
-
-using ::testing::AssertionResult;
 
 namespace http2 {
 namespace test {
@@ -42,7 +39,7 @@ std::string SerializeStructure(const S& s) {
 }
 
 template <class S>
-class StructureDecoderTest : public QuicheTest {
+class StructureDecoderTest : public quiche::test::QuicheTest {
  protected:
   typedef S Structure;
 

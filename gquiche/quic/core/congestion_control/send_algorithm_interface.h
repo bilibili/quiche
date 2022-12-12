@@ -33,11 +33,8 @@ class QUIC_EXPORT_PRIVATE SendAlgorithmInterface {
  public:
   // Network Params for AdjustNetworkParameters.
   struct QUIC_NO_EXPORT NetworkParams {
-    NetworkParams()
-        : NetworkParams(QuicBandwidth::Zero(), QuicTime::Delta::Zero(), false) {
-    }
-    NetworkParams(const QuicBandwidth& bandwidth,
-                  const QuicTime::Delta& rtt,
+    NetworkParams() = default;
+    NetworkParams(const QuicBandwidth& bandwidth, const QuicTime::Delta& rtt,
                   bool allow_cwnd_to_decrease)
         : bandwidth(bandwidth),
           rtt(rtt),
@@ -47,24 +44,24 @@ class QUIC_EXPORT_PRIVATE SendAlgorithmInterface {
       return bandwidth == other.bandwidth && rtt == other.rtt &&
              max_initial_congestion_window ==
                  other.max_initial_congestion_window &&
-             allow_cwnd_to_decrease == other.allow_cwnd_to_decrease;
+             allow_cwnd_to_decrease == other.allow_cwnd_to_decrease &&
+             is_rtt_trusted == other.is_rtt_trusted;
     }
 
-    QuicBandwidth bandwidth;
-    QuicTime::Delta rtt;
+    QuicBandwidth bandwidth = QuicBandwidth::Zero();
+    QuicTime::Delta rtt = QuicTime::Delta::Zero();
     int max_initial_congestion_window = 0;
-    bool allow_cwnd_to_decrease;
+    bool allow_cwnd_to_decrease = false;
+    bool is_rtt_trusted = false;
   };
 
   static SendAlgorithmInterface* Create(
-      const QuicClock* clock,
-      const RttStats* rtt_stats,
-      const QuicUnackedPacketMap* unacked_packets,
-      CongestionControlType type,
-      QuicRandom* random,
-      QuicConnectionStats* stats,
+      const QuicClock* clock, const RttStats* rtt_stats,
+      const QuicUnackedPacketMap* unacked_packets, CongestionControlType type,
+      QuicRandom* random, QuicConnectionStats* stats,
       QuicPacketCount initial_congestion_window,
-      SendAlgorithmInterface* old_send_algorithm);
+      SendAlgorithmInterface* old_send_algorithm,
+      float extra_loss_threshold);
 
   virtual ~SendAlgorithmInterface() {}
 
@@ -77,6 +74,28 @@ class QUIC_EXPORT_PRIVATE SendAlgorithmInterface {
   // Sets the initial congestion window in number of packets.  May be ignored
   // if called after the initial congestion window is no longer relevant.
   virtual void SetInitialCongestionWindowInPackets(QuicPacketCount packets) = 0;
+
+  virtual void SetExtraLossThreshold(float extra_loss_threshold) = 0;
+
+  virtual void SetBandwidthListSize(uint64_t bandwidth_list_size) {}
+
+  virtual void SetBandwidthListIndex(float bandwidth_list_index) {}
+
+  virtual void SetUpdateRangeTime(QuicTime::Delta update_range_time) = 0;
+
+  virtual void SetIsUpdatePacketLostFlag(bool is_update_min_packet_lost) = 0;
+
+  virtual void SetIsUpdatePacketLostOldFlag(bool is_update_min_packet_lost_old) {}
+
+  virtual void SetMinPacketLostListIndex(float min_packet_lost_list_index) {}
+
+  virtual void SetMinPacketLostListSize(uint64_t min_packet_lost_list_size) {}
+
+  virtual void SetUseBandwidthListFlag(bool is_use_bandwidth_list) = 0;
+
+  virtual void SetUseDecreasePacingRateFlag(bool is_use_decrease_pacing_rate_by_rtt) {};
+  
+  virtual void SetUseRttDetermineCongested(bool is_use_rtt_determine_congested_by_random) {};
 
   // Indicates an update to the congestion state, caused either by an incoming
   // ack or loss event timeout.  |rtt_updated| indicates whether a new
@@ -93,10 +112,8 @@ class QUIC_EXPORT_PRIVATE SendAlgorithmInterface {
   // retransmittable.  |bytes_in_flight| is the number of bytes in flight before
   // the packet was sent.
   // Note: this function must be called for every packet sent to the wire.
-  virtual void OnPacketSent(QuicTime sent_time,
-                            QuicByteCount bytes_in_flight,
-                            QuicPacketNumber packet_number,
-                            QuicByteCount bytes,
+  virtual void OnPacketSent(QuicTime sent_time, QuicByteCount bytes_in_flight,
+                            QuicPacketNumber packet_number, QuicByteCount bytes,
                             HasRetransmittableData is_retransmittable) = 0;
 
   // Inform that |packet_number| has been neutered.
@@ -120,6 +137,9 @@ class QUIC_EXPORT_PRIVATE SendAlgorithmInterface {
   // Returns 0 when it does not have an estimate.
   virtual QuicBandwidth BandwidthEstimate() const = 0;
 
+  // Whether BandwidthEstimate returns a good measurement for resumption.
+  virtual bool HasGoodBandwidthEstimateForResumption() const = 0;
+
   // Returns the size of the current congestion window in bytes.  Note, this is
   // not the *available* window.  Some send algorithms may not use a congestion
   // window and will return 0.
@@ -131,12 +151,6 @@ class QUIC_EXPORT_PRIVATE SendAlgorithmInterface {
 
   // Whether the send algorithm is currently in recovery.
   virtual bool InRecovery() const = 0;
-
-  // True when the congestion control is probing for more bandwidth and needs
-  // enough data to not be app-limited to do so.
-  // TODO(ianswett): In the future, this API may want to indicate the size of
-  // the probing packet.
-  virtual bool ShouldSendProbingPacket() const = 0;
 
   // Returns the size of the slow start congestion window in bytes,
   // aka ssthresh.  Only defined for Cubic and Reno, other algorithms return 0.
@@ -169,6 +183,10 @@ class QUIC_EXPORT_PRIVATE SendAlgorithmInterface {
 
   // Called before connection close to collect stats.
   virtual void PopulateConnectionStats(QuicConnectionStats* stats) const = 0;
+
+  virtual void SetStartUpPacingGain(float new_pacing_gain) {}
+
+  virtual float GetStartUpPacingGain() {return 0;}
 };
 
 }  // namespace quic
