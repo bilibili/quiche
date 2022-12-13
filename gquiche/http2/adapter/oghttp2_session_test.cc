@@ -29,8 +29,9 @@ enum FrameType {
 
 TEST(OgHttp2SessionTest, ClientConstruction) {
   testing::StrictMock<MockHttp2Visitor> visitor;
-  OgHttp2Session session(
-      visitor, OgHttp2Session::Options{.perspective = Perspective::kClient});
+  OgHttp2Session::Options options;
+  options.perspective = Perspective::kClient;
+  OgHttp2Session session(visitor, options);
   EXPECT_TRUE(session.want_read());
   EXPECT_FALSE(session.want_write());
   EXPECT_EQ(session.GetRemoteWindowSize(), kInitialFlowControlWindowSize);
@@ -40,8 +41,9 @@ TEST(OgHttp2SessionTest, ClientConstruction) {
 
 TEST(OgHttp2SessionTest, ClientHandlesFrames) {
   testing::StrictMock<MockHttp2Visitor> visitor;
-  OgHttp2Session session(
-      visitor, OgHttp2Session::Options{.perspective = Perspective::kClient});
+  OgHttp2Session::Options options;
+  options.perspective = Perspective::kClient;
+  OgHttp2Session session(visitor, options);
 
   const std::string initial_frames = TestFrameSequence()
                                          .ServerPreface()
@@ -145,8 +147,9 @@ TEST(OgHttp2SessionTest, ClientHandlesFrames) {
 // before any frames are explicitly queued.
 TEST(OgHttp2SessionTest, ClientEnqueuesSettingsOnSend) {
   DataSavingVisitor visitor;
-  OgHttp2Session session(
-      visitor, OgHttp2Session::Options{.perspective = Perspective::kClient});
+  OgHttp2Session::Options options;
+  options.perspective = Perspective::kClient;
+  OgHttp2Session session(visitor, options);
   EXPECT_FALSE(session.want_write());
 
   EXPECT_CALL(visitor, OnBeforeFrameSent(SETTINGS, 0, _, 0x0));
@@ -165,8 +168,9 @@ TEST(OgHttp2SessionTest, ClientEnqueuesSettingsOnSend) {
 // frame type is passed to the first invocation of EnqueueFrame().
 TEST(OgHttp2SessionTest, ClientEnqueuesSettingsBeforeOtherFrame) {
   DataSavingVisitor visitor;
-  OgHttp2Session session(
-      visitor, OgHttp2Session::Options{.perspective = Perspective::kClient});
+  OgHttp2Session::Options options;
+  options.perspective = Perspective::kClient;
+  OgHttp2Session session(visitor, options);
   EXPECT_FALSE(session.want_write());
   session.EnqueueFrame(absl::make_unique<spdy::SpdyPingIR>(42));
   EXPECT_TRUE(session.want_write());
@@ -190,8 +194,9 @@ TEST(OgHttp2SessionTest, ClientEnqueuesSettingsBeforeOtherFrame) {
 // the client session will not enqueue an additional SETTINGS frame.
 TEST(OgHttp2SessionTest, ClientEnqueuesSettingsOnce) {
   DataSavingVisitor visitor;
-  OgHttp2Session session(
-      visitor, OgHttp2Session::Options{.perspective = Perspective::kClient});
+  OgHttp2Session::Options options;
+  options.perspective = Perspective::kClient;
+  OgHttp2Session session(visitor, options);
   EXPECT_FALSE(session.want_write());
   session.EnqueueFrame(absl::make_unique<spdy::SpdySettingsIR>());
   EXPECT_TRUE(session.want_write());
@@ -210,8 +215,9 @@ TEST(OgHttp2SessionTest, ClientEnqueuesSettingsOnce) {
 
 TEST(OgHttp2SessionTest, ClientSubmitRequest) {
   DataSavingVisitor visitor;
-  OgHttp2Session session(
-      visitor, OgHttp2Session::Options{.perspective = Perspective::kClient});
+  OgHttp2Session::Options options;
+  options.perspective = Perspective::kClient;
+  OgHttp2Session session(visitor, options);
 
   EXPECT_FALSE(session.want_write());
 
@@ -320,8 +326,9 @@ TEST(OgHttp2SessionTest, ClientSubmitRequest) {
 // blocked.
 TEST(OgHttp2SessionTest, ClientSubmitRequestWithReadBlock) {
   DataSavingVisitor visitor;
-  OgHttp2Session session(
-      visitor, OgHttp2Session::Options{.perspective = Perspective::kClient});
+  OgHttp2Session::Options options;
+  options.perspective = Perspective::kClient;
+  OgHttp2Session session(visitor, options);
   EXPECT_FALSE(session.want_write());
 
   const char* kSentinel1 = "arbitrary pointer 1";
@@ -375,8 +382,9 @@ TEST(OgHttp2SessionTest, ClientSubmitRequestWithReadBlock) {
 // blocked, then ends with an empty DATA frame.
 TEST(OgHttp2SessionTest, ClientSubmitRequestEmptyDataWithFin) {
   DataSavingVisitor visitor;
-  OgHttp2Session session(
-      visitor, OgHttp2Session::Options{.perspective = Perspective::kClient});
+  OgHttp2Session::Options options;
+  options.perspective = Perspective::kClient;
+  OgHttp2Session session(visitor, options);
   EXPECT_FALSE(session.want_write());
 
   const char* kSentinel1 = "arbitrary pointer 1";
@@ -429,8 +437,9 @@ TEST(OgHttp2SessionTest, ClientSubmitRequestEmptyDataWithFin) {
 // blocked.
 TEST(OgHttp2SessionTest, ClientSubmitRequestWithWriteBlock) {
   DataSavingVisitor visitor;
-  OgHttp2Session session(
-      visitor, OgHttp2Session::Options{.perspective = Perspective::kClient});
+  OgHttp2Session::Options options;
+  options.perspective = Perspective::kClient;
+  OgHttp2Session session(visitor, options);
   EXPECT_FALSE(session.want_write());
 
   const char* kSentinel1 = "arbitrary pointer 1";
@@ -473,34 +482,11 @@ TEST(OgHttp2SessionTest, ClientSubmitRequestWithWriteBlock) {
   EXPECT_FALSE(session.want_write());
 }
 
-TEST(OgHttp2SessionTest, ClientStartShutdown) {
-  DataSavingVisitor visitor;
-  OgHttp2Session session(
-      visitor, OgHttp2Session::Options{.perspective = Perspective::kClient});
-
-  EXPECT_FALSE(session.want_write());
-
-  // No-op (except for logging) for a client implementation.
-  session.StartGracefulShutdown();
-  EXPECT_FALSE(session.want_write());
-
-  EXPECT_CALL(visitor, OnBeforeFrameSent(SETTINGS, 0, _, 0x0));
-  EXPECT_CALL(visitor, OnFrameSent(SETTINGS, 0, _, 0x0, 0));
-
-  int result = session.Send();
-  EXPECT_EQ(0, result);
-
-  absl::string_view serialized = visitor.data();
-  EXPECT_THAT(serialized,
-              testing::StartsWith(spdy::kHttp2ConnectionHeaderPrefix));
-  serialized.remove_prefix(strlen(spdy::kHttp2ConnectionHeaderPrefix));
-  EXPECT_THAT(serialized, EqualsFrames({SpdyFrameType::SETTINGS}));
-}
-
 TEST(OgHttp2SessionTest, ServerConstruction) {
   testing::StrictMock<MockHttp2Visitor> visitor;
-  OgHttp2Session session(
-      visitor, OgHttp2Session::Options{.perspective = Perspective::kServer});
+  OgHttp2Session::Options options;
+  options.perspective = Perspective::kServer;
+  OgHttp2Session session(visitor, options);
   EXPECT_TRUE(session.want_read());
   EXPECT_FALSE(session.want_write());
   EXPECT_EQ(session.GetRemoteWindowSize(), kInitialFlowControlWindowSize);
@@ -510,8 +496,9 @@ TEST(OgHttp2SessionTest, ServerConstruction) {
 
 TEST(OgHttp2SessionTest, ServerHandlesFrames) {
   DataSavingVisitor visitor;
-  OgHttp2Session session(
-      visitor, OgHttp2Session::Options{.perspective = Perspective::kServer});
+  OgHttp2Session::Options options;
+  options.perspective = Perspective::kServer;
+  OgHttp2Session session(visitor, options);
 
   EXPECT_EQ(0, session.GetHpackDecoderDynamicTableSize());
 
@@ -630,8 +617,9 @@ TEST(OgHttp2SessionTest, ServerHandlesFrames) {
 // frame type is passed to the first invocation of EnqueueFrame().
 TEST(OgHttp2SessionTest, ServerEnqueuesSettingsBeforeOtherFrame) {
   DataSavingVisitor visitor;
-  OgHttp2Session session(
-      visitor, OgHttp2Session::Options{.perspective = Perspective::kServer});
+  OgHttp2Session::Options options;
+  options.perspective = Perspective::kServer;
+  OgHttp2Session session(visitor, options);
   EXPECT_FALSE(session.want_write());
   session.EnqueueFrame(absl::make_unique<spdy::SpdyPingIR>(42));
   EXPECT_TRUE(session.want_write());
@@ -651,8 +639,9 @@ TEST(OgHttp2SessionTest, ServerEnqueuesSettingsBeforeOtherFrame) {
 // the server session will not enqueue an additional SETTINGS frame.
 TEST(OgHttp2SessionTest, ServerEnqueuesSettingsOnce) {
   DataSavingVisitor visitor;
-  OgHttp2Session session(
-      visitor, OgHttp2Session::Options{.perspective = Perspective::kServer});
+  OgHttp2Session::Options options;
+  options.perspective = Perspective::kServer;
+  OgHttp2Session session(visitor, options);
   EXPECT_FALSE(session.want_write());
   session.EnqueueFrame(absl::make_unique<spdy::SpdySettingsIR>());
   EXPECT_TRUE(session.want_write());
@@ -667,8 +656,9 @@ TEST(OgHttp2SessionTest, ServerEnqueuesSettingsOnce) {
 
 TEST(OgHttp2SessionTest, ServerSubmitResponse) {
   DataSavingVisitor visitor;
-  OgHttp2Session session(
-      visitor, OgHttp2Session::Options{.perspective = Perspective::kServer});
+  OgHttp2Session::Options options;
+  options.perspective = Perspective::kServer;
+  OgHttp2Session session(visitor, options);
 
   EXPECT_FALSE(session.want_write());
 
@@ -762,60 +752,13 @@ TEST(OgHttp2SessionTest, ServerSubmitResponse) {
   EXPECT_GT(session.GetHpackEncoderDynamicTableSize(), 0);
 }
 
-TEST(OgHttp2SessionTest, ServerStartShutdown) {
-  DataSavingVisitor visitor;
-  OgHttp2Session session(
-      visitor, OgHttp2Session::Options{.perspective = Perspective::kServer});
-
-  EXPECT_FALSE(session.want_write());
-
-  session.StartGracefulShutdown();
-  EXPECT_TRUE(session.want_write());
-
-  EXPECT_CALL(visitor, OnBeforeFrameSent(SETTINGS, 0, _, 0x0));
-  EXPECT_CALL(visitor, OnFrameSent(SETTINGS, 0, _, 0x0, 0));
-  EXPECT_CALL(visitor, OnBeforeFrameSent(GOAWAY, 0, _, 0x0));
-  EXPECT_CALL(visitor, OnFrameSent(GOAWAY, 0, _, 0x0, 0));
-
-  int result = session.Send();
-  EXPECT_EQ(0, result);
-  EXPECT_THAT(visitor.data(),
-              EqualsFrames({SpdyFrameType::SETTINGS, SpdyFrameType::GOAWAY}));
-}
-
-TEST(OgHttp2SessionTest, ServerStartShutdownAfterGoaway) {
-  DataSavingVisitor visitor;
-  OgHttp2Session session(
-      visitor, OgHttp2Session::Options{.perspective = Perspective::kServer});
-
-  EXPECT_FALSE(session.want_write());
-
-  auto goaway = absl::make_unique<spdy::SpdyGoAwayIR>(
-      1, spdy::ERROR_CODE_NO_ERROR, "and don't come back!");
-  session.EnqueueFrame(std::move(goaway));
-  EXPECT_TRUE(session.want_write());
-
-  EXPECT_CALL(visitor, OnBeforeFrameSent(SETTINGS, 0, _, 0x0));
-  EXPECT_CALL(visitor, OnFrameSent(SETTINGS, 0, _, 0x0, 0));
-  EXPECT_CALL(visitor, OnBeforeFrameSent(GOAWAY, 0, _, 0x0));
-  EXPECT_CALL(visitor, OnFrameSent(GOAWAY, 0, _, 0x0, 0));
-
-  int result = session.Send();
-  EXPECT_EQ(0, result);
-  EXPECT_THAT(visitor.data(),
-              EqualsFrames({SpdyFrameType::SETTINGS, SpdyFrameType::GOAWAY}));
-
-  // No-op, since a GOAWAY has previously been enqueued.
-  session.StartGracefulShutdown();
-  EXPECT_FALSE(session.want_write());
-}
-
 // Tests the case where the server queues trailers after the data stream is
 // exhausted.
 TEST(OgHttp2SessionTest, ServerSendsTrailers) {
   DataSavingVisitor visitor;
-  OgHttp2Session session(
-      visitor, OgHttp2Session::Options{.perspective = Perspective::kServer});
+  OgHttp2Session::Options options;
+  options.perspective = Perspective::kServer;
+  OgHttp2Session session(visitor, options);
 
   EXPECT_FALSE(session.want_write());
 
@@ -905,8 +848,9 @@ TEST(OgHttp2SessionTest, ServerSendsTrailers) {
 // data, and before any writes have taken place.
 TEST(OgHttp2SessionTest, ServerQueuesTrailersWithResponse) {
   DataSavingVisitor visitor;
-  OgHttp2Session session(
-      visitor, OgHttp2Session::Options{.perspective = Perspective::kServer});
+  OgHttp2Session::Options options;
+  options.perspective = Perspective::kServer;
+  OgHttp2Session session(visitor, options);
 
   EXPECT_FALSE(session.want_write());
 

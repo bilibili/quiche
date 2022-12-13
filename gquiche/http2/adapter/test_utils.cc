@@ -4,9 +4,8 @@
 
 #include "absl/strings/str_format.h"
 #include "gquiche/http2/adapter/http2_visitor_interface.h"
-#include "gquiche/common/quiche_endian.h"
+#include "gquiche/common/quiche_data_reader.h"
 #include "gquiche/spdy/core/hpack/hpack_encoder.h"
-#include "gquiche/spdy/core/spdy_frame_reader.h"
 
 namespace http2 {
 namespace adapter {
@@ -62,7 +61,7 @@ bool TestDataFrameSource::Send(absl::string_view frame_header,
   } else if (result == 0) {
     // Write blocked.
     return false;
-  } else if (static_cast<const size_t>(result) < concatenated.size()) {
+  } else if (static_cast<size_t>(result) < concatenated.size()) {
     // Probably need to handle this better within this test class.
     QUICHE_LOG(DFATAL)
         << "DATA frame not fully flushed. Connection will be corrupt!";
@@ -83,13 +82,13 @@ bool TestDataFrameSource::Send(absl::string_view frame_header,
   return true;
 }
 
-std::string EncodeHeaders(const spdy::SpdyHeaderBlock& entries) {
+std::string EncodeHeaders(const spdy::Http2HeaderBlock& entries) {
   spdy::HpackEncoder encoder;
   encoder.DisableCompression();
   return encoder.EncodeHeaderBlock(entries);
 }
 
-TestMetadataSource::TestMetadataSource(const spdy::SpdyHeaderBlock& entries)
+TestMetadataSource::TestMetadataSource(const spdy::Http2HeaderBlock& entries)
     : encoded_entries_(EncodeHeaders(entries)) {
   remaining_ = encoded_entries_;
 }
@@ -137,7 +136,7 @@ class SpdyControlFrameMatcher
 
   bool MatchAndExplain(absl::string_view s,
                        testing::MatchResultListener* listener) const override {
-    spdy::SpdyFrameReader reader(s.data(), s.size());
+    quiche::QuicheDataReader reader(s.data(), s.size());
 
     for (TypeAndOptionalLength expected : expected_types_and_lengths_) {
       if (!MatchAndExplainOneFrame(expected.first, expected.second, &reader,
@@ -146,8 +145,7 @@ class SpdyControlFrameMatcher
       }
     }
     if (!reader.IsDoneReading()) {
-      size_t bytes_remaining = s.size() - reader.GetBytesConsumed();
-      *listener << "; " << bytes_remaining << " bytes left to read!";
+      *listener << "; " << reader.BytesRemaining() << " bytes left to read!";
       return false;
     }
     return true;
@@ -155,7 +153,7 @@ class SpdyControlFrameMatcher
 
   bool MatchAndExplainOneFrame(spdy::SpdyFrameType expected_type,
                                absl::optional<size_t> expected_length,
-                               spdy::SpdyFrameReader* reader,
+                               quiche::QuicheDataReader* reader,
                                testing::MatchResultListener* listener) const {
     uint32_t payload_length;
     if (!reader->ReadUInt24(&payload_length)) {

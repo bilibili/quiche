@@ -16,6 +16,7 @@ class QboneSessionBase;
 class QUIC_EXPORT_PRIVATE QboneControlStreamBase : public QuicStream {
  public:
   explicit QboneControlStreamBase(QuicSession* session);
+  QboneControlStreamBase(quic::PendingStream* pending, QuicSession* session);
 
   void OnDataAvailable() override;
 
@@ -33,7 +34,7 @@ class QUIC_EXPORT_PRIVATE QboneControlStreamBase : public QuicStream {
 template <class T>
 class QUIC_EXPORT_PRIVATE QboneControlHandler {
  public:
-  virtual ~QboneControlHandler() { }
+  virtual ~QboneControlHandler() {}
 
   virtual void OnControlRequest(const T& request) = 0;
   virtual void OnControlError() = 0;
@@ -46,6 +47,9 @@ class QUIC_EXPORT_PRIVATE QboneControlStream : public QboneControlStreamBase {
 
   QboneControlStream(QuicSession* session, Handler* handler)
       : QboneControlStreamBase(session), handler_(handler) {}
+  QboneControlStream(quic::PendingStream* pending, QuicSession* session,
+                     Handler* handler)
+      : QboneControlStreamBase(pending, session), handler_(handler) {}
 
   bool SendRequest(const Outgoing& request) { return SendMessage(request); }
 

@@ -11,6 +11,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include "absl/cleanup/cleanup.h"
 #include "gquiche/quic/core/crypto/quic_random.h"
 #include "gquiche/quic/core/http/spdy_utils.h"
 #include "gquiche/quic/core/quic_connection.h"
@@ -22,7 +23,7 @@
 #include "gquiche/quic/core/quic_udp_socket.h"
 #include "gquiche/quic/platform/api/quic_bug_tracker.h"
 #include "gquiche/quic/platform/api/quic_logging.h"
-#include "gquiche/quic/platform/api/quic_system_event_loop.h"
+#include "gquiche/common/platform/api/quiche_system_event_loop.h"
 
 namespace quic {
 
@@ -31,8 +32,7 @@ const int kEpollFlags = EPOLLIN | EPOLLOUT | EPOLLET;
 }  // namespace
 
 QuicClientEpollNetworkHelper::QuicClientEpollNetworkHelper(
-    QuicEpollServer* epoll_server,
-    QuicClientBase* client)
+    QuicEpollServer* epoll_server, QuicClientBase* client)
     : epoll_server_(epoll_server),
       packets_dropped_(0),
       overflow_supported_(false),
@@ -55,8 +55,7 @@ std::string QuicClientEpollNetworkHelper::Name() const {
 }
 
 bool QuicClientEpollNetworkHelper::CreateUDPSocketAndBind(
-    QuicSocketAddress server_address,
-    QuicIpAddress bind_to_address,
+    QuicSocketAddress server_address, QuicIpAddress bind_to_address,
     int bind_to_port) {
   epoll_server_->set_timeout_in_us(50 * 1000);
 
@@ -64,6 +63,7 @@ bool QuicClientEpollNetworkHelper::CreateUDPSocketAndBind(
   if (fd < 0) {
     return false;
   }
+  auto closer = absl::MakeCleanup([fd] { close(fd); });
 
   QuicSocketAddress client_address;
   if (bind_to_address.IsInitialized()) {
@@ -108,6 +108,7 @@ bool QuicClientEpollNetworkHelper::CreateUDPSocketAndBind(
 
   fd_address_map_[fd] = client_address;
   epoll_server_->RegisterFD(fd, this, kEpollFlags);
+  std::move(closer).Cancel();
   return true;
 }
 
@@ -132,7 +133,7 @@ void QuicClientEpollNetworkHelper::CleanUpUDPSocketImpl(int fd) {
 }
 
 void QuicClientEpollNetworkHelper::RunEventLoop() {
-  QuicRunSystemEventLoopIteration();
+  quiche::QuicheRunSystemEventLoopIteration();
   epoll_server_->WaitForEventsAndExecuteCallbacks();
 }
 
@@ -204,14 +205,12 @@ int QuicClientEpollNetworkHelper::GetLatestFD() const {
 
 void QuicClientEpollNetworkHelper::ProcessPacket(
     const QuicSocketAddress& self_address,
-    const QuicSocketAddress& peer_address,
-    const QuicReceivedPacket& packet) {
+    const QuicSocketAddress& peer_address, const QuicReceivedPacket& packet) {
   client_->session()->ProcessUdpPacket(self_address, peer_address, packet);
 }
 
 int QuicClientEpollNetworkHelper::CreateUDPSocket(
-    QuicSocketAddress server_address,
-    bool* overflow_supported) {
+    QuicSocketAddress server_address, bool* overflow_supported) {
   QuicUdpSocketApi api;
   int fd = api.Create(server_address.host().AddressFamilyToInt(),
                       /*receive_buffer_size =*/kDefaultSocketReceiveBuffer,
@@ -222,6 +221,18 @@ int QuicClientEpollNetworkHelper::CreateUDPSocket(
 
   *overflow_supported = api.EnableDroppedPacketCount(fd);
   api.EnableReceiveTimestamp(fd);
+
+  std::string interface_name = client_->interface_name();
+  if (!interface_name.empty()) {
+    if (!api.BindInterface(fd, interface_name)) {
+      QUIC_DLOG(WARNING) << "Failed to bind socket (" << fd
+                         << ") to interface (" << interface_name << ").";
+
+      CleanUpUDPSocket(fd);
+      return kQuicInvalidSocketFd;
+    }
+  }
+
   return fd;
 }
 }  // namespace quic

@@ -8,7 +8,6 @@
 #include <memory>
 
 #include "gquiche/quic/core/quic_config.h"
-#include "gquiche/quic/platform/api/quic_containers.h"
 #include "gquiche/quic/platform/api/quic_mutex.h"
 #include "gquiche/quic/platform/api/quic_socket_address.h"
 #include "gquiche/quic/platform/api/quic_thread.h"
@@ -20,7 +19,8 @@ namespace test {
 // Simple wrapper class to run QuicServer in a dedicated thread.
 class ServerThread : public QuicThread {
  public:
-  ServerThread(QuicServer* server, const QuicSocketAddress& address);
+  ServerThread(std::unique_ptr<QuicServer> server,
+               const QuicSocketAddress& address);
   ServerThread(const ServerThread&) = delete;
   ServerThread& operator=(const ServerThread&) = delete;
 
@@ -78,7 +78,7 @@ class ServerThread : public QuicThread {
   QuicNotification quit_;    // Notified when the server should quit.
 
   std::unique_ptr<QuicServer> server_;
-  QuicEpollClock clock_;
+  QuicClock* clock_;
   QuicSocketAddress address_;
   mutable QuicMutex port_lock_;
   int port_ QUIC_GUARDED_BY(port_lock_);

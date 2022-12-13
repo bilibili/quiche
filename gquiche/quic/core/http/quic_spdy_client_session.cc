@@ -22,15 +22,11 @@
 namespace quic {
 
 QuicSpdyClientSession::QuicSpdyClientSession(
-    const QuicConfig& config,
-    const ParsedQuicVersionVector& supported_versions,
-    QuicConnection* connection,
-    const QuicServerId& server_id,
+    const QuicConfig& config, const ParsedQuicVersionVector& supported_versions,
+    QuicConnection* connection, const QuicServerId& server_id,
     QuicCryptoClientConfig* crypto_config,
     QuicClientPushPromiseIndex* push_promise_index)
-    : QuicSpdyClientSessionBase(connection,
-                                push_promise_index,
-                                config,
+    : QuicSpdyClientSessionBase(connection, push_promise_index, config,
                                 supported_versions),
       server_id_(server_id),
       crypto_config_(crypto_config),
@@ -42,7 +38,11 @@ void QuicSpdyClientSession::Initialize() {
   crypto_stream_ = CreateQuicCryptoStream();
   if (config()->HasClientRequestedIndependentOption(kQLVE,
                                                     Perspective::IS_CLIENT)) {
-    connection()->EnableLegacyVersionEncapsulation(server_id_.host());
+    if (GetQuicRestartFlag(quic_disable_legacy_version_encapsulation)) {
+      QUIC_CODE_COUNT(quic_disable_legacy_version_encapsulation_client_init);
+    } else {
+      connection()->EnableLegacyVersionEncapsulation(server_id_.host());
+    }
   }
   QuicSpdyClientSessionBase::Initialize();
 }

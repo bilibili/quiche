@@ -11,7 +11,6 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "gquiche/quic/core/quic_types.h"
-#include "gquiche/quic/platform/api/quic_containers.h"
 #include "gquiche/quic/platform/api/quic_export.h"
 
 namespace quic {

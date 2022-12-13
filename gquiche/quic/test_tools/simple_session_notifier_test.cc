@@ -29,11 +29,8 @@ class MockQuicConnectionWithSendStreamData : public MockQuicConnection {
                                        Perspective perspective)
       : MockQuicConnection(helper, alarm_factory, perspective) {}
 
-  MOCK_METHOD(QuicConsumedData,
-              SendStreamData,
-              (QuicStreamId id,
-               size_t write_length,
-               QuicStreamOffset offset,
+  MOCK_METHOD(QuicConsumedData, SendStreamData,
+              (QuicStreamId id, size_t write_length, QuicStreamOffset offset,
                StreamSendingState state),
               (override));
 };
@@ -317,6 +314,9 @@ TEST_F(SimpleSessionNotifierTest, OnCanWriteCryptoFrames) {
 
 TEST_F(SimpleSessionNotifierTest, RetransmitFrames) {
   InSequence s;
+  connection_.SetEncrypter(
+      ENCRYPTION_FORWARD_SECURE,
+      std::make_unique<NullEncrypter>(Perspective::IS_CLIENT));
   // Send stream 3 data [0, 10) and fin.
   EXPECT_CALL(connection_, SendStreamData(3, 10, 0, FIN))
       .WillOnce(Return(QuicConsumedData(10, true)));
@@ -358,7 +358,7 @@ TEST_F(SimpleSessionNotifierTest, RetransmitFrames) {
   // stream 3 data [0, 3) is retransmitted and connection is blocked.
   EXPECT_CALL(connection_, SendStreamData(3, 3, 0, NO_FIN))
       .WillOnce(Return(QuicConsumedData(2, false)));
-  notifier_.RetransmitFrames(frames, RTO_RETRANSMISSION);
+  notifier_.RetransmitFrames(frames, PTO_RETRANSMISSION);
   EXPECT_FALSE(notifier_.WillingToWrite());
 }
 

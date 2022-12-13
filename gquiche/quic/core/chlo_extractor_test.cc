@@ -27,8 +27,7 @@ class TestDelegate : public ChloExtractor::Delegate {
   ~TestDelegate() override = default;
 
   // ChloExtractor::Delegate implementation
-  void OnChlo(QuicTransportVersion version,
-              QuicConnectionId connection_id,
+  void OnChlo(QuicTransportVersion version, QuicConnectionId connection_id,
               const CryptoHandshakeMessage& chlo) override {
     version_ = version;
     connection_id_ = connection_id;
@@ -55,8 +54,7 @@ class ChloExtractorTest : public QuicTestWithParam<ParsedQuicVersion> {
  public:
   ChloExtractorTest() : version_(GetParam()) {}
 
-  void MakePacket(absl::string_view data,
-                  bool munge_offset,
+  void MakePacket(absl::string_view data, bool munge_offset,
                   bool munge_stream_id) {
     QuicPacketHeader header;
     header.destination_connection_id = TestConnectionId();
@@ -67,8 +65,9 @@ class ChloExtractorTest : public QuicTestWithParam<ParsedQuicVersion> {
     header.packet_number_length = PACKET_4BYTE_PACKET_NUMBER;
     header.packet_number = QuicPacketNumber(1);
     if (version_.HasLongHeaderLengths()) {
-      header.retry_token_length_length = VARIABLE_LENGTH_INTEGER_LENGTH_1;
-      header.length_length = VARIABLE_LENGTH_INTEGER_LENGTH_2;
+      header.retry_token_length_length =
+          quiche::VARIABLE_LENGTH_INTEGER_LENGTH_1;
+      header.length_length = quiche::VARIABLE_LENGTH_INTEGER_LENGTH_2;
     }
     QuicFrames frames;
     size_t offset = 0;
@@ -110,8 +109,7 @@ class ChloExtractorTest : public QuicTestWithParam<ParsedQuicVersion> {
 };
 
 INSTANTIATE_TEST_SUITE_P(
-    ChloExtractorTests,
-    ChloExtractorTest,
+    ChloExtractorTests, ChloExtractorTest,
     ::testing::ValuesIn(AllSupportedVersionsWithQuicCrypto()),
     ::testing::PrintToStringParamName());
 

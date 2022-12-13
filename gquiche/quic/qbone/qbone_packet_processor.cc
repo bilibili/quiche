@@ -6,8 +6,10 @@
 
 #include <cstring>
 
+#include "absl/base/optimization.h"
 #include "absl/strings/string_view.h"
 #include "gquiche/quic/platform/api/quic_bug_tracker.h"
+#include "gquiche/quic/platform/api/quic_ip_address_family.h"
 #include "gquiche/quic/platform/api/quic_logging.h"
 #include "gquiche/quic/qbone/platform/icmp_packet.h"
 #include "gquiche/quic/qbone/platform/internet_checksum.h"
@@ -61,7 +63,7 @@ QbonePacketProcessor::Filter::FilterPacket(Direction direction,
 
 void QbonePacketProcessor::ProcessPacket(std::string* packet,
                                          Direction direction) {
-  if (QUIC_PREDICT_FALSE(!IsValid())) {
+  if (ABSL_PREDICT_FALSE(!IsValid())) {
     QUIC_BUG(quic_bug_11024_1)
         << "QuicPacketProcessor is invoked in an invalid state.";
     stats_->OnPacketDroppedSilently(direction);
@@ -159,11 +161,8 @@ QbonePacketProcessor::ProcessIPv6HeaderAndFilter(std::string* packet,
 }
 
 QbonePacketProcessor::ProcessingResult QbonePacketProcessor::ProcessIPv6Header(
-    std::string* packet,
-    Direction direction,
-    uint8_t* transport_protocol,
-    char** transport_data,
-    icmp6_hdr* icmp_header) {
+    std::string* packet, Direction direction, uint8_t* transport_protocol,
+    char** transport_data, icmp6_hdr* icmp_header) {
   // Check if the packet is big enough to have IPv6 header.
   if (packet->size() < kIPv6HeaderSize) {
     QUIC_DVLOG(1) << "Dropped malformed packet: IPv6 header too short";

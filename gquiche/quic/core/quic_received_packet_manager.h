@@ -6,6 +6,7 @@
 #define QUICHE_QUIC_CORE_QUIC_RECEIVED_PACKET_MANAGER_H_
 
 #include <cstddef>
+
 #include "gquiche/quic/core/frames/quic_ack_frequency_frame.h"
 #include "gquiche/quic/core/quic_config.h"
 #include "gquiche/quic/core/quic_framer.h"
@@ -64,7 +65,7 @@ class QUIC_EXPORT_PRIVATE QuicReceivedPacketManager {
   // Otherwise, ACK needs to be sent by the specified time.
   void MaybeUpdateAckTimeout(bool should_last_packet_instigate_acks,
                              QuicPacketNumber last_received_packet_number,
-                             QuicTime now,
+                             QuicTime last_packet_receipt_time, QuicTime now,
                              const RttStats* rtt_stats);
 
   // Resets ACK related states, called after an ACK is successfully sent.
@@ -103,8 +104,9 @@ class QUIC_EXPORT_PRIVATE QuicReceivedPacketManager {
     max_ack_ranges_ = max_ack_ranges;
   }
 
-  void set_save_timestamps(bool save_timestamps) {
+  void set_save_timestamps(bool save_timestamps, bool in_order_packets_only) {
     save_timestamps_ = save_timestamps;
+    save_timestamps_for_in_order_packets_ = in_order_packets_only;
   }
 
   size_t min_received_before_ack_decimation() const {
@@ -166,6 +168,10 @@ class QUIC_EXPORT_PRIVATE QuicReceivedPacketManager {
 
   // If true, save timestamps in the ack_frame_.
   bool save_timestamps_;
+
+  // If true and |save_timestamps_|, only save timestamps for packets that are
+  // received in order.
+  bool save_timestamps_for_in_order_packets_;
 
   // Least packet number received from peer.
   QuicPacketNumber least_received_packet_number_;

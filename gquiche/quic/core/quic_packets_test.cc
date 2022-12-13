@@ -74,12 +74,11 @@ TEST_F(QuicPacketsTest, GetClientConnectionIdAsSender) {
 
 TEST_F(QuicPacketsTest, CopySerializedPacket) {
   std::string buffer(1000, 'a');
-  SimpleBufferAllocator allocator;
+  quiche::SimpleBufferAllocator allocator;
   SerializedPacket packet(QuicPacketNumber(1), PACKET_1BYTE_PACKET_NUMBER,
                           buffer.data(), buffer.length(), /*has_ack=*/false,
                           /*has_stop_waiting=*/false);
-  packet.retransmittable_frames.push_back(
-      QuicFrame(new QuicWindowUpdateFrame()));
+  packet.retransmittable_frames.push_back(QuicFrame(QuicWindowUpdateFrame()));
   packet.retransmittable_frames.push_back(QuicFrame(QuicStreamFrame()));
 
   QuicAckFrame ack_frame(InitAckFrame(1));

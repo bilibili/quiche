@@ -5,8 +5,8 @@
 #include "gquiche/http2/adapter/nghttp2_util.h"
 #include "gquiche/http2/adapter/test_frame_sequence.h"
 #include "gquiche/http2/adapter/test_utils.h"
+#include "gquiche/common/platform/api/quiche_expect_bug.h"
 #include "gquiche/common/platform/api/quiche_test.h"
-#include "gquiche/common/platform/api/quiche_test_helpers.h"
 
 namespace http2 {
 namespace adapter {
@@ -27,7 +27,7 @@ enum FrameType {
   WINDOW_UPDATE,
 };
 
-class NgHttp2SessionTest : public testing::Test {
+class NgHttp2SessionTest : public quiche::test::QuicheTest {
  public:
   void SetUp() override {
     nghttp2_option_new(&options_);
@@ -99,21 +99,21 @@ TEST_F(NgHttp2SessionTest, ClientHandlesFrames) {
                                         spdy::SpdyFrameType::PING}));
   visitor_.Clear();
 
-  const std::vector<const Header> headers1 =
+  const std::vector<Header> headers1 =
       ToHeaders({{":method", "GET"},
                  {":scheme", "http"},
                  {":authority", "example.com"},
                  {":path", "/this/is/request/one"}});
   const auto nvs1 = GetNghttp2Nvs(headers1);
 
-  const std::vector<const Header> headers2 =
+  const std::vector<Header> headers2 =
       ToHeaders({{":method", "GET"},
                  {":scheme", "http"},
                  {":authority", "example.com"},
                  {":path", "/this/is/request/two"}});
   const auto nvs2 = GetNghttp2Nvs(headers2);
 
-  const std::vector<const Header> headers3 =
+  const std::vector<Header> headers3 =
       ToHeaders({{":method", "GET"},
                  {":scheme", "http"},
                  {":authority", "example.com"},
@@ -311,9 +311,12 @@ TEST_F(NgHttp2SessionTest, NullPayload) {
   ASSERT_EQ(0, result);
   EXPECT_TRUE(session.want_write());
   int send_result = -1;
-  EXPECT_QUICHE_BUG(send_result = nghttp2_session_send(session.raw_ptr()),
-                    "Extension frame payload for stream 1 is null!");
-  EXPECT_EQ(NGHTTP2_ERR_CALLBACK_FAILURE, send_result);
+  EXPECT_QUICHE_BUG(
+      {
+        send_result = nghttp2_session_send(session.raw_ptr());
+        EXPECT_EQ(NGHTTP2_ERR_CALLBACK_FAILURE, send_result);
+      },
+      "Extension frame payload for stream 1 is null!");
 }
 
 }  // namespace

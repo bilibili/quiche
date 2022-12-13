@@ -34,7 +34,6 @@
 #include "gquiche/quic/core/frames/quic_streams_blocked_frame.h"
 #include "gquiche/quic/core/frames/quic_window_update_frame.h"
 #include "gquiche/quic/core/quic_types.h"
-#include "gquiche/quic/platform/api/quic_containers.h"
 #include "gquiche/quic/platform/api/quic_export.h"
 
 #ifndef QUIC_FRAME_DEBUG
@@ -58,19 +57,19 @@ struct QUIC_EXPORT_PRIVATE QuicFrame {
   explicit QuicFrame(QuicStreamsBlockedFrame frame);
   explicit QuicFrame(QuicStreamFrame stream_frame);
   explicit QuicFrame(QuicHandshakeDoneFrame handshake_done_frame);
+  explicit QuicFrame(QuicWindowUpdateFrame frame);
+  explicit QuicFrame(QuicBlockedFrame frame);
+  explicit QuicFrame(QuicStopSendingFrame frame);
+  explicit QuicFrame(QuicPathChallengeFrame frame);
+  explicit QuicFrame(QuicPathResponseFrame frame);
 
   explicit QuicFrame(QuicAckFrame* frame);
   explicit QuicFrame(QuicRstStreamFrame* frame);
   explicit QuicFrame(QuicConnectionCloseFrame* frame);
   explicit QuicFrame(QuicGoAwayFrame* frame);
-  explicit QuicFrame(QuicWindowUpdateFrame* frame);
-  explicit QuicFrame(QuicBlockedFrame* frame);
   explicit QuicFrame(QuicNewConnectionIdFrame* frame);
   explicit QuicFrame(QuicRetireConnectionIdFrame* frame);
   explicit QuicFrame(QuicNewTokenFrame* frame);
-  explicit QuicFrame(QuicPathResponseFrame* frame);
-  explicit QuicFrame(QuicPathChallengeFrame* frame);
-  explicit QuicFrame(QuicStopSendingFrame* frame);
   explicit QuicFrame(QuicMessageFrame* message_frame);
   explicit QuicFrame(QuicCryptoFrame* crypto_frame);
   explicit QuicFrame(QuicAckFrequencyFrame* ack_frequency_frame);
@@ -91,6 +90,11 @@ struct QUIC_EXPORT_PRIVATE QuicFrame {
     QuicStreamsBlockedFrame streams_blocked_frame;
     QuicStreamFrame stream_frame;
     QuicHandshakeDoneFrame handshake_done_frame;
+    QuicWindowUpdateFrame window_update_frame;
+    QuicBlockedFrame blocked_frame;
+    QuicStopSendingFrame stop_sending_frame;
+    QuicPathChallengeFrame path_challenge_frame;
+    QuicPathResponseFrame path_response_frame;
 
     // Out of line frames.
     struct {
@@ -100,22 +104,13 @@ struct QUIC_EXPORT_PRIVATE QuicFrame {
       bool delete_forbidden = false;
 #endif  // QUIC_FRAME_DEBUG
 
-      // TODO(wub): These frames can also be inlined without increasing the size
-      // of QuicFrame: QuicRstStreamFrame, QuicWindowUpdateFrame,
-      // QuicBlockedFrame, QuicPathResponseFrame, QuicPathChallengeFrame and
-      // QuicStopSendingFrame.
       union {
         QuicAckFrame* ack_frame;
         QuicRstStreamFrame* rst_stream_frame;
         QuicConnectionCloseFrame* connection_close_frame;
         QuicGoAwayFrame* goaway_frame;
-        QuicWindowUpdateFrame* window_update_frame;
-        QuicBlockedFrame* blocked_frame;
         QuicNewConnectionIdFrame* new_connection_id_frame;
         QuicRetireConnectionIdFrame* retire_connection_id_frame;
-        QuicPathResponseFrame* path_response_frame;
-        QuicPathChallengeFrame* path_challenge_frame;
-        QuicStopSendingFrame* stop_sending_frame;
         QuicMessageFrame* message_frame;
         QuicCryptoFrame* crypto_frame;
         QuicAckFrequencyFrame* ack_frequency_frame;
@@ -163,12 +158,12 @@ QUIC_EXPORT_PRIVATE QuicFrame
 CopyRetransmittableControlFrame(const QuicFrame& frame);
 
 // Returns a copy of |frame|.
-QUIC_EXPORT_PRIVATE QuicFrame CopyQuicFrame(QuicBufferAllocator* allocator,
-                                            const QuicFrame& frame);
+QUIC_EXPORT_PRIVATE QuicFrame
+CopyQuicFrame(quiche::QuicheBufferAllocator* allocator, const QuicFrame& frame);
 
 // Returns a copy of |frames|.
-QUIC_EXPORT_PRIVATE QuicFrames CopyQuicFrames(QuicBufferAllocator* allocator,
-                                              const QuicFrames& frames);
+QUIC_EXPORT_PRIVATE QuicFrames CopyQuicFrames(
+    quiche::QuicheBufferAllocator* allocator, const QuicFrames& frames);
 
 // Human-readable description suitable for logging.
 QUIC_EXPORT_PRIVATE std::string QuicFramesToString(const QuicFrames& frames);

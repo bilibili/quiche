@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "gquiche/quic/core/tls_chlo_extractor.h"
+
 #include <cstring>
 #include <memory>
 
@@ -17,6 +18,7 @@
 #include "gquiche/quic/core/quic_types.h"
 #include "gquiche/quic/core/quic_versions.h"
 #include "gquiche/quic/platform/api/quic_bug_tracker.h"
+#include "gquiche/common/platform/api/quiche_logging.h"
 
 namespace quic {
 
@@ -60,6 +62,7 @@ TlsChloExtractor& TlsChloExtractor::operator=(TlsChloExtractor&& other) {
       other.parsed_crypto_frame_in_this_packet_;
   alpns_ = std::move(other.alpns_);
   server_name_ = std::move(other.server_name_);
+  client_hello_bytes_ = std::move(other.client_hello_bytes_);
   return *this;
 }
 
@@ -152,8 +155,7 @@ void TlsChloExtractor::OnUnrecoverableError(QuicErrorCode error,
 }
 
 void TlsChloExtractor::OnUnrecoverableError(
-    QuicErrorCode error,
-    QuicIetfTransportErrorCodes ietf_error,
+    QuicErrorCode error, QuicIetfTransportErrorCodes ietf_error,
     const std::string& details) {
   HandleUnrecoverableError(absl::StrCat(
       "Crypto stream error ", QuicErrorCodeToString(error), "(",
@@ -211,10 +213,8 @@ TlsChloExtractor* TlsChloExtractor::GetInstanceFromSSL(SSL* ssl) {
 
 // static
 int TlsChloExtractor::SetReadSecretCallback(
-    SSL* ssl,
-    enum ssl_encryption_level_t /*level*/,
-    const SSL_CIPHER* /*cipher*/,
-    const uint8_t* /*secret*/,
+    SSL* ssl, enum ssl_encryption_level_t /*level*/,
+    const SSL_CIPHER* /*cipher*/, const uint8_t* /*secret*/,
     size_t /*secret_length*/) {
   GetInstanceFromSSL(ssl)->HandleUnexpectedCallback("SetReadSecretCallback");
   return 0;
@@ -222,10 +222,8 @@ int TlsChloExtractor::SetReadSecretCallback(
 
 // static
 int TlsChloExtractor::SetWriteSecretCallback(
-    SSL* ssl,
-    enum ssl_encryption_level_t /*level*/,
-    const SSL_CIPHER* /*cipher*/,
-    const uint8_t* /*secret*/,
+    SSL* ssl, enum ssl_encryption_level_t /*level*/,
+    const SSL_CIPHER* /*cipher*/, const uint8_t* /*secret*/,
     size_t /*secret_length*/) {
   GetInstanceFromSSL(ssl)->HandleUnexpectedCallback("SetWriteSecretCallback");
   return 0;
@@ -233,9 +231,7 @@ int TlsChloExtractor::SetWriteSecretCallback(
 
 // static
 int TlsChloExtractor::WriteMessageCallback(
-    SSL* ssl,
-    enum ssl_encryption_level_t /*level*/,
-    const uint8_t* /*data*/,
+    SSL* ssl, enum ssl_encryption_level_t /*level*/, const uint8_t* /*data*/,
     size_t /*len*/) {
   GetInstanceFromSSL(ssl)->HandleUnexpectedCallback("WriteMessageCallback");
   return 0;
@@ -273,6 +269,9 @@ void TlsChloExtractor::SendAlert(uint8_t tls_alert_value) {
   HandleUnrecoverableError(absl::StrCat(
       "BoringSSL attempted to send alert ", static_cast<int>(tls_alert_value),
       " ", SSL_alert_desc_string_long(tls_alert_value)));
+  if (state_ == State::kUnrecoverableFailure) {
+    tls_alert_ = tls_alert_value;
+  }
 }
 
 // static
@@ -294,6 +293,11 @@ void TlsChloExtractor::HandleParsedChlo(const SSL_CLIENT_HELLO* client_hello) {
   resumption_attempted_ =
       HasExtension(client_hello, TLSEXT_TYPE_pre_shared_key);
   early_data_attempted_ = HasExtension(client_hello, TLSEXT_TYPE_early_data);
+
+  QUICHE_DCHECK(client_hello_bytes_.empty());
+  client_hello_bytes_.assign(
+      client_hello->client_hello,
+      client_hello->client_hello + client_hello->client_hello_len);
 
   const uint8_t* alpn_data;
   size_t alpn_len;

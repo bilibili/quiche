@@ -15,6 +15,11 @@ ABSL_FLAG(bool, qbone_tun_device_replace_default_routing_rules, true,
           "qbone interface to the qbone table. This is unnecessary in "
           "environments with no other ipv6 route.");
 
+ABSL_FLAG(int, qbone_route_init_cwnd,
+          quic::NetlinkInterface::kUnspecifiedInitCwnd,
+          "If non-zero, will add initcwnd to QBONE routing rules.  Setting "
+          "a value below 10 is dangerous and not recommended.");
+
 namespace quic {
 
 bool TunDeviceController::UpdateAddress(const IpRange& desired_range) {
@@ -59,8 +64,7 @@ bool TunDeviceController::UpdateAddress(const IpRange& desired_range) {
 }
 
 bool TunDeviceController::UpdateRoutes(
-    const IpRange& desired_range,
-    const std::vector<IpRange>& desired_routes) {
+    const IpRange& desired_range, const std::vector<IpRange>& desired_routes) {
   if (!setup_tun_) {
     return true;
   }
@@ -81,10 +85,10 @@ bool TunDeviceController::UpdateRoutes(
   for (const auto& rule : routing_rules) {
     if (rule.out_interface == link_info.index &&
         rule.table == QboneConstants::kQboneRouteTableId) {
-      if (!netlink_->ChangeRoute(NetlinkInterface::Verb::kRemove,
-                                 rule.table, rule.destination_subnet,
-                                 rule.scope, rule.preferred_source,
-                                 rule.out_interface)) {
+      if (!netlink_->ChangeRoute(NetlinkInterface::Verb::kRemove, rule.table,
+                                 rule.destination_subnet, rule.scope,
+                                 rule.preferred_source, rule.out_interface,
+                                 rule.init_cwnd)) {
         QUIC_LOG(ERROR) << "Unable to remove old route to <"
                         << rule.destination_subnet.ToString() << ">";
         return false;
@@ -104,8 +108,8 @@ bool TunDeviceController::UpdateRoutes(
   for (const auto& route : routes) {
     if (!netlink_->ChangeRoute(NetlinkInterface::Verb::kReplace,
                                QboneConstants::kQboneRouteTableId, route,
-                               RT_SCOPE_LINK, desired_address,
-                               link_info.index)) {
+                               RT_SCOPE_LINK, desired_address, link_info.index,
+                               absl::GetFlag(FLAGS_qbone_route_init_cwnd))) {
       QUIC_LOG(ERROR) << "Unable to add route <" << route.ToString() << ">";
       return false;
     }
@@ -115,8 +119,7 @@ bool TunDeviceController::UpdateRoutes(
 }
 
 bool TunDeviceController::UpdateRoutesWithRetries(
-    const IpRange& desired_range,
-    const std::vector<IpRange>& desired_routes,
+    const IpRange& desired_range, const std::vector<IpRange>& desired_routes,
     int retries) {
   while (retries-- > 0) {
     if (UpdateRoutes(desired_range, desired_routes)) {
@@ -140,8 +143,8 @@ bool TunDeviceController::UpdateRules(IpRange desired_range) {
 
   for (const auto& rule : ip_rules) {
     if (rule.table == QboneConstants::kQboneRouteTableId) {
-      if (!netlink_->ChangeRule(NetlinkInterface::Verb::kRemove,
-                                rule.table, rule.source_range)) {
+      if (!netlink_->ChangeRule(NetlinkInterface::Verb::kRemove, rule.table,
+                                rule.source_range)) {
         QUIC_LOG(ERROR) << "Unable to remove old rule for table <" << rule.table
                         << "> from source <" << rule.source_range.ToString()
                         << ">";

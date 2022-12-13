@@ -28,8 +28,7 @@ class QuicTestServer : public QuicServer {
 
     // Returns a new session owned by the caller.
     virtual std::unique_ptr<QuicServerSessionBase> CreateSession(
-        const QuicConfig& config,
-        QuicConnection* connection,
+        const QuicConfig& config, QuicConnection* connection,
         QuicSession::Visitor* visitor,
         QuicCryptoServerStreamBase::Helper* helper,
         const QuicCryptoServerConfig* crypto_config,
@@ -44,8 +43,11 @@ class QuicTestServer : public QuicServer {
 
     // Returns a new stream owned by the caller.
     virtual QuicSimpleServerStream* CreateStream(
-        QuicStreamId id,
-        QuicSpdySession* session,
+        QuicStreamId id, QuicSpdySession* session,
+        QuicSimpleServerBackend* quic_simple_server_backend) = 0;
+
+    virtual QuicSimpleServerStream* CreateStream(
+        PendingStream* pending, QuicSpdySession* session,
         QuicSimpleServerBackend* quic_simple_server_backend) = 0;
   };
 
@@ -86,6 +88,15 @@ class QuicTestServer : public QuicServer {
   // Sets a custom crypto stream factory, owned by the caller, for easy custom
   // crypto logic.  This is incompatible with setting a session factory.
   void SetCryptoStreamFactory(CryptoStreamFactory* factory);
+
+  // Sets the override for the default event loop factory used by the server.
+  void SetEventLoopFactory(QuicEventLoopFactory* factory);
+
+ protected:
+  std::unique_ptr<QuicEventLoop> CreateEventLoop() override;
+
+ private:
+  QuicEventLoopFactory* event_loop_factory_ = nullptr;
 };
 
 // Useful test sessions for the QuicTestServer.
@@ -94,8 +105,7 @@ class QuicTestServer : public QuicServer {
 // credentials have even been established.
 class ImmediateGoAwaySession : public QuicSimpleServerSession {
  public:
-  ImmediateGoAwaySession(const QuicConfig& config,
-                         QuicConnection* connection,
+  ImmediateGoAwaySession(const QuicConfig& config, QuicConnection* connection,
                          QuicSession::Visitor* visitor,
                          QuicCryptoServerStreamBase::Helper* helper,
                          const QuicCryptoServerConfig* crypto_config,
@@ -106,8 +116,7 @@ class ImmediateGoAwaySession : public QuicSimpleServerSession {
   void OnStreamFrame(const QuicStreamFrame& frame) override;
   void OnCryptoFrame(const QuicCryptoFrame& frame) override;
   void OnNewEncryptionKeyAvailable(
-      EncryptionLevel level,
-      std::unique_ptr<QuicEncrypter> encrypter) override;
+      EncryptionLevel level, std::unique_ptr<QuicEncrypter> encrypter) override;
 };
 
 }  // namespace test

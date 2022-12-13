@@ -14,7 +14,6 @@
 
 #include "absl/container/flat_hash_set.h"
 #include "absl/strings/string_view.h"
-#include "gquiche/http2/platform/api/http2_flags.h"
 #include "gquiche/common/platform/api/quiche_export.h"
 #include "gquiche/common/quiche_text_utils.h"
 
@@ -67,7 +66,7 @@ QUICHE_EXPORT_PRIVATE inline std::ostream& operator<<(std::ostream& out,
 
 // Flags that appear in supported frame types. These are treated as bit masks.
 // The comments indicate for which frame types the flag is valid.
-enum Http2FrameFlag {
+enum Http2FrameFlag : uint8_t {
   END_STREAM = 0x01,   // DATA, HEADERS
   ACK = 0x01,          // SETTINGS, PING
   END_HEADERS = 0x04,  // HEADERS, PUSH_PROMISE, CONTINUATION

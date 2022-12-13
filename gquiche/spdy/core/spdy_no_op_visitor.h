@@ -12,14 +12,16 @@
 #include <cstdint>
 
 #include "absl/strings/string_view.h"
+#include "gquiche/common/platform/api/quiche_export.h"
 #include "gquiche/spdy/core/http2_frame_decoder_adapter.h"
 #include "gquiche/spdy/core/spdy_protocol.h"
 
 namespace spdy {
 
-class SpdyNoOpVisitor : public SpdyFramerVisitorInterface,
-                        public SpdyFramerDebugVisitorInterface,
-                        public SpdyHeadersHandlerInterface {
+class QUICHE_EXPORT_PRIVATE SpdyNoOpVisitor
+    : public SpdyFramerVisitorInterface,
+      public SpdyFramerDebugVisitorInterface,
+      public SpdyHeadersHandlerInterface {
  public:
   SpdyNoOpVisitor();
   ~SpdyNoOpVisitor() override;
@@ -30,11 +32,9 @@ class SpdyNoOpVisitor : public SpdyFramerVisitorInterface,
   SpdyHeadersHandlerInterface* OnHeaderFrameStart(
       SpdyStreamId stream_id) override;
   void OnHeaderFrameEnd(SpdyStreamId /*stream_id*/) override {}
-  void OnDataFrameHeader(SpdyStreamId /*stream_id*/,
-                         size_t /*length*/,
+  void OnDataFrameHeader(SpdyStreamId /*stream_id*/, size_t /*length*/,
                          bool /*fin*/) override {}
-  void OnStreamFrameData(SpdyStreamId /*stream_id*/,
-                         const char* /*data*/,
+  void OnStreamFrameData(SpdyStreamId /*stream_id*/, const char* /*data*/,
                          size_t /*len*/) override {}
   void OnStreamEnd(SpdyStreamId /*stream_id*/) override {}
   void OnStreamPadding(SpdyStreamId /*stream_id*/, size_t /*len*/) override {}
@@ -46,35 +46,33 @@ class SpdyNoOpVisitor : public SpdyFramerVisitorInterface,
   void OnSettingsAck() override {}
   void OnGoAway(SpdyStreamId /*last_accepted_stream_id*/,
                 SpdyErrorCode /*error_code*/) override {}
-  void OnHeaders(SpdyStreamId /*stream_id*/,
-                 bool /*has_priority*/,
-                 int /*weight*/,
-                 SpdyStreamId /*parent_stream_id*/,
-                 bool /*exclusive*/,
-                 bool /*fin*/,
-                 bool /*end*/) override {}
+  void OnHeaders(SpdyStreamId /*stream_id*/, size_t /*payload_length*/,
+                 bool /*has_priority*/, int /*weight*/,
+                 SpdyStreamId /*parent_stream_id*/, bool /*exclusive*/,
+                 bool /*fin*/, bool /*end*/) override {}
   void OnWindowUpdate(SpdyStreamId /*stream_id*/,
                       int /*delta_window_size*/) override {}
   void OnPushPromise(SpdyStreamId /*stream_id*/,
                      SpdyStreamId /*promised_stream_id*/,
                      bool /*end*/) override {}
-  void OnContinuation(SpdyStreamId /*stream_id*/, bool /*end*/) override {}
-  void OnAltSvc(SpdyStreamId /*stream_id*/,
-                absl::string_view /*origin*/,
+  void OnContinuation(SpdyStreamId /*stream_id*/, size_t /*payload_size*/,
+                      bool /*end*/) override {}
+  void OnAltSvc(SpdyStreamId /*stream_id*/, absl::string_view /*origin*/,
                 const SpdyAltSvcWireFormat::AlternativeServiceVector&
                 /*altsvc_vector*/) override {}
-  void OnPriority(SpdyStreamId /*stream_id*/,
-                  SpdyStreamId /*parent_stream_id*/,
-                  int /*weight*/,
-                  bool /*exclusive*/) override {}
+  void OnPriority(SpdyStreamId /*stream_id*/, SpdyStreamId /*parent_stream_id*/,
+                  int /*weight*/, bool /*exclusive*/) override {}
   void OnPriorityUpdate(SpdyStreamId /*prioritized_stream_id*/,
                         absl::string_view /*priority_field_value*/) override {}
   bool OnUnknownFrame(SpdyStreamId /*stream_id*/,
                       uint8_t /*frame_type*/) override;
+  void OnUnknownFrameStart(SpdyStreamId /*stream_id*/, size_t /*length*/,
+                           uint8_t /*type*/, uint8_t /*flags*/) override {}
+  void OnUnknownFramePayload(SpdyStreamId /*stream_id*/,
+                             absl::string_view /*payload*/) override {}
 
   // SpdyFramerDebugVisitorInterface methods:
-  void OnSendCompressedFrame(SpdyStreamId /*stream_id*/,
-                             SpdyFrameType /*type*/,
+  void OnSendCompressedFrame(SpdyStreamId /*stream_id*/, SpdyFrameType /*type*/,
                              size_t /*payload_len*/,
                              size_t /*frame_len*/) override {}
   void OnReceiveCompressedFrame(SpdyStreamId /*stream_id*/,

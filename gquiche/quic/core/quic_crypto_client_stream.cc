@@ -28,11 +28,9 @@ QuicCryptoClientStreamBase::QuicCryptoClientStreamBase(QuicSession* session)
     : QuicCryptoStream(session) {}
 
 QuicCryptoClientStream::QuicCryptoClientStream(
-    const QuicServerId& server_id,
-    QuicSession* session,
+    const QuicServerId& server_id, QuicSession* session,
     std::unique_ptr<ProofVerifyContext> verify_context,
-    QuicCryptoClientConfig* crypto_config,
-    ProofHandler* proof_handler,
+    QuicCryptoClientConfig* crypto_config, ProofHandler* proof_handler,
     bool has_application_state)
     : QuicCryptoClientStreamBase(session) {
   QUICHE_DCHECK_EQ(Perspective::IS_CLIENT,
@@ -114,10 +112,6 @@ size_t QuicCryptoClientStream::BufferSizeLimitForLevel(
   return handshaker_->BufferSizeLimitForLevel(level);
 }
 
-bool QuicCryptoClientStream::KeyUpdateSupportedLocally() const {
-  return handshaker_->KeyUpdateSupportedLocally();
-}
-
 std::unique_ptr<QuicDecrypter>
 QuicCryptoClientStream::AdvanceKeysAndCreateCurrentOneRttDecrypter() {
   return handshaker_->AdvanceKeysAndCreateCurrentOneRttDecrypter();
@@ -168,6 +162,17 @@ void QuicCryptoClientStream::SetServerApplicationStateForResumption(
 
 SSL* QuicCryptoClientStream::GetSsl() const {
   return tls_handshaker_ == nullptr ? nullptr : tls_handshaker_->ssl();
+}
+
+bool QuicCryptoClientStream::IsCryptoFrameExpectedForEncryptionLevel(
+    EncryptionLevel level) const {
+  return handshaker_->IsCryptoFrameExpectedForEncryptionLevel(level);
+}
+
+EncryptionLevel
+QuicCryptoClientStream::GetEncryptionLevelToSendCryptoDataOfSpace(
+    PacketNumberSpace space) const {
+  return handshaker_->GetEncryptionLevelToSendCryptoDataOfSpace(space);
 }
 
 }  // namespace quic

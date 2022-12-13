@@ -18,24 +18,6 @@
 
 namespace quic {
 
-// A path context which owns the writer.
-class QUIC_EXPORT_PRIVATE PathMigrationContext
-    : public QuicPathValidationContext {
- public:
-  PathMigrationContext(std::unique_ptr<QuicPacketWriter> writer,
-                       const QuicSocketAddress& self_address,
-                       const QuicSocketAddress& peer_address)
-      : QuicPathValidationContext(self_address, peer_address),
-        alternative_writer_(std::move(writer)) {}
-
-  QuicPacketWriter* WriterToUse() override { return alternative_writer_.get(); }
-
-  QuicPacketWriter* ReleaseWriter() { return alternative_writer_.release(); }
-
- private:
-  std::unique_ptr<QuicPacketWriter> alternative_writer_;
-};
-
 // Implements the basic feature of a result delegate for path validation for
 // connection migration. If the validation succeeds, migrate to the alternative
 // path. Otherwise, stay on the current path.
@@ -49,7 +31,8 @@ class QuicClientSocketMigrationValidationResultDelegate
   // Overridden to start migration and takes the ownership of the writer in the
   // context.
   void OnPathValidationSuccess(
-      std::unique_ptr<QuicPathValidationContext> context) override {
+      std::unique_ptr<QuicPathValidationContext> context,
+      QuicTime /*start_time*/) override {
     QUIC_DLOG(INFO) << "Successfully validated path from " << *context
                     << ". Migrate to it now.";
     auto migration_context = std::unique_ptr<PathMigrationContext>(
@@ -77,10 +60,8 @@ QuicClientBase::NetworkHelper::~NetworkHelper() = default;
 
 QuicClientBase::QuicClientBase(
     const QuicServerId& server_id,
-    const ParsedQuicVersionVector& supported_versions,
-    const QuicConfig& config,
-    QuicConnectionHelperInterface* helper,
-    QuicAlarmFactory* alarm_factory,
+    const ParsedQuicVersionVector& supported_versions, const QuicConfig& config,
+    QuicConnectionHelperInterface* helper, QuicAlarmFactory* alarm_factory,
     std::unique_ptr<NetworkHelper> network_helper,
     std::unique_ptr<ProofVerifier> proof_verifier,
     std::unique_ptr<SessionCache> session_cache)
@@ -184,7 +165,7 @@ void QuicClientBase::StartConnect() {
       new QuicConnection(GetNextConnectionId(), QuicSocketAddress(),
                          server_address(), helper(), alarm_factory(), writer,
                          /* owns_writer= */ false, Perspective::IS_CLIENT,
-                         client_supported_versions));
+                         client_supported_versions, connection_id_generator_));
   if (can_reconnect_with_different_version) {
     session()->set_client_original_supported_versions(supported_versions());
   }
@@ -206,9 +187,7 @@ void QuicClientBase::StartConnect() {
   set_connected_or_attempting_connect(true);
 }
 
-void QuicClientBase::InitializeSession() {
-  session()->Initialize();
-}
+void QuicClientBase::InitializeSession() { session()->Initialize(); }
 
 void QuicClientBase::Disconnect() {
   QUICHE_DCHECK(initialized_);
@@ -243,6 +222,10 @@ bool QuicClientBase::WaitForEvents() {
 
   network_helper_->RunEventLoop();
 
+  return WaitForEventsPostprocessing();
+}
+
+bool QuicClientBase::WaitForEventsPostprocessing() {
   QUICHE_DCHECK(session() != nullptr);
   ParsedQuicVersion version = UnsupportedQuicVersion();
   if (!connected() && CanReconnectWithDifferentVersion(&version)) {
@@ -260,8 +243,7 @@ bool QuicClientBase::MigrateSocket(const QuicIpAddress& new_host) {
 }
 
 bool QuicClientBase::MigrateSocketWithSpecifiedPort(
-    const QuicIpAddress& new_host,
-    int port) {
+    const QuicIpAddress& new_host, int port) {
   if (!connected()) {
     QUICHE_DVLOG(1)
         << "MigrateSocketWithSpecifiedPort failed as connection has closed";
@@ -289,8 +271,7 @@ bool QuicClientBase::MigrateSocketWithSpecifiedPort(
 
 bool QuicClientBase::ValidateAndMigrateSocket(const QuicIpAddress& new_host) {
   QUICHE_DCHECK(VersionHasIetfQuicFrames(
-                    session_->connection()->version().transport_version) &&
-                session_->connection()->use_path_validator());
+      session_->connection()->version().transport_version));
   if (!connected()) {
     return false;
   }
@@ -311,8 +292,7 @@ bool QuicClientBase::ValidateAndMigrateSocket(const QuicIpAddress& new_host) {
 }
 
 std::unique_ptr<QuicPacketWriter> QuicClientBase::CreateWriterForNewNetwork(
-    const QuicIpAddress& new_host,
-    int port) {
+    const QuicIpAddress& new_host, int port) {
   set_bind_to_address(new_host);
   set_local_port(port);
   if (!network_helper_->CreateUDPSocketAndBind(server_address_,
@@ -332,13 +312,9 @@ bool QuicClientBase::ChangeEphemeralPort() {
   return MigrateSocketWithSpecifiedPort(current_host, 0 /*any ephemeral port*/);
 }
 
-QuicSession* QuicClientBase::session() {
-  return session_.get();
-}
+QuicSession* QuicClientBase::session() { return session_.get(); }
 
-const QuicSession* QuicClientBase::session() const {
-  return session_.get();
-}
+const QuicSession* QuicClientBase::session() const { return session_.get(); }
 
 QuicClientBase::NetworkHelper* QuicClientBase::network_helper() {
   return network_helper_.get();
@@ -478,8 +454,10 @@ class ValidationResultDelegate : public QuicPathValidator::ResultDelegate {
       : QuicPathValidator::ResultDelegate(), client_(client) {}
 
   void OnPathValidationSuccess(
-      std::unique_ptr<QuicPathValidationContext> context) override {
-    QUIC_DLOG(INFO) << "Successfully validated path from " << *context;
+      std::unique_ptr<QuicPathValidationContext> context,
+      QuicTime start_time) override {
+    QUIC_DLOG(INFO) << "Successfully validated path from " << *context
+                    << ", validation started at " << start_time;
     client_->AddValidatedPath(std::move(context));
   }
   void OnPathValidationFailure(

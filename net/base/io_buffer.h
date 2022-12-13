@@ -8,13 +8,13 @@
 #include <memory>
 #include <string>
 
-#include "gquiche/quic/platform/api/quic_reference_counted.h"
+#include "gquiche/common/platform/api/quiche_reference_counted.h"
 
 namespace net{
 
 // This is a simplified version of chromium net::IOBuffer. That is to say, We
 //take of reference count of that.
-class IOBuffer : public quic::QuicReferenceCounted {
+class IOBuffer : public quiche::QuicheReferenceCounted {
  public:
   IOBuffer();
 
@@ -73,8 +73,8 @@ class IOBufferWithSize : public IOBuffer {
 class DrainableIOBuffer : public IOBuffer {
  public:
   // TODO(eroman): Deprecated. Use the size_t flavor instead. crbug.com/488553
-  DrainableIOBuffer(quic::QuicReferenceCountedPointer<IOBuffer> base, int size);
-  DrainableIOBuffer(quic::QuicReferenceCountedPointer<IOBuffer> base, size_t size);
+  DrainableIOBuffer(quiche::QuicheReferenceCountedPointer<IOBuffer> base, int size);
+  DrainableIOBuffer(quiche::QuicheReferenceCountedPointer<IOBuffer> base, size_t size);
 
   // DidConsume() changes the |data_| pointer so that |data_| always points
   // to the first unconsumed byte.
@@ -95,7 +95,7 @@ class DrainableIOBuffer : public IOBuffer {
  private:
   ~DrainableIOBuffer() override;
 
-  quic::QuicReferenceCountedPointer<IOBuffer> base_;
+  quiche::QuicheReferenceCountedPointer<IOBuffer> base_;
   int size_;
   int used_;
 };

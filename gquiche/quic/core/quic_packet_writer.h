@@ -8,8 +8,10 @@
 #include <cstddef>
 #include <utility>
 
+#include "absl/types/optional.h"
 #include "gquiche/quic/core/quic_packets.h"
 #include "gquiche/quic/platform/api/quic_export.h"
+#include "gquiche/quic/platform/api/quic_ip_address.h"
 #include "gquiche/quic/platform/api/quic_socket_address.h"
 
 namespace quic {
@@ -100,8 +102,7 @@ class QUIC_EXPORT_PRIVATE QuicPacketWriter {
   // d) When WRITE_STATUS_BLOCKED_DATA_BUFFERED is returned, the caller expects
   // 1) the writer owns the packet buffers, and 2) the writer will re-send the
   // packet when it unblocks.
-  virtual WriteResult WritePacket(const char* buffer,
-                                  size_t buf_len,
+  virtual WriteResult WritePacket(const char* buffer, size_t buf_len,
                                   const QuicIpAddress& self_address,
                                   const QuicSocketAddress& peer_address,
                                   PerPacketOptions* options) = 0;
@@ -112,6 +113,11 @@ class QUIC_EXPORT_PRIVATE QuicPacketWriter {
   // Records that the socket has become writable, for example when an EPOLLOUT
   // is received or an asynchronous write completes.
   virtual void SetWritable() = 0;
+
+  // The error code used by the writer to indicate that the write failed due to
+  // supplied packet being too big.  This is equivalent to returning
+  // WRITE_STATUS_MSG_TOO_BIG as a status.
+  virtual absl::optional<int> MessageTooBigErrorCode() const = 0;
 
   // Returns the maximum size of the packet which can be written using this
   // writer for the supplied peer address.  This size may actually exceed the

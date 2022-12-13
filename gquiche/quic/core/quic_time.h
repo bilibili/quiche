@@ -61,17 +61,17 @@ class QUIC_EXPORT_PRIVATE QuicTime {
     static constexpr Delta FromMicroseconds(int64_t us) { return Delta(us); }
 
     // Converts the time offset to a rounded number of seconds.
-    inline int64_t ToSeconds() const { return time_offset_ / 1000 / 1000; }
+    constexpr int64_t ToSeconds() const { return time_offset_ / 1000 / 1000; }
 
     // Converts the time offset to a rounded number of milliseconds.
-    inline int64_t ToMilliseconds() const { return time_offset_ / 1000; }
+    constexpr int64_t ToMilliseconds() const { return time_offset_ / 1000; }
 
     // Converts the time offset to a rounded number of microseconds.
-    inline int64_t ToMicroseconds() const { return time_offset_; }
+    constexpr int64_t ToMicroseconds() const { return time_offset_; }
 
-    inline bool IsZero() const { return time_offset_ == 0; }
+    constexpr bool IsZero() const { return time_offset_ == 0; }
 
-    inline bool IsInfinite() const {
+    constexpr bool IsInfinite() const {
       return time_offset_ == kQuicInfiniteTimeUs;
     }
 
@@ -83,11 +83,13 @@ class QUIC_EXPORT_PRIVATE QuicTime {
     friend inline QuicTime::Delta operator<<(QuicTime::Delta lhs, size_t rhs);
     friend inline QuicTime::Delta operator>>(QuicTime::Delta lhs, size_t rhs);
 
-    friend inline QuicTime::Delta operator+(QuicTime::Delta lhs,
-                                            QuicTime::Delta rhs);
-    friend inline QuicTime::Delta operator-(QuicTime::Delta lhs,
-                                            QuicTime::Delta rhs);
-    friend inline QuicTime::Delta operator*(QuicTime::Delta lhs, int rhs);
+    friend inline constexpr QuicTime::Delta operator+(QuicTime::Delta lhs,
+                                                      QuicTime::Delta rhs);
+    friend inline constexpr QuicTime::Delta operator-(QuicTime::Delta lhs,
+                                                      QuicTime::Delta rhs);
+    friend inline constexpr QuicTime::Delta operator*(QuicTime::Delta lhs,
+                                                      int rhs);
+    // Not constexpr since std::llround() is not constexpr.
     friend inline QuicTime::Delta operator*(QuicTime::Delta lhs, double rhs);
 
     friend inline QuicTime operator+(QuicTime lhs, QuicTime::Delta rhs);
@@ -123,9 +125,9 @@ class QUIC_EXPORT_PRIVATE QuicTime {
   // represents the number of microseconds since some epoch.  It may
   // be the UNIX epoch on some platforms.  On others, it may
   // be a CPU ticks based value.
-  inline int64_t ToDebuggingValue() const { return time_; }
+  int64_t ToDebuggingValue() const { return time_; }
 
-  inline bool IsInitialized() const { return 0 != time_; }
+  bool IsInitialized() const { return 0 != time_; }
 
  private:
   friend class QuicClock;
@@ -229,21 +231,13 @@ inline QuicTime::Delta operator>>(QuicTime::Delta lhs, size_t rhs) {
 inline bool operator==(QuicTime lhs, QuicTime rhs) {
   return lhs.time_ == rhs.time_;
 }
-inline bool operator!=(QuicTime lhs, QuicTime rhs) {
-  return !(lhs == rhs);
-}
+inline bool operator!=(QuicTime lhs, QuicTime rhs) { return !(lhs == rhs); }
 inline bool operator<(QuicTime lhs, QuicTime rhs) {
   return lhs.time_ < rhs.time_;
 }
-inline bool operator>(QuicTime lhs, QuicTime rhs) {
-  return rhs < lhs;
-}
-inline bool operator<=(QuicTime lhs, QuicTime rhs) {
-  return !(rhs < lhs);
-}
-inline bool operator>=(QuicTime lhs, QuicTime rhs) {
-  return !(lhs < rhs);
-}
+inline bool operator>(QuicTime lhs, QuicTime rhs) { return rhs < lhs; }
+inline bool operator<=(QuicTime lhs, QuicTime rhs) { return !(rhs < lhs); }
+inline bool operator>=(QuicTime lhs, QuicTime rhs) { return !(lhs < rhs); }
 
 // Override stream output operator for gtest or QUICHE_CHECK macros.
 inline std::ostream& operator<<(std::ostream& output, const QuicTime t) {
@@ -252,13 +246,15 @@ inline std::ostream& operator<<(std::ostream& output, const QuicTime t) {
 }
 
 // Non-member arithmetic operators for QuicTime::Delta.
-inline QuicTime::Delta operator+(QuicTime::Delta lhs, QuicTime::Delta rhs) {
+inline constexpr QuicTime::Delta operator+(QuicTime::Delta lhs,
+                                           QuicTime::Delta rhs) {
   return QuicTime::Delta(lhs.time_offset_ + rhs.time_offset_);
 }
-inline QuicTime::Delta operator-(QuicTime::Delta lhs, QuicTime::Delta rhs) {
+inline constexpr QuicTime::Delta operator-(QuicTime::Delta lhs,
+                                           QuicTime::Delta rhs) {
   return QuicTime::Delta(lhs.time_offset_ - rhs.time_offset_);
 }
-inline QuicTime::Delta operator*(QuicTime::Delta lhs, int rhs) {
+inline constexpr QuicTime::Delta operator*(QuicTime::Delta lhs, int rhs) {
   return QuicTime::Delta(lhs.time_offset_ * rhs);
 }
 inline QuicTime::Delta operator*(QuicTime::Delta lhs, double rhs) {

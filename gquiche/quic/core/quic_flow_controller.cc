@@ -29,11 +29,8 @@ std::string QuicFlowController::LogLabel() {
 }
 
 QuicFlowController::QuicFlowController(
-    QuicSession* session,
-    QuicStreamId id,
-    bool is_connection_flow_controller,
-    QuicStreamOffset send_window_offset,
-    QuicStreamOffset receive_window_offset,
+    QuicSession* session, QuicStreamId id, bool is_connection_flow_controller,
+    QuicStreamOffset send_window_offset, QuicStreamOffset receive_window_offset,
     QuicByteCount receive_window_size_limit,
     bool should_auto_tune_receive_window,
     QuicFlowControllerInterface* session_flow_controller)
@@ -235,10 +232,10 @@ void QuicFlowController::UpdateReceiveWindowOffsetAndSendWindowUpdate(
   SendWindowUpdate();
 }
 
-bool QuicFlowController::ShouldSendBlocked() {
+void QuicFlowController::MaybeSendBlocked() {
   if (SendWindowSize() != 0 ||
       last_blocked_send_window_offset_ >= send_window_offset_) {
-    return false;
+    return;
   }
   QUIC_DLOG(INFO) << ENDPOINT << LogLabel() << " is flow control blocked. "
                   << "Send window: " << SendWindowSize()
@@ -250,7 +247,7 @@ bool QuicFlowController::ShouldSendBlocked() {
   // Keep track of when we last sent a BLOCKED frame so that we only send one
   // at a given send offset.
   last_blocked_send_window_offset_ = send_window_offset_;
-  return true;
+  session_->SendBlocked(id_, last_blocked_send_window_offset_);
 }
 
 bool QuicFlowController::UpdateSendWindowOffset(
@@ -283,9 +280,7 @@ void QuicFlowController::EnsureWindowAtLeast(QuicByteCount window_size) {
   UpdateReceiveWindowOffsetAndSendWindowUpdate(available_window);
 }
 
-bool QuicFlowController::IsBlocked() const {
-  return SendWindowSize() == 0;
-}
+bool QuicFlowController::IsBlocked() const { return SendWindowSize() == 0; }
 
 uint64_t QuicFlowController::SendWindowSize() const {
   if (bytes_sent_ > send_window_offset_) {

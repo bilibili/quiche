@@ -10,6 +10,7 @@
 #include "gquiche/quic/core/quic_types.h"
 #include "gquiche/quic/platform/api/quic_export.h"
 #include "gquiche/quic/platform/api/quic_logging.h"
+#include "gquiche/common/platform/api/quiche_logging.h"
 
 namespace quic {
 
@@ -21,8 +22,7 @@ class QUIC_EXPORT_PRIVATE QuicSendControlStream : public QuicStream {
  public:
   // |session| can't be nullptr, and the ownership is not passed. The stream can
   // only be accessed through the session.
-  QuicSendControlStream(QuicStreamId id,
-                        QuicSpdySession* session,
+  QuicSendControlStream(QuicStreamId id, QuicSpdySession* session,
                         const SettingsFrame& settings);
   QuicSendControlStream(const QuicSendControlStream&) = delete;
   QuicSendControlStream& operator=(const QuicSendControlStream&) = delete;
@@ -47,7 +47,7 @@ class QUIC_EXPORT_PRIVATE QuicSendControlStream : public QuicStream {
 
   // The send control stream is write unidirectional, so this method should
   // never be called.
-  void OnDataAvailable() override { QUIC_NOTREACHED(); }
+  void OnDataAvailable() override { QUICHE_NOTREACHED(); }
 
  private:
   // Track if a settings frame is already sent.

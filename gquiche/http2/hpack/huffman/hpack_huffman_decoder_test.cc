@@ -12,11 +12,9 @@
 #include "absl/strings/escaping.h"
 #include "gquiche/http2/decoder/decode_buffer.h"
 #include "gquiche/http2/decoder/decode_status.h"
-#include "gquiche/http2/platform/api/http2_test_helpers.h"
-#include "gquiche/http2/tools/random_decoder_test.h"
+#include "gquiche/http2/test_tools/random_decoder_test_base.h"
+#include "gquiche/common/platform/api/quiche_expect_bug.h"
 #include "gquiche/common/platform/api/quiche_test.h"
-
-using ::testing::AssertionResult;
 
 namespace http2 {
 namespace test {

@@ -10,7 +10,7 @@ Document QLogFrame::toShortJson() const {
   return j;
 }
 
-Document PaddingFrameLog::toJson() const {
+Document PaddingFrameLog::ToJson() const {
   Document j;
   j.SetObject();
   j.AddMember("frame_type",
@@ -27,7 +27,7 @@ Document PaddingFrameLog::toShortJson() const {
   return j;
 }
 
-Document RstStreamFrameLog::toJson() const {
+Document RstStreamFrameLog::ToJson() const {
   Document j;
   j.SetObject();
   Document::AllocatorType& j_allocator = j.GetAllocator();
@@ -35,18 +35,18 @@ Document RstStreamFrameLog::toJson() const {
               Value(toQlogString(QuicFrameType::RST_STREAM_FRAME).data(), j_allocator).Move(),
               j_allocator);
   j.AddMember("stream_id",
-              streamId,
+              stream_id_,
               j_allocator);
   j.AddMember("error_code",
-              errorCode,
+              error_code_,
               j_allocator);
   j.AddMember("offset",
-              offset,
+              offset_,
               j_allocator);
   return j;
 }
 
-Document ConnectionCloseFrameLog::toJson() const {
+Document ConnectionCloseFrameLog::ToJson() const {
   Document j;
   j.SetObject();
   Document::AllocatorType& j_allocator = j.GetAllocator();
@@ -54,24 +54,24 @@ Document ConnectionCloseFrameLog::toJson() const {
               Value(toQlogString(QuicFrameType::CONNECTION_CLOSE_FRAME).data(), j_allocator).Move(),
               j_allocator);
   j.AddMember("wire_error_code",
-              wireErrorCode,
+              wire_error_code_,
               j_allocator);
   j.AddMember("quic_error_code",
-              Value(QuicErrorCodeToString(quicErrorCode), j_allocator).Move(),
+              Value(QuicErrorCodeToString(quic_error_code_), j_allocator).Move(),
               j_allocator);
   j.AddMember("error_details",
-              Value(errorDetails.c_str(), j_allocator).Move(),
+              Value(error_details_.c_str(), j_allocator).Move(),
               j_allocator);
   j.AddMember("close_type",
-              Value((toQlogString(closeType)).data(), j_allocator).Move(),
+              Value((toQlogString(close_type_)).data(), j_allocator).Move(),
               j_allocator);
   j.AddMember("transport_closing_frame_type",
-              transportCloseFrameType,
+              transport_close_frame_type_,
               j_allocator);
   return j;
 }
 
-Document GoAwayFrameLog::toJson() const {
+Document GoAwayFrameLog::ToJson() const {
   Document j;
   j.SetObject();
   Document::AllocatorType& j_allocator = j.GetAllocator();
@@ -79,18 +79,18 @@ Document GoAwayFrameLog::toJson() const {
               Value(toQlogString(QuicFrameType::GOAWAY_FRAME).data(), j_allocator).Move(),
               j_allocator);
   j.AddMember("error_code",
-              Value(QuicErrorCodeToString(errorCode), j_allocator).Move(),
+              Value(QuicErrorCodeToString(error_code_), j_allocator).Move(),
               j_allocator);
   j.AddMember("reason_phrase",
-              Value(reasonPhrase.c_str(), j_allocator).Move(),
+              Value(reason_phrase_.c_str(), j_allocator).Move(),
               j_allocator);
   j.AddMember("last_good_stream_id",
-              lastGoodStreamId,
+              last_good_streamId_,
               j_allocator);
   return j;
 }
 
-Document WindowUpdateFrameLog::toJson() const {
+Document WindowUpdateFrameLog::ToJson() const {
   Document j;
   j.SetObject();
   Document::AllocatorType& j_allocator = j.GetAllocator();
@@ -98,15 +98,15 @@ Document WindowUpdateFrameLog::toJson() const {
               Value(toQlogString(QuicFrameType::WINDOW_UPDATE_FRAME).data(), j_allocator).Move(),
               j_allocator);
   j.AddMember("stream_id",
-              streamId,
+              stream_id_,
               j_allocator);
   j.AddMember("max_data",
-              maxData,
+              max_data_,
               j_allocator);
   return j;
 }
 
-Document BlockedFrameLog::toJson() const {
+Document BlockedFrameLog::ToJson() const {
   Document j;
   j.SetObject();
   Document::AllocatorType& j_allocator = j.GetAllocator();
@@ -114,12 +114,12 @@ Document BlockedFrameLog::toJson() const {
               Value(toQlogString(QuicFrameType::BLOCKED_FRAME).data(), j_allocator).Move(),
               j_allocator);
   j.AddMember("stream_id",
-              streamId,
+              stream_id_,
               j_allocator);
   return j;
 }
 
-Document StopWaitingFrameLog::toJson() const {
+Document StopWaitingFrameLog::ToJson() const {
   Document j;
   j.SetObject();
   Document::AllocatorType& j_allocator = j.GetAllocator();
@@ -129,7 +129,7 @@ Document StopWaitingFrameLog::toJson() const {
   return j;
 }
 
-Document PingFrameLog::toJson() const {
+Document PingFrameLog::ToJson() const {
   Document j;
   j.SetObject();
   Document::AllocatorType& j_allocator = j.GetAllocator();
@@ -139,7 +139,7 @@ Document PingFrameLog::toJson() const {
   return j;
 }
 
-Document AckFrameLog::toJson() const {
+Document AckFrameLog::ToJson() const {
   Document j;
   j.SetObject();
   Document::AllocatorType& j_allocator = j.GetAllocator();
@@ -148,9 +148,9 @@ Document AckFrameLog::toJson() const {
   value.SetArray();
 
   Value temp_value;
-  for (auto interval : packetNumberQueue) {
+  for (auto interval : packet_number_queue_) {
     temp_value.SetArray();      
-    //*: Because the interval uses half-closed range `[)` and causes confusion,
+    //*: Because the interval uses half-closed  `[)` and causes confusion,
     //*: minus 1 here to make it closed range '[]'
     if(interval.max().ToUint64() - 1 == interval.min().ToUint64()) {
       temp_value.PushBack(interval.min().ToUint64(), j_allocator);             
@@ -168,7 +168,7 @@ Document AckFrameLog::toJson() const {
               Value(toQlogString(QuicFrameType::ACK_FRAME).data(), j_allocator).Move(),
               j_allocator);
   j.AddMember("ack_delay",
-              ackDelay.count(),
+              ack_delay_.count(),
               j_allocator);
   return j;
 }
@@ -182,7 +182,7 @@ Document AckFrameLog::toShortJson() const {
   value.SetArray();
 
   Value tmp_arr;
-  for (auto interval : packetNumberQueue) {
+  for (auto interval : packet_number_queue_) {
     tmp_arr.SetArray();
     if(interval.max().ToUint64() - 1 == interval.min().ToUint64()) {
       tmp_arr.PushBack(interval.min().ToUint64(), j_allocator);
@@ -194,11 +194,11 @@ Document AckFrameLog::toShortJson() const {
   }
 
   j.PushBack(value, j_allocator);
-  j.PushBack(ackDelay.count(), j_allocator);
+  j.PushBack(ack_delay_.count(), j_allocator);
   return j;
 }
 
-Document StreamFrameLog::toJson() const {
+Document StreamFrameLog::ToJson() const {
   Document j;
   j.SetObject();
   Document::AllocatorType& j_allocator = j.GetAllocator();
@@ -206,16 +206,16 @@ Document StreamFrameLog::toJson() const {
               Value(toQlogString(QuicFrameType::STREAM_FRAME).data(), j_allocator).Move(),
               j_allocator);
   j.AddMember("stream_id",
-              streamId,
+              stream_id_,
               j_allocator);
   j.AddMember("offset",
-              offset,
+              offset_,
               j_allocator);
   j.AddMember("length",
-              len,
+              len_,
               j_allocator);
   j.AddMember("fin",
-              fin,
+              fin_,
               j_allocator);              
   return j;
 }
@@ -224,33 +224,33 @@ Document StreamFrameLog::toShortJson() const {
   Document j;
   j.SetArray();
   Document::AllocatorType& j_allocator = j.GetAllocator();
-  j.PushBack(streamId, j_allocator);
-  j.PushBack(offset, j_allocator);
-  j.PushBack(len, j_allocator);
-  j.PushBack(fin, j_allocator); 
+  j.PushBack(stream_id_, j_allocator);
+  j.PushBack(offset_, j_allocator);
+  j.PushBack(len_, j_allocator);
+  j.PushBack(fin_, j_allocator); 
   return j;
 }
 
-Document CryptoFrameLog::toJson() const {
+Document CryptoFrameLog::ToJson() const {
   Document j;
   j.SetObject();
   Document::AllocatorType& j_allocator = j.GetAllocator();
   j.AddMember("encryption_level",
-              Value(toQlogString(level).data(), j_allocator).Move(),
+              Value(toQlogString(level_).data(), j_allocator).Move(),
               j_allocator);
   j.AddMember("frame_type",
               Value(toQlogString(QuicFrameType::CRYPTO_FRAME).data(), j_allocator).Move(),
               j_allocator);
   j.AddMember("offset",
-              offset,
+              offset_,
               j_allocator);
   j.AddMember("data_length",
-              dataLength,
+              data_length_,
               j_allocator);
   return j;
 }
 
-Document HandshakeDoneFrameLog::toJson() const {
+Document HandshakeDoneFrameLog::ToJson() const {
   Document j;
   j.SetObject();
   j.AddMember("frame_type",
@@ -259,7 +259,7 @@ Document HandshakeDoneFrameLog::toJson() const {
   return j;
 }
 
-Document MTUDiscoveryFrameLog::toJson() const {
+Document MTUDiscoveryFrameLog::ToJson() const {
   Document j;
   j.SetObject();
   j.AddMember("frame_type",
@@ -268,7 +268,7 @@ Document MTUDiscoveryFrameLog::toJson() const {
   return j;
 }
 
-Document NewConnectionIdFrameLog::toJson() const {
+Document NewConnectionIdFrameLog::ToJson() const {
   Document j;
   j.SetObject();
   Document::AllocatorType& j_allocator = j.GetAllocator();    
@@ -276,12 +276,12 @@ Document NewConnectionIdFrameLog::toJson() const {
               Value(toQlogString(QuicFrameType::NEW_CONNECTION_ID_FRAME).data(), j_allocator).Move(),
               j_allocator);
   j.AddMember("sequence",
-              sequenceNumber,
+              sequence_number_,
               j_allocator);
   return j;
 }
 
-Document MaxStreamsFrameLog::toJson() const {
+Document MaxStreamsFrameLog::ToJson() const {
   Document j;
   j.SetObject();
   Document::AllocatorType& j_allocator = j.GetAllocator();  
@@ -289,15 +289,15 @@ Document MaxStreamsFrameLog::toJson() const {
               Value(toQlogString(QuicFrameType::MAX_STREAMS_FRAME).data(), j_allocator).Move(),
               j_allocator);
   j.AddMember("max_streams",
-              streamCount,
+              stream_count_,
               j_allocator);
   j.AddMember("direction",
-              Value(unidirectional ? "unidirectional" : "bidirectional", j_allocator).Move(),
+              Value(unidirectional_ ? "unidirectional" : "bidirectional", j_allocator).Move(),
               j_allocator);
   return j;
 }
 
-Document StreamsBlockedFrameLog::toJson() const {
+Document StreamsBlockedFrameLog::ToJson() const {
   Document j;
   j.SetObject();
   Document::AllocatorType& j_allocator = j.GetAllocator();  
@@ -305,15 +305,15 @@ Document StreamsBlockedFrameLog::toJson() const {
               Value(toQlogString(QuicFrameType::STREAMS_BLOCKED_FRAME).data(), j_allocator).Move(),
               j_allocator);
   j.AddMember("max_streams",
-              streamCount,
+              stream_count_,
               j_allocator);
   j.AddMember("direction",
-              Value(unidirectional ? "unidirectional" : "bidirectional", j_allocator).Move(),
+              Value(unidirectional_ ? "unidirectional" : "bidirectional", j_allocator).Move(),
               j_allocator);
   return j;
 }
 
-Document PathResponseFrameLog::toJson() const {
+Document PathResponseFrameLog::ToJson() const {
   Document j;
   j.SetObject();
   Document::AllocatorType& j_allocator = j.GetAllocator();  
@@ -321,12 +321,12 @@ Document PathResponseFrameLog::toJson() const {
               Value(toQlogString(QuicFrameType::PATH_RESPONSE_FRAME).data(), j_allocator).Move(),
               j_allocator);
   j.AddMember("path_data",
-              Value(pathData.c_str(), j_allocator).Move(),
+              Value(path_data_.c_str(), j_allocator).Move(),
               j_allocator);
   return j;
 }
 
-Document PathChallengeFrameLog::toJson() const {
+Document PathChallengeFrameLog::ToJson() const {
   Document j;
   j.SetObject();
   Document::AllocatorType& j_allocator = j.GetAllocator();  
@@ -334,12 +334,12 @@ Document PathChallengeFrameLog::toJson() const {
               Value(toQlogString(QuicFrameType::PATH_CHALLENGE_FRAME).data(), j_allocator).Move(),
               j_allocator);
   j.AddMember("path_data",
-              Value(pathData.c_str(), j_allocator).Move(),
+              Value(path_data_.c_str(), j_allocator).Move(),
               j_allocator);
   return j;
 }
 
-Document StopSendingFrameLog::toJson() const {
+Document StopSendingFrameLog::ToJson() const {
   Document j;
   j.SetObject();
   Document::AllocatorType& j_allocator = j.GetAllocator();  
@@ -347,15 +347,15 @@ Document StopSendingFrameLog::toJson() const {
               Value(toQlogString(QuicFrameType::STOP_SENDING_FRAME).data(), j_allocator).Move(),
               j_allocator);
   j.AddMember("stream_id",
-              streamId,
+              stream_id_,
               j_allocator);
   j.AddMember("error_code",
-              Value(QuicRstStreamErrorCodeToString(errorCode), j_allocator).Move(),
+              Value(QuicRstStreamErrorCodeToString(error_code_), j_allocator).Move(),
               j_allocator);
   return j;
 }
 
-Document MessageFrameLog::toJson() const {
+Document MessageFrameLog::ToJson() const {
   Document j;
   j.SetObject();
   Document::AllocatorType& j_allocator = j.GetAllocator();  
@@ -363,15 +363,15 @@ Document MessageFrameLog::toJson() const {
               Value(toQlogString(QuicFrameType::MESSAGE_FRAME).data(), j_allocator).Move(),
               j_allocator);
   j.AddMember("message_id",
-              messageId,
+              message_id_,
               j_allocator);
   j.AddMember("length",
-              length,
+              length_,
               j_allocator);
   return j;
 }
 
-Document NewTokenFrameLog::toJson() const {
+Document NewTokenFrameLog::ToJson() const {
   Document j;
   j.SetObject();
   j.AddMember("frame_type",
@@ -380,7 +380,7 @@ Document NewTokenFrameLog::toJson() const {
   return j;
 }
 
-Document RetireConnectionIdFrameLog::toJson() const {
+Document RetireConnectionIdFrameLog::ToJson() const {
   Document j;
   j.SetObject();
   Document::AllocatorType& j_allocator = j.GetAllocator();  
@@ -388,12 +388,12 @@ Document RetireConnectionIdFrameLog::toJson() const {
               Value(toQlogString(QuicFrameType::RETIRE_CONNECTION_ID_FRAME).data(), j_allocator).Move(),
               j_allocator);
   j.AddMember("sequence",
-              sequenceNumber,
+              sequence_number_,
               j_allocator);
   return j;
 }
 
-Document AckFrequencyFrameLog::toJson() const {
+Document AckFrequencyFrameLog::ToJson() const {
   Document j;
   j.SetObject();
   Document::AllocatorType& j_allocator = j.GetAllocator();  
@@ -401,48 +401,48 @@ Document AckFrequencyFrameLog::toJson() const {
               Value(toQlogString(QuicFrameType::ACK_FREQUENCY_FRAME).data(), j_allocator ).Move(),
               j_allocator);
   j.AddMember("sequence_number",
-              sequenceNumber,
+              sequence_number_,
               j_allocator);
   j.AddMember("packet_tolerance",
-              packetTolerance,
+              packet_tolerance_,
               j_allocator);
   j.AddMember("update_max_ack_delay",
-              updateMaxAckDelay,
+              update_max_ack_delay_,
               j_allocator);
   j.AddMember("ignore_order",
-              ignoreOrder,
+              ignore_order_,
               j_allocator);
   return j;
 }
 
-Document VersionNegotiationLog::toJson() const {
+Document VersionNegotiationLog::ToJson() const {
   Document j;
   j.SetArray();
   Document::AllocatorType& j_allocator = j.GetAllocator();  
-  for (const auto& v : versions) {
+  for (const auto& v : versions_) {
     j.PushBack(Value(ParsedQuicVersionToString(v).c_str(), j_allocator).Move(), j_allocator);
   }
   return j;
 }
 
-Document QLogFramesProcessed::toJson() const {
+Document QLogFramesProcessed::ToJson() const {
   Document j;
   j.SetArray();
   Document::AllocatorType& j_allocator = j.GetAllocator();  
-  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(refTime.count()).c_str(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(ref_time_.count()).c_str(), j_allocator).Move(), j_allocator);
   j.PushBack("transport", j_allocator);
-  j.PushBack(Value(toString(eventType).data(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(ToString(event_type_).data(), j_allocator).Move(), j_allocator);
 
   Value value;
   value.SetObject();
   value.AddMember("frames_type",
-                  Value(toQlogString(framesType).data(), j_allocator).Move(),
+                  Value(toQlogString(frames_type_).data(), j_allocator).Move(),
                   j_allocator);
 
   //frames_fields
   Value tmp_arr;
   tmp_arr.SetArray();
-  switch(framesType) {
+  switch(frames_type_) {
     case QuicFrameType::STREAM_FRAME:
       tmp_arr.PushBack("stream_id", j_allocator);
       tmp_arr.PushBack("offset", j_allocator);
@@ -461,7 +461,7 @@ Document QLogFramesProcessed::toJson() const {
                   j_allocator);
 
   tmp_arr.SetArray();
-  for (const auto& frame : frames) {
+  for (const auto& frame : frames_) {
     tmp_arr.PushBack(Value().CopyFrom(frame->toShortJson(), j_allocator).Move(), j_allocator);  
   }
   value.AddMember("frames",
@@ -469,15 +469,15 @@ Document QLogFramesProcessed::toJson() const {
                   j_allocator);
 
   tmp_arr.SetArray();
-  for (const auto& packetSize : packetSizes) {
-    tmp_arr.PushBack(packetSize, j_allocator);
+  for (const auto& packet_size : packet_sizes_) {
+    tmp_arr.PushBack(packet_size, j_allocator);
   }
-  value.AddMember("packetSizes",
+  value.AddMember("packet_sizes",
                   tmp_arr,
                   j_allocator);
 
   tmp_arr.SetArray();
-  for (const auto& timeDrift : timeDrifts) {
+  for (const auto& timeDrift : time_drifts_) {
     tmp_arr.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(timeDrift.count()).c_str(), j_allocator).Move(), j_allocator);
   }
   value.AddMember("timeDrift",
@@ -486,44 +486,44 @@ Document QLogFramesProcessed::toJson() const {
 
 
   tmp_arr.SetArray();
-  for (const auto& packetNum : packetNums) {
-    tmp_arr.PushBack(packetNum, j_allocator);
+  for (const auto& packet_num : packet_nums_) {
+    tmp_arr.PushBack(packet_num, j_allocator);
   }
   value.AddMember("packetNums",
                   tmp_arr,
                   j_allocator);
 
   value.AddMember("packet_type",
-                  Value(packetType.c_str(), j_allocator).Move(),
+                  Value(packet_type_.c_str(), j_allocator).Move(),
                   j_allocator);
 
   j.PushBack(value, j_allocator);
   return j;
 }
 
-Document QLogPacketEvent::toJson() const {
+Document QLogPacketEvent::ToJson() const {
   // creating a json array to hold the information corresponding to
   // the event fields relative_time, category, event_type, trigger, data
   Document j;
   j.SetArray();
   Document::AllocatorType& j_allocator = j.GetAllocator();  
-  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(refTime.count()).c_str(), j_allocator), j_allocator);
+  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(ref_time_.count()).c_str(), j_allocator), j_allocator);
   j.PushBack("transport", j_allocator);
-  j.PushBack(Value(toString(eventType).data(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(ToString(event_type_).data(), j_allocator).Move(), j_allocator);
 
   Value tmp_object, tmp_arr;
   tmp_object.SetObject();
   tmp_arr.SetArray();
   tmp_object.AddMember("packet_size",
-                       packetSize,
+                       packet_size_,
                        j_allocator);  
-  if (packetType != toQlogString(QuicLongHeaderType::RETRY)) {
+  if (packet_type_ != toQlogString(QuicLongHeaderType::RETRY)) {
     tmp_object.AddMember("packet_number",
-                         packetNum,
+                         packet_num_,
                          j_allocator);
 
-    for (const auto& frame : frames) {
-      tmp_arr.PushBack(Value().CopyFrom(frame->toJson(), j_allocator).Move(), j_allocator);
+    for (const auto& frame : frames_) {
+      tmp_arr.PushBack(Value().CopyFrom(frame->ToJson(), j_allocator).Move(), j_allocator);
     }
   }
 
@@ -536,16 +536,16 @@ Document QLogPacketEvent::toJson() const {
                   tmp_arr,
                   j_allocator);
   value.AddMember("packet_type",
-                  Value(packetType.c_str(), j_allocator).Move(),
+                  Value(packet_type_.c_str(), j_allocator).Move(),
                   j_allocator);
   value.AddMember("transmission_type",
-                  Value(transmissionType.c_str(), j_allocator).Move(),
+                  Value(transmission_type_.c_str(), j_allocator).Move(),
                   j_allocator);
   j.PushBack(value, j_allocator);
   return j;
 }
 
-Document QLogVersionNegotiationEvent::toJson() const {
+Document QLogVersionNegotiationEvent::ToJson() const {
   // creating a json array to hold the information corresponding to
   // the event fields relative_time, category, event_type, trigger, data
   Document j;
@@ -555,29 +555,29 @@ Document QLogVersionNegotiationEvent::toJson() const {
   Value tmp_object;
   tmp_object.SetObject();
   tmp_object.AddMember("packet_size",
-                       packetSize,
+                       packet_size_,
                        j_allocator);  
 
   Value value;
   value.SetObject();
   value.AddMember("versions",
-                  versionLog->toJson(),
+                  version_log_->ToJson(),
                   j_allocator);
   value.AddMember("header",
                   tmp_object,
                   j_allocator);
   value.AddMember("packet_type",
-                  Value(packetType.c_str(), j_allocator).Move(),
+                  Value(packet_type_.c_str(), j_allocator).Move(),
                   j_allocator);
 
-  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(refTime.count()).c_str(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(ref_time_.count()).c_str(), j_allocator).Move(), j_allocator);
   j.PushBack("transport", j_allocator);
-  j.PushBack(Value(toString(eventType).data(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(ToString(event_type_).data(), j_allocator).Move(), j_allocator);
   j.PushBack(value, j_allocator);
   return j;
 }
 
-Document QLogRetryEvent::toJson() const {
+Document QLogRetryEvent::ToJson() const {
   Document j;
   j.SetArray();
   Document::AllocatorType& j_allocator = j.GetAllocator();  
@@ -585,7 +585,7 @@ Document QLogRetryEvent::toJson() const {
   Value tmp_object;
   tmp_object.SetObject();
   tmp_object.AddMember("packet_size",
-                       packetSize,
+                       packet_size_,
                        j_allocator);  
 
   Value value;
@@ -594,32 +594,32 @@ Document QLogRetryEvent::toJson() const {
                   tmp_object,
                   j_allocator);
   value.AddMember("packet_type",
-                  Value(packetType.c_str(), j_allocator).Move(),
+                  Value(packet_type_.c_str(), j_allocator).Move(),
                   j_allocator);
   value.AddMember("token_size",
-                  tokenSize,
+                  token_size_,
                   j_allocator);
 
-  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(refTime.count()).c_str(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(ref_time_.count()).c_str(), j_allocator).Move(), j_allocator);
   j.PushBack("transport", j_allocator);
-  j.PushBack(Value(toString(eventType).data(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(ToString(event_type_).data(), j_allocator).Move(), j_allocator);
   j.PushBack(value, j_allocator);
   return j;
 }
 
 QLogConnectionCloseEvent::QLogConnectionCloseEvent(
-    QuicErrorCode errorIn,
-    std::string reasonIn,
-    ConnectionCloseSource sourceIn,
-    std::chrono::microseconds refTimeIn)
-    : error{std::move(errorIn)},
-      reason{std::move(reasonIn)},
-      source{sourceIn} {
-  eventType = QLogEventType::ConnectionClose;
-  refTime = refTimeIn;
+    QuicErrorCode error_in,
+    std::string reason_in,
+    ConnectionCloseSource source_in,
+    std::chrono::microseconds ref_time_in)
+    : error_{std::move(error_in)},
+      reason_{std::move(reason_in)},
+      source_{source_in} {
+  event_type_ = QLogEventType::CONNECTION_CLOSE;
+  ref_time_ = ref_time_in;
 }
 
-Document QLogConnectionCloseEvent::toJson() const {
+Document QLogConnectionCloseEvent::ToJson() const {
   // creating a json array to hold the information corresponding to
   // the event fields relative_time, category, event_type, trigger, data
   Document j;
@@ -629,18 +629,18 @@ Document QLogConnectionCloseEvent::toJson() const {
   Value value;
   value.SetObject();
   value.AddMember("error",
-                  Value(QuicErrorCodeToString(error), j_allocator).Move(),
+                  Value(QuicErrorCodeToString(error_), j_allocator).Move(),
                   j_allocator);
   value.AddMember("reason",
-                  Value(reason.c_str(), j_allocator).Move(),
+                  Value(reason_.c_str(), j_allocator).Move(),
                   j_allocator);
   value.AddMember("source",
-                  Value(ConnectionCloseSourceToString(source).c_str(), j_allocator).Move(),
+                  Value(ConnectionCloseSourceToString(source_).c_str(), j_allocator).Move(),
                   j_allocator);
 
-  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(refTime.count()).c_str(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(ref_time_.count()).c_str(), j_allocator).Move(), j_allocator);
   j.PushBack("connectivity", j_allocator);
-  j.PushBack(Value(toString(eventType).data(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(ToString(event_type_).data(), j_allocator).Move(), j_allocator);
   j.PushBack(value, j_allocator);
   return j;
 }
@@ -680,46 +680,46 @@ QLogTransportSummaryEvent::QLogTransportSummaryEvent(
     float GrowthDurationRatioIn,
     float ConservationDurationRatioIn,
     float AverageDifferenceIn,
-    std::chrono::microseconds refTimeIn)
-    : totalBytesSent{totalBytesSentIn},
-      totalPacketsSent{totalPacketsSentIn},
-      totalBytesRecvd{totalBytesRecvdIn},
-      totalPacketsRecvd{totalPacketsRecvdIn},
-      sumCurWriteOffset{sumCurWriteOffsetIn},
-      sumMaxObservedOffset{sumMaxObservedOffsetIn},
-      sumCurStreamBufferLen{sumCurStreamBufferLenIn},
-      totalPacketsLost{totalPacketsLostIn},
-      totalStartupDuration{totalStartupDurationIn},
-      totalDrainDuration{totalDrainDurationIn},
-      totalProbeBWDuration{totalProbeBWDurationIn},
-      totalProbeRttDuration{totalProbeRttDurationIn},
-      totalNotRecoveryDuration{totalNotRecoveryDurationIn},
-      totalGrowthDuration{totalGrowthDurationIn},
-      totalConservationDuration{totalConservationDurationIn},
-      totalStreamBytesCloned{totalStreamBytesClonedIn},
-      totalBytesCloned{totalBytesClonedIn},
-      totalCryptoDataWritten{totalCryptoDataWrittenIn},
-      totalCryptoDataRecvd{totalCryptoDataRecvdIn},
-      currentWritableBytes{currentWritableBytesIn},
-      currentConnFlowControl{currentConnFlowControlIn},
-      usedZeroRtt{usedZeroRttIn},
-      quicVersion{quicVersionIn},
-      congestionType{congestionTypeIn},
-      smoothedMinRtt{smoothedMinRttIn},
-      smoothedMaxBandwidth{smoothedMaxBandwidthIn},
-      startupDurationRatio{startupDurationRatioIn},
-      drainDurationRatio{drainDurationRatioIn},
-      probebwDurationRatio{probebwDurationRatioIn},
-      proberttDurationRatio{proberttDurationRatioIn},
-      NotRecoveryDurationRatio {NotRecoveryDurationRatioIn},
-      GrowthDurationRatio {GrowthDurationRatioIn},
-      ConservationDurationRatio {ConservationDurationRatioIn},
-      AverageDifference {AverageDifferenceIn} {
-  eventType = QLogEventType::TransportSummary;
-  refTime = refTimeIn;
+    std::chrono::microseconds ref_time_in)
+    : total_bytes_sent{totalBytesSentIn},
+      total_packets_sent{totalPacketsSentIn},
+      total_bytes_recvd{totalBytesRecvdIn},
+      total_packets_recvd{totalPacketsRecvdIn},
+      sum_cur_write_offset{sumCurWriteOffsetIn},
+      sum_max_observed_offset{sumMaxObservedOffsetIn},
+      sum_cur_stream_buffer_len{sumCurStreamBufferLenIn},
+      total_packets_lost{totalPacketsLostIn},
+      total_startup_duration{totalStartupDurationIn},
+      total_drain_duration{totalDrainDurationIn},
+      total_probebw_Duration{totalProbeBWDurationIn},
+      total_probertt_duration{totalProbeRttDurationIn},
+      total_not_recovery_duration{totalNotRecoveryDurationIn},
+      total_growth_duration{totalGrowthDurationIn},
+      total_conservation_duration{totalConservationDurationIn},
+      total_stream_bytes_cloned{totalStreamBytesClonedIn},
+      total_bytes_cloned{totalBytesClonedIn},
+      total_crypto_data_written{totalCryptoDataWrittenIn},
+      total_crypto_data_recvd{totalCryptoDataRecvdIn},
+      current_writable_bytes{currentWritableBytesIn},
+      current_conn_flow_control{currentConnFlowControlIn},
+      used_zero_rtt{usedZeroRttIn},
+      quic_version{quicVersionIn},
+      congestion_type{congestionTypeIn},
+      smoothed_min_rtt{smoothedMinRttIn},
+      smoothed_max_bandwidth{smoothedMaxBandwidthIn},
+      startup_suration_ratio{startupDurationRatioIn},
+      drain_duration_ratio{drainDurationRatioIn},
+      probebw_duration_ratio{probebwDurationRatioIn},
+      probertt_duration_ratio{proberttDurationRatioIn},
+      not_recovery_duration_ratio {NotRecoveryDurationRatioIn},
+      growth_duration_ratio {GrowthDurationRatioIn},
+      conservation_duration_ratio {ConservationDurationRatioIn},
+      average_difference {AverageDifferenceIn} {
+  event_type_ = QLogEventType::TRANSPORT_SUMMARY;
+  ref_time_ = ref_time_in;
 }
 
-Document QLogTransportSummaryEvent::toJson() const {
+Document QLogTransportSummaryEvent::ToJson() const {
   // creating a json array to hold the information corresponding to
   // the event fields relative_time, category, event_type, trigger, data
   Document j;
@@ -729,78 +729,78 @@ Document QLogTransportSummaryEvent::toJson() const {
   Value value;
   value.SetObject();
   value.AddMember("total_bytes_sent",
-                  totalBytesSent,
+                  total_bytes_sent,
                   j_allocator);
   value.AddMember("reatotal_packets_sentson",
-                  totalPacketsSent,
+                  total_packets_sent,
                   j_allocator);
   value.AddMember("total_bytes_recvd",
-                  totalBytesRecvd,
+                  total_bytes_recvd,
                   j_allocator);
   value.AddMember("total_packets_recvd",
-                  totalPacketsRecvd,
+                  total_packets_recvd,
                   j_allocator);
   value.AddMember("sum_cur_write_offset",
-                  sumCurWriteOffset,
+                  sum_cur_write_offset,
                   j_allocator);
   value.AddMember("sum_max_observed_offset",
-                  sumMaxObservedOffset,
+                  sum_max_observed_offset,
                   j_allocator);
   value.AddMember("sum_cur_stream_buffer_len",
-                  sumCurStreamBufferLen,
+                  sum_cur_stream_buffer_len,
                   j_allocator);
   value.AddMember("total_packets_lost",
-                  totalPacketsLost,
+                  total_packets_lost,
                   j_allocator);
   value.AddMember("total_stream_bytes_cloned",
-                  totalStreamBytesCloned,
+                  total_stream_bytes_cloned,
                   j_allocator);
   value.AddMember("total_bytes_cloned",
-                  totalBytesCloned,
+                  total_bytes_cloned,
                   j_allocator);
   value.AddMember("total_crypto_data_written",
-                  totalCryptoDataWritten,
+                  total_crypto_data_written,
                   j_allocator);
   value.AddMember("total_crypto_data_recvd",
-                  totalCryptoDataRecvd,
+                  total_crypto_data_recvd,
                   j_allocator);                
   value.AddMember("current_writable_bytes",
-                  currentWritableBytes,
+                  current_writable_bytes,
                   j_allocator);
   value.AddMember("current_conn_flow_control",
-                  currentConnFlowControl,
+                  current_conn_flow_control,
                   j_allocator);
   value.AddMember("used_zero_rtt",
-                  usedZeroRtt,
+                  used_zero_rtt,
                   j_allocator);
   value.AddMember("quic_version",
-                  Value(QuicVersionToString(quicVersion).c_str(), j_allocator).Move(),
+                  Value(QuicVersionToString(quic_version).c_str(), j_allocator).Move(),
                   j_allocator);
 
-  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(refTime.count()).c_str(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(ref_time_.count()).c_str(), j_allocator).Move(), j_allocator);
   j.PushBack("transport", j_allocator);
-  j.PushBack(Value(toString(eventType).data(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(ToString(event_type_).data(), j_allocator).Move(), j_allocator);
   j.PushBack(value, j_allocator);
   return j;
 }
 
 QLogBBRCongestionMetricUpdateEvent::QLogBBRCongestionMetricUpdateEvent(
-    uint64_t bytesInFlightIn,
-    uint64_t currentCwndIn,
-    std::string congestionEventIn,
-    CongestionControlType typeIn,
-    void* stateIn,
-    std::chrono::microseconds refTimeIn)
-    : bytesInFlight{bytesInFlightIn},
-      currentCwnd{currentCwndIn},
-      congestionEvent{std::move(congestionEventIn)},
-      type{typeIn},
-      state{stateIn} {
-  eventType = QLogEventType::CongestionMetricUpdate;
-  refTime = refTimeIn;
+    uint64_t bytes_in_flight_in,
+    uint64_t current_cwnd_in,
+    std::string congestion_event_in,
+    CongestionControlType type_in,
+    void* state_in,
+    std::chrono::microseconds ref_time_in)
+    : bytes_inflight_{bytes_in_flight_in},
+      current_cwnd_{current_cwnd_in},
+      congestion_event_{std::move(congestion_event_in)},
+      type_{type_in},
+      state{state_in} {
+  event_type_ = QLogEventType::CONGESTION_METRIC_UPDATE;
+  ref_time_ = ref_time_in;
 }
 
-Document QLogBBRCongestionMetricUpdateEvent::toJson() const {
+Document QLogBBRCongestionMetricUpdateEvent::ToJson() const {
   // creating a json array to hold the information corresponding to
   // the event fields relative_time, category, event_type, trigger, data
   Document j;
@@ -810,18 +810,18 @@ Document QLogBBRCongestionMetricUpdateEvent::toJson() const {
   Value value;
   value.SetObject();
   value.AddMember("bytes_in_flight",
-                  bytesInFlight,
+                  bytes_inflight_,
                   j_allocator);
   value.AddMember("current_cwnd",
-                  currentCwnd,
+                  current_cwnd_,
                   j_allocator);
   value.AddMember("congestion_event",
-                  Value(congestionEvent.c_str(), j_allocator).Move(),
+                  Value(congestion_event_.c_str(), j_allocator).Move(),
                   j_allocator);
   value.AddMember("congestion_control_type",
-                  Value(toQlogString(type).data(), j_allocator).Move(),
+                  Value(toQlogString(type_).data(), j_allocator).Move(),
                   j_allocator);
-  if (type == kBBR) {
+  if (type_ == kBBR) {
     BbrSender::DebugState* bbr_state =
 	    static_cast<BbrSender::DebugState*>(state);
     Value tmp_object(kObjectType);
@@ -857,30 +857,30 @@ Document QLogBBRCongestionMetricUpdateEvent::toJson() const {
                     j_allocator);
   }
 
-  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(refTime.count()).c_str(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(ref_time_.count()).c_str(), j_allocator).Move(), j_allocator);
   j.PushBack("metric_update", j_allocator);
-  j.PushBack(Value(toString(eventType).data(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(ToString(event_type_).data(), j_allocator).Move(), j_allocator);
   j.PushBack(value, j_allocator);
   return j;
 }
 
 QLogCubicCongestionMetricUpdateEvent::QLogCubicCongestionMetricUpdateEvent(
-    uint64_t bytesInFlightIn,
-    uint64_t currentCwndIn,
-    std::string congestionEventIn,
-    CongestionControlType typeIn,
-    void* stateIn,
-    std::chrono::microseconds refTimeIn)
-    : bytesInFlight{bytesInFlightIn},
-      currentCwnd{currentCwndIn},
-      congestionEvent{std::move(congestionEventIn)},
-      type{typeIn},
-      state{stateIn} {
-  eventType = QLogEventType::CongestionMetricUpdate;
-  refTime = refTimeIn;
+    uint64_t bytes_in_flight_in,
+    uint64_t current_cwnd_in,
+    std::string congestion_event_in,
+    CongestionControlType type_in,
+    void* state_in,
+    std::chrono::microseconds ref_time_in)
+    : bytes_inflight_{bytes_in_flight_in},
+      current_cwnd_{current_cwnd_in},
+      congestion_event_{std::move(congestion_event_in)},
+      type_{type_in},
+      state{state_in} {
+  event_type_ = QLogEventType::CONGESTION_METRIC_UPDATE;
+  ref_time_ = ref_time_in;
 }
 
-Document QLogCubicCongestionMetricUpdateEvent::toJson() const {
+Document QLogCubicCongestionMetricUpdateEvent::ToJson() const {
   // creating a json array to hold the information corresponding to
   // the event fields relative_time, category, event_type, trigger, data
   Document j;
@@ -891,18 +891,18 @@ Document QLogCubicCongestionMetricUpdateEvent::toJson() const {
   value.SetObject();
 
   value.AddMember("bytes_in_flight",
-                  bytesInFlight,
+                  bytes_inflight_,
                   j_allocator);
   value.AddMember("current_cwnd",
-                  currentCwnd,
+                  current_cwnd_,
                   j_allocator);
   value.AddMember("congestion_event",
-                  Value(congestionEvent.c_str(), j_allocator).Move(),
+                  Value(congestion_event_.c_str(), j_allocator).Move(),
                   j_allocator);
   value.AddMember("congestion_control_type",
-                  Value(toQlogString(type).data(), j_allocator).Move(),
+                  Value(toQlogString(type_).data(), j_allocator).Move(),
                   j_allocator);
-  if (type == kCubicBytes) {
+  if (type_ == kCubicBytes) {
     TcpCubicSenderBytes::DebugState* cubic_state =
 	    static_cast<TcpCubicSenderBytes::DebugState*>(state);
     Value tmp_object(kObjectType);
@@ -927,30 +927,30 @@ Document QLogCubicCongestionMetricUpdateEvent::toJson() const {
 
   }
   
-  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(refTime.count()).c_str(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(ref_time_.count()).c_str(), j_allocator).Move(), j_allocator);
   j.PushBack("metric_update", j_allocator);
-  j.PushBack(Value(toString(eventType).data(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(ToString(event_type_).data(), j_allocator).Move(), j_allocator);
   j.PushBack(value, j_allocator);
   return j;
 }
 
 QLogBBR2CongestionMetricUpdateEvent::QLogBBR2CongestionMetricUpdateEvent(
-    uint64_t bytesInFlightIn,
-    uint64_t currentCwndIn,
-    std::string congestionEventIn,
-    CongestionControlType typeIn,
-    void* stateIn,
-    std::chrono::microseconds refTimeIn)
-    : bytesInFlight{bytesInFlightIn},
-      currentCwnd{currentCwndIn},
-      congestionEvent{std::move(congestionEventIn)},
-      type{typeIn},
-      state{stateIn} {
-  eventType = QLogEventType::CongestionMetricUpdate;
-  refTime = refTimeIn;
+    uint64_t bytes_in_flight_in,
+    uint64_t current_cwnd_in,
+    std::string congestion_event_in,
+    CongestionControlType type_in,
+    void* state_in,
+    std::chrono::microseconds ref_time_in)
+    : bytes_inflight_{bytes_in_flight_in},
+      current_cwnd_{current_cwnd_in},
+      congestion_event_{std::move(congestion_event_in)},
+      type_{type_in},
+      state{state_in} {
+  event_type_ = QLogEventType::CONGESTION_METRIC_UPDATE;
+  ref_time_ = ref_time_in;
 }
 
-Document QLogBBR2CongestionMetricUpdateEvent::toJson() const {
+Document QLogBBR2CongestionMetricUpdateEvent::ToJson() const {
   // creating a json array to hold the information corresponding to
   // the event fields relative_time, category, event_type, trigger, data
   Document j;
@@ -959,19 +959,19 @@ Document QLogBBR2CongestionMetricUpdateEvent::toJson() const {
   Value value;
   value.SetObject();
   value.AddMember("bytes_in_flight",
-                  bytesInFlight,
+                  bytes_inflight_,
                   j_allocator);
   value.AddMember("current_cwnd",
-                  currentCwnd,
+                  current_cwnd_,
                   j_allocator);
   value.AddMember("congestion_event",
-                  Value(congestionEvent.c_str(), j_allocator).Move(),
+                  Value(congestion_event_.c_str(), j_allocator).Move(),
                   j_allocator);
   value.AddMember("congestion_control_type",
-                  Value(toQlogString(type).data(), j_allocator).Move(),
+                  Value(toQlogString(type_).data(), j_allocator).Move(),
                   j_allocator);
 
-  if (type == kBBRv2) {
+  if (type_ == kBBRv2) {
     Bbr2Sender::DebugState* bbr2_state =
 	    static_cast<Bbr2Sender::DebugState*>(state);
     Value tmp_object(kObjectType);
@@ -1014,29 +1014,29 @@ Document QLogBBR2CongestionMetricUpdateEvent::toJson() const {
                     j_allocator);
   }
 
-  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(refTime.count()).c_str(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(ref_time_.count()).c_str(), j_allocator).Move(), j_allocator);
   j.PushBack("metric_update", j_allocator);
-  j.PushBack(Value(toString(eventType).data(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(ToString(event_type_).data(), j_allocator).Move(), j_allocator);
   j.PushBack(value, j_allocator);
   return j;
 }
 
 
 QLogRequestOverStreamEvent::QLogRequestOverStreamEvent(
-    std::string methodIn,
-    QuicStreamId streamIdIn,
-    std::string uriIn,
-    std::string rangeIn,
-    std::chrono::microseconds refTimeIn)
-    : streamId{streamIdIn},
-      method{std::move(methodIn)},
-      uri{std::move(uriIn)},
-      range{std::move(rangeIn)} {
-  eventType = QLogEventType::RequestOverStream;
-  refTime = refTimeIn;
+    std::string method_in,
+    QuicStreamId stream_id_in,
+    std::string uri_in,
+    std::string range_in,
+    std::chrono::microseconds ref_time_in)
+    : stream_id_{stream_id_in},
+      method_{std::move(method_in)},
+      uri_{std::move(uri_in)},
+      range_{std::move(range_in)} {
+  event_type_ = QLogEventType::REQUEST_OVER_STREAM;
+  ref_time_ = ref_time_in;
 }
 
-Document QLogRequestOverStreamEvent::toJson() const {
+Document QLogRequestOverStreamEvent::ToJson() const {
   Document j;
   j.SetArray();
   Document::AllocatorType& j_allocator = j.GetAllocator();  
@@ -1044,33 +1044,33 @@ Document QLogRequestOverStreamEvent::toJson() const {
   Value value;
   value.SetObject();
   value.AddMember("stream_id",
-                  streamId,
+                  stream_id_,
                   j_allocator);
   value.AddMember("method",
-                  Value(method.c_str(), j_allocator).Move(),
+                  Value(method_.c_str(), j_allocator).Move(),
                   j_allocator);
   value.AddMember("uri",
-                  Value(uri.c_str(), j_allocator).Move(),
+                  Value(uri_.c_str(), j_allocator).Move(),
                   j_allocator);
   value.AddMember("range",
-                  Value(range.c_str(),j_allocator).Move(),
+                  Value(range_.c_str(),j_allocator).Move(),
                   j_allocator);              
-  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(refTime.count()).c_str(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(ref_time_.count()).c_str(), j_allocator).Move(), j_allocator);
   j.PushBack("application", j_allocator);
-  j.PushBack(Value(toString(eventType).data(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(ToString(event_type_).data(), j_allocator).Move(), j_allocator);
   j.PushBack(value, j_allocator);
   return j;
 }
 
 QLogAppLimitedUpdateEvent::QLogAppLimitedUpdateEvent(
-    bool limitedIn,
-    std::chrono::microseconds refTimeIn)
-    : limited(limitedIn) {
-  eventType = QLogEventType::AppLimitedUpdate;
-  refTime = refTimeIn;
+    bool limited_in,
+    std::chrono::microseconds ref_time_in)
+    : limited(limited_in) {
+  event_type_ = QLogEventType::APP_LIMITED_UPDATE;
+  ref_time_ = ref_time_in;
 }
 
-Document QLogAppLimitedUpdateEvent::toJson() const {
+Document QLogAppLimitedUpdateEvent::ToJson() const {
   Document j;
   j.SetArray();
   Document::AllocatorType& j_allocator = j.GetAllocator();  
@@ -1080,9 +1080,9 @@ Document QLogAppLimitedUpdateEvent::toJson() const {
   value.AddMember("app_limited",
                   Value(limited ? kAppLimited : kAppUnlimited, j_allocator).Move(),
                   j_allocator);
-  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(refTime.count()).c_str(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(ref_time_.count()).c_str(), j_allocator).Move(), j_allocator);
   j.PushBack("APP_LIMITED_UPDATE", j_allocator);
-  j.PushBack(Value(toString(eventType).data(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(ToString(event_type_).data(), j_allocator).Move(), j_allocator);
   j.PushBack(value, j_allocator);
   return j;
 }
@@ -1090,13 +1090,13 @@ Document QLogAppLimitedUpdateEvent::toJson() const {
 QLogBandwidthEstUpdateEvent::QLogBandwidthEstUpdateEvent(
     uint64_t bytesIn,
     std::chrono::microseconds intervalIn,
-    std::chrono::microseconds refTimeIn)
-    : bytes(bytesIn), interval(intervalIn) {
-  refTime = refTimeIn;
-  eventType = QLogEventType::BandwidthEstUpdate;
+    std::chrono::microseconds ref_time_in)
+    : bytes_(bytesIn), interval_(intervalIn) {
+  ref_time_ = ref_time_in;
+  event_type_ = QLogEventType::BANDWIDTH_ESTUPDATE;
 }
 
-Document QLogBandwidthEstUpdateEvent::toJson() const {
+Document QLogBandwidthEstUpdateEvent::ToJson() const {
   Document j;
   j.SetArray();
   Document::AllocatorType& j_allocator = j.GetAllocator();  
@@ -1104,28 +1104,28 @@ Document QLogBandwidthEstUpdateEvent::toJson() const {
   Value value;
   value.SetObject();
   value.AddMember("bandwidth_bytes",
-                  bytes,
+                  bytes_,
                   j_allocator);
   value.AddMember("bandwidth_interval",
-                  interval.count(),
+                  interval_.count(),
                   j_allocator);                  
-  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(refTime.count()).c_str(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(ref_time_.count()).c_str(), j_allocator).Move(), j_allocator);
   j.PushBack("BANDIWDTH_EST_UPDATE", j_allocator);
-  j.PushBack(Value(toString(eventType).data(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(ToString(event_type_).data(), j_allocator).Move(), j_allocator);
   j.PushBack(value, j_allocator);
   return j;
 }
 
 QLogPacingMetricUpdateEvent::QLogPacingMetricUpdateEvent(
-    uint64_t pacingBurstSizeIn,
-    std::chrono::microseconds pacingIntervalIn,
-    std::chrono::microseconds refTimeIn)
-    : pacingBurstSize{pacingBurstSizeIn}, pacingInterval{pacingIntervalIn} {
-  eventType = QLogEventType::PacingMetricUpdate;
-  refTime = refTimeIn;
+    uint64_t pacing_burst_size_in,
+    std::chrono::microseconds pacing_interval_in,
+    std::chrono::microseconds ref_time_in)
+    : pacing_burst_size_{pacing_burst_size_in}, pacing_interval_{pacing_interval_in} {
+  event_type_ = QLogEventType::PACING_METRIC_UPDATE;
+  ref_time_ = ref_time_in;
 }
 
-Document QLogPacingMetricUpdateEvent::toJson() const {
+Document QLogPacingMetricUpdateEvent::ToJson() const {
   // creating a json array to hold the information corresponding to
   // the event fields relative_time, category, event_type, trigger, data
   Document j;
@@ -1135,34 +1135,34 @@ Document QLogPacingMetricUpdateEvent::toJson() const {
   Value value;
   value.SetObject();
   value.AddMember("pacing_burst_size",
-                  pacingBurstSize,
+                  pacing_burst_size_,
                   j_allocator);
   value.AddMember("pacing_interval",
-                  pacingInterval.count(),
+                  pacing_interval_.count(),
                   j_allocator);                  
-  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(refTime.count()).c_str(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(ref_time_.count()).c_str(), j_allocator).Move(), j_allocator);
   j.PushBack("metric_update", j_allocator);
-  j.PushBack(Value(toString(eventType).data(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(ToString(event_type_).data(), j_allocator).Move(), j_allocator);
   j.PushBack(value, j_allocator);
   return j;
 }
 
 QLogPacingObservationEvent::QLogPacingObservationEvent(
-    std::string& actualIn,
-    std::string& expectIn,
-    std::string& conclusionIn,
-    std::chrono::microseconds refTimeIn)
-    : actual(actualIn),
-      expect(expectIn),
-      conclusion(conclusionIn) {
-  eventType = QLogEventType::PacingObservation;
-  refTime = refTimeIn;
+    std::string& actual_in,
+    std::string& expect_in,
+    std::string& conclusion_in,
+    std::chrono::microseconds ref_time_in)
+    : actual_(actual_in),
+      expect_(expect_in),
+      conclusion_(conclusion_in) {
+  event_type_ = QLogEventType::PACING_OBSERVATION;
+  ref_time_ = ref_time_in;
 }
 
 // TODO: Sad. I wanted moved all the string into the dynamic but this function
 // is const. I think we should make all the toDynamic rvalue qualified since
-// users are not supposed to use them after toJson() is called.
-Document QLogPacingObservationEvent::toJson() const {
+// users are not supposed to use them after ToJson() is called.
+Document QLogPacingObservationEvent::ToJson() const {
   Document j;
   j.SetArray();
   Document::AllocatorType& j_allocator = j.GetAllocator();  
@@ -1170,17 +1170,17 @@ Document QLogPacingObservationEvent::toJson() const {
   Value value;
   value.SetObject();
   value.AddMember("actual_pacing_rate",
-                  Value(actual.c_str(), j_allocator).Move(),
+                  Value(actual_.c_str(), j_allocator).Move(),
                   j_allocator);
   value.AddMember("expect_pacing_rate",
-                  Value(expect.c_str(), j_allocator).Move(),
+                  Value(expect_.c_str(), j_allocator).Move(),
                   j_allocator);     
   value.AddMember("conclusion",
-                  Value(conclusion.c_str(), j_allocator).Move(),
+                  Value(conclusion_.c_str(), j_allocator).Move(),
                   j_allocator);                                 
-  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(refTime.count()).c_str(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(ref_time_.count()).c_str(), j_allocator).Move(), j_allocator);
   j.PushBack("metric_update", j_allocator);
-  j.PushBack(Value(toString(eventType).data(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(ToString(event_type_).data(), j_allocator).Move(), j_allocator);
   j.PushBack(value, j_allocator);
   return j;
 }
@@ -1188,13 +1188,13 @@ Document QLogPacingObservationEvent::toJson() const {
 QLogAppIdleUpdateEvent::QLogAppIdleUpdateEvent(
     std::string& idleEventIn,
     bool idleIn,
-    std::chrono::microseconds refTimeIn)
-    : idleEvent{idleEventIn}, idle{idleIn} {
-  eventType = QLogEventType::AppIdleUpdate;
-  refTime = refTimeIn;
+    std::chrono::microseconds ref_time_in)
+    : idle_event_{idleEventIn}, idle_{idleIn} {
+  event_type_ = QLogEventType::APPIDLE_UPDATE;
+  ref_time_ = ref_time_in;
 }
 
-Document QLogAppIdleUpdateEvent::toJson() const {
+Document QLogAppIdleUpdateEvent::ToJson() const {
   // creating a json array to hold the information corresponding to
   // the event fields relative_time, category, event_type, trigger, data
   Document j;
@@ -1204,28 +1204,28 @@ Document QLogAppIdleUpdateEvent::toJson() const {
   Value value;
   value.SetObject();
   value.AddMember("idle_event",
-                  Value(idleEvent.c_str(), j_allocator).Move(),
+                  Value(idle_event_.c_str(), j_allocator).Move(),
                   j_allocator);
   value.AddMember("idle",
-                  idle,
+                  idle_,
                   j_allocator);                                    
-  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(refTime.count()).c_str(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(ref_time_.count()).c_str(), j_allocator).Move(), j_allocator);
   j.PushBack("idle_update", j_allocator);
-  j.PushBack(Value(toString(eventType).data(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(ToString(event_type_).data(), j_allocator).Move(), j_allocator);
   j.PushBack(value, j_allocator);
   return j;
 }
 
 QLogPacketDropEvent::QLogPacketDropEvent(
     size_t packetSizeIn,
-    std::string& dropReasonIn,
-    std::chrono::microseconds refTimeIn)
-    : packetSize{packetSizeIn}, dropReason{dropReasonIn} {
-  eventType = QLogEventType::PacketDrop;
-  refTime = refTimeIn;
+    std::string& drop_reason_in,
+    std::chrono::microseconds ref_time_in)
+    : packet_size_{packetSizeIn}, drop_reason_{drop_reason_in} {
+  event_type_ = QLogEventType::PACKET_DROP;
+  ref_time_ = ref_time_in;
 }
 
-Document QLogPacketDropEvent::toJson() const {
+Document QLogPacketDropEvent::ToJson() const {
   // creating a json array to hold the information corresponding to
   // the event fields relative_time, category, event_type, trigger, data
   Document j;
@@ -1235,27 +1235,27 @@ Document QLogPacketDropEvent::toJson() const {
   Value value;
   value.SetObject();
   value.AddMember("packet_size",
-                  packetSize,
+                  packet_size_,
                   j_allocator);
   value.AddMember("drop_reason",
-                  Value(dropReason.c_str(), j_allocator).Move(),
+                  Value(drop_reason_.c_str(), j_allocator).Move(),
                   j_allocator);                                             
-  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(refTime.count()).c_str(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(ref_time_.count()).c_str(), j_allocator).Move(), j_allocator);
   j.PushBack("loss", j_allocator);
-  j.PushBack(Value(toString(eventType).data(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(ToString(event_type_).data(), j_allocator).Move(), j_allocator);
   j.PushBack(value, j_allocator);
   return j;
 } // namespace quic
 
 QLogDatagramReceivedEvent::QLogDatagramReceivedEvent(
-    uint64_t dataLen,
-    std::chrono::microseconds refTimeIn)
-    : dataLen{dataLen} {
-  eventType = QLogEventType::DatagramReceived;
-  refTime = refTimeIn;
+    uint64_t data_len,
+    std::chrono::microseconds ref_time_in)
+    : data_len_{data_len} {
+  event_type_ = QLogEventType::DATAGRAM_RECEIVED;
+  ref_time_ = ref_time_in;
 }
 
-Document QLogDatagramReceivedEvent::toJson() const {
+Document QLogDatagramReceivedEvent::ToJson() const {
   // creating a json array to hold the information corresponding to
   // the event fields relative_time, category, event_type, trigger, data
   Document j;
@@ -1265,11 +1265,11 @@ Document QLogDatagramReceivedEvent::toJson() const {
   Value value;
   value.SetObject();
   value.AddMember("data_len",
-                  dataLen,
+                  data_len_,
                   j_allocator);                                          
-  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(refTime.count()).c_str(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(ref_time_.count()).c_str(), j_allocator).Move(), j_allocator);
   j.PushBack("transport", j_allocator);
-  j.PushBack(Value(toString(eventType).data(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(ToString(event_type_).data(), j_allocator).Move(), j_allocator);
   j.PushBack(value, j_allocator);
   return j;
 }
@@ -1278,17 +1278,17 @@ QLogLossAlarmEvent::QLogLossAlarmEvent(
     uint64_t largestSentIn,
     uint64_t alarmCountIn,
     uint64_t outstandingPacketsIn,
-    std::string& typeIn,
-    std::chrono::microseconds refTimeIn)
-    : largestSent{largestSentIn},
-      alarmCount{alarmCountIn},
-      outstandingPackets{outstandingPacketsIn},
-      type{typeIn} {
-  eventType = QLogEventType::LossAlarm;
-  refTime = refTimeIn;
+    std::string& type_in,
+    std::chrono::microseconds ref_time_in)
+    : largest_sent_{largestSentIn},
+      alarm_count_{alarmCountIn},
+      outstanding_packets_{outstandingPacketsIn},
+      type_{type_in} {
+  event_type_ = QLogEventType::LOSS_ALARM;
+  ref_time_ = ref_time_in;
 }
 
-Document QLogLossAlarmEvent::toJson() const {
+Document QLogLossAlarmEvent::ToJson() const {
   // creating a json array to hold the information corresponding to
   // the event fields relative_time, category, event_type, trigger, data
   Document j;
@@ -1298,20 +1298,20 @@ Document QLogLossAlarmEvent::toJson() const {
   Value value;
   value.SetObject();
   value.AddMember("largest_sent",
-                  largestSent,
+                  largest_sent_,
                   j_allocator); 
   value.AddMember("alarm_count",
-                  alarmCount,
+                  alarm_count_,
                   j_allocator); 
   value.AddMember("outstanding_packets",
-                  outstandingPackets,
+                  outstanding_packets_,
                   j_allocator);  
   value.AddMember("type",
-                  Value(type.c_str(), j_allocator).Move(),
+                  Value(type_.c_str(), j_allocator).Move(),
                   j_allocator);                                                                                                   
-  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(refTime.count()).c_str(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(ref_time_.count()).c_str(), j_allocator).Move(), j_allocator);
   j.PushBack("loss", j_allocator);
-  j.PushBack(Value(toString(eventType).data(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(ToString(event_type_).data(), j_allocator).Move(), j_allocator);
   j.PushBack(value, j_allocator);
   return j;
 }
@@ -1320,15 +1320,15 @@ QLogPacketLostEvent::QLogPacketLostEvent(
     uint64_t lostPacketNumIn,
     EncryptionLevel encryptionLevelIn,
     TransmissionType transmissionTypeIn,
-    std::chrono::microseconds refTimeIn)
-    : lostPacketNum{lostPacketNumIn},
-      encryptionLevel{encryptionLevelIn},
-      transmissionType{transmissionTypeIn} {
-  eventType = QLogEventType::PacketLost;
-  refTime = refTimeIn;
+    std::chrono::microseconds ref_time_in)
+    : lost_packet_num_{lostPacketNumIn},
+      encryption_level_{encryptionLevelIn},
+      transmission_type_{transmissionTypeIn} {
+  event_type_ = QLogEventType::PACKET_LOST;
+  ref_time_ = ref_time_in;
 }
 
-Document QLogPacketLostEvent::toJson() const {
+Document QLogPacketLostEvent::ToJson() const {
   // creating a json array to hold the information corresponding to
   // the event fields relative_time, category, event_type, trigger, data
   Document j;
@@ -1338,30 +1338,30 @@ Document QLogPacketLostEvent::toJson() const {
   Value value;
   value.SetObject();
   value.AddMember("lost_packet_num",
-                  lostPacketNum,
+                  lost_packet_num_,
                   j_allocator); 
   value.AddMember("encryption_level",
-                  Value(toQlogString(encryptionLevel).data(), j_allocator).Move(),
+                  Value(toQlogString(encryption_level_).data(), j_allocator).Move(),
                   j_allocator); 
   value.AddMember("transmission_type",
-                  transmissionType,
+                  transmission_type_,
                   j_allocator);                                                                                                    
-  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(refTime.count()).c_str(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(ref_time_.count()).c_str(), j_allocator).Move(), j_allocator);
   j.PushBack("loss", j_allocator);
-  j.PushBack(Value(toString(eventType).data(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(ToString(event_type_).data(), j_allocator).Move(), j_allocator);
   j.PushBack(value, j_allocator);
   return j;
 }
 
 QLogTransportStateUpdateEvent::QLogTransportStateUpdateEvent(
     std::string& updateIn,
-    std::chrono::microseconds refTimeIn)
-    : update{updateIn} {
-  eventType = QLogEventType::TransportStateUpdate;
-  refTime = refTimeIn;
+    std::chrono::microseconds ref_time_in)
+    : update_{updateIn} {
+  event_type_ = QLogEventType::TRANSPORT_STATE_UPDATE;
+  ref_time_ = ref_time_in;
 }
 
-Document QLogTransportStateUpdateEvent::toJson() const {
+Document QLogTransportStateUpdateEvent::ToJson() const {
   // creating a json array to hold the information corresponding to
   // the event fields relative_time, category, event_type, trigger, data
   Document j;
@@ -1371,11 +1371,11 @@ Document QLogTransportStateUpdateEvent::toJson() const {
   Value value;
   value.SetObject();
   value.AddMember("update",
-                  Value(update.c_str(), j_allocator).Move(),
+                  Value(update_.c_str(), j_allocator).Move(),
                   j_allocator);                                                                                                  
-  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(refTime.count()).c_str(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(ref_time_.count()).c_str(), j_allocator).Move(), j_allocator);
   j.PushBack("transport", j_allocator);
-  j.PushBack(Value(toString(eventType).data(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(ToString(event_type_).data(), j_allocator).Move(), j_allocator);
   j.PushBack(value, j_allocator);
   return j;
 }
@@ -1384,15 +1384,15 @@ QLogPacketBufferedEvent::QLogPacketBufferedEvent(
     uint64_t packetNumIn,
     EncryptionLevel encryptionLevelIn,
     uint64_t packetSizeIn,
-    std::chrono::microseconds refTimeIn)
-    : packetNum{packetNumIn},
-      encryptionLevel{encryptionLevelIn},
-      packetSize{packetSizeIn} {
-  eventType = QLogEventType::PacketBuffered;
-  refTime = refTimeIn;
+    std::chrono::microseconds ref_time_in)
+    : packet_num_{packetNumIn},
+      encryption_level_{encryptionLevelIn},
+      packet_size_{packetSizeIn} {
+  event_type_ = QLogEventType::Packet_Buffered;
+  ref_time_ = ref_time_in;
 }
 
-Document QLogPacketBufferedEvent::toJson() const {
+Document QLogPacketBufferedEvent::ToJson() const {
   // creating a json array to hold the information corresponding to
   // the event fields relative_time, category, event_type, trigger, data
   Document j;
@@ -1402,17 +1402,17 @@ Document QLogPacketBufferedEvent::toJson() const {
   Value value;
   value.SetObject();
   value.AddMember("packet_num",
-                  packetNum,
+                  packet_num_,
                   j_allocator);    
   value.AddMember("encryption_level",
-                  Value(toQlogString(encryptionLevel).data(), j_allocator).Move(),
+                  Value(toQlogString(encryption_level_).data(), j_allocator).Move(),
                   j_allocator);
   value.AddMember("packet_size",
-                  packetSize,
+                  packet_size_,
                   j_allocator);                                                                                                                    
-  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(refTime.count()).c_str(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(ref_time_.count()).c_str(), j_allocator).Move(), j_allocator);
   j.PushBack("transport", j_allocator);
-  j.PushBack(Value(toString(eventType).data(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(ToString(event_type_).data(), j_allocator).Move(), j_allocator);
   j.PushBack(value, j_allocator);
   return j;
 }
@@ -1420,13 +1420,13 @@ Document QLogPacketBufferedEvent::toJson() const {
 QLogPacketAckEvent::QLogPacketAckEvent(
     PacketNumberSpace packetNumSpaceIn,
     uint64_t packetNumIn,
-    std::chrono::microseconds refTimeIn)
-    : packetNumSpace{packetNumSpaceIn}, packetNum{packetNumIn} {
-  eventType = QLogEventType::PacketAck;
-  refTime = refTimeIn;
+    std::chrono::microseconds ref_time_in)
+    : packet_num_space_{packetNumSpaceIn}, packet_num_{packetNumIn} {
+  event_type_ = QLogEventType::PACKET_ACK;
+  ref_time_ = ref_time_in;
 }
 
-Document QLogPacketAckEvent::toJson() const {
+Document QLogPacketAckEvent::ToJson() const {
   // creating a json array to hold the information corresponding to
   // the event fields relative_time, category, event_type, trigger, data
   Document j;
@@ -1436,14 +1436,14 @@ Document QLogPacketAckEvent::toJson() const {
   Value value;
   value.SetObject();
   value.AddMember("packet_num_space",
-                  Value(quiche::QuicheTextUtilsImpl::Uint64ToString(packetNumSpace).c_str(), j_allocator).Move(),
+                  Value(quiche::QuicheTextUtilsImpl::Uint64ToString(packet_num_space_).c_str(), j_allocator).Move(),
                   j_allocator);    
   value.AddMember("packet_num",
-                  packetNum,
+                  packet_num_,
                   j_allocator);                                                                                                                 
-  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(refTime.count()).c_str(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(ref_time_.count()).c_str(), j_allocator).Move(), j_allocator);
   j.PushBack("transport", j_allocator);
-  j.PushBack(Value(toString(eventType).data(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(ToString(event_type_).data(), j_allocator).Move(), j_allocator);
   j.PushBack(value, j_allocator);
   return j;
 }
@@ -1452,14 +1452,14 @@ QLogMetricUpdateEvent::QLogMetricUpdateEvent(
     std::chrono::microseconds latestRttIn,
     std::chrono::microseconds mrttIn,
     std::chrono::microseconds srttIn,
-    std::chrono::microseconds ackDelayIn,
-    std::chrono::microseconds refTimeIn)
-    : latestRtt{latestRttIn}, mrtt{mrttIn}, srtt{srttIn}, ackDelay{ackDelayIn} {
-  eventType = QLogEventType::MetricUpdate;
-  refTime = refTimeIn;
+    std::chrono::microseconds ack_delay_in,
+    std::chrono::microseconds ref_time_in)
+    : latest_rtt_{latestRttIn}, mrtt_{mrttIn}, srtt_{srttIn}, ack_delay_{ack_delay_in} {
+  event_type_ = QLogEventType::METRIC_UPDATE;
+  ref_time_ = ref_time_in;
 }
 
-Document QLogMetricUpdateEvent::toJson() const {
+Document QLogMetricUpdateEvent::ToJson() const {
   // creating a json array to hold the information corresponding to
   // the event fields relative_time, category, event_type, trigger, data
   Document j;
@@ -1469,20 +1469,20 @@ Document QLogMetricUpdateEvent::toJson() const {
   Value value;
   value.SetObject();
   value.AddMember("latest_rtt",
-                  latestRtt.count(),
+                  latest_rtt_.count(),
                   j_allocator);    
   value.AddMember("min_rtt",
-                  mrtt.count(),
+                  mrtt_.count(),
                   j_allocator);   
   value.AddMember("smoothed_rtt",
-                  srtt.count(),
+                  srtt_.count(),
                   j_allocator); 
   value.AddMember("ack_delay",
-                  ackDelay.count(),
+                  ack_delay_.count(),
                   j_allocator);                                                                                                                                                   
-  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(refTime.count()).c_str(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(ref_time_.count()).c_str(), j_allocator).Move(), j_allocator);
   j.PushBack("recovery", j_allocator);
-  j.PushBack(Value(toString(eventType).data(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(ToString(event_type_).data(), j_allocator).Move(), j_allocator);
   j.PushBack(value, j_allocator);
   return j;
 }
@@ -1491,17 +1491,17 @@ QLogStreamStateUpdateEvent::QLogStreamStateUpdateEvent(
     QuicStreamId idIn,
     std::string& updateIn,
     quiche::QuicheOptionalImpl<std::chrono::milliseconds> timeSinceStreamCreationIn,
-    VantagePoint vantagePoint,
-    std::chrono::microseconds refTimeIn)
-    : id{idIn},
-      update{updateIn},
-      timeSinceStreamCreation(std::move(timeSinceStreamCreationIn)),
-      vantagePoint_(vantagePoint) {
-  eventType = QLogEventType::StreamStateUpdate;
-  refTime = refTimeIn;
+    VantagePoint vantage_point,
+    std::chrono::microseconds ref_time_in)
+    : id_{idIn},
+      update_{updateIn},
+      time_since_stream_creation_(std::move(timeSinceStreamCreationIn)),
+      vantagePoint_(vantage_point) {
+  event_type_ = QLogEventType::STREAM_STATE_UPDATE;
+  ref_time_ = ref_time_in;
 }
 
-Document QLogStreamStateUpdateEvent::toJson() const {
+Document QLogStreamStateUpdateEvent::ToJson() const {
   // creating a json array to hold the information corresponding to
   // the event fields relative_time, category, event_type, trigger, data
   Document j;
@@ -1511,43 +1511,43 @@ Document QLogStreamStateUpdateEvent::toJson() const {
   Value value;
   value.SetObject();
   value.AddMember("id",
-                  id,
+                  id_,
                   j_allocator);    
   value.AddMember("update",
-                  Value(update.c_str(), j_allocator).Move(),
+                  Value(update_.c_str(), j_allocator).Move(),
                   j_allocator);   
-  if (timeSinceStreamCreation) {
-    if (update == kOnEOM && vantagePoint_ == VantagePoint::IS_CLIENT) {
+  if (time_since_stream_creation_) {
+    if (update_ == kOnEOM && vantagePoint_ == VantagePoint::IS_CLIENT) {
       value.AddMember("ttlb",
-                      timeSinceStreamCreation->count(),
+                      time_since_stream_creation_->count(),
                       j_allocator);
-    } else if (update == kOnHeaders && vantagePoint_ == VantagePoint::IS_CLIENT) {
+    } else if (update_ == kOnHeaders && vantagePoint_ == VantagePoint::IS_CLIENT) {
       value.AddMember("ttfb",
-                      timeSinceStreamCreation->count(),
+                      time_since_stream_creation_->count(),
                       j_allocator);      
     } else {
       value.AddMember("ms_since_creation",
-                      timeSinceStreamCreation->count(),
+                      time_since_stream_creation_->count(),
                       j_allocator);
     }
   }                                                                                                                                                 
-  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(refTime.count()).c_str(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(ref_time_.count()).c_str(), j_allocator).Move(), j_allocator);
   j.PushBack("HTTP3", j_allocator);
-  j.PushBack(Value(toString(eventType).data(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(ToString(event_type_).data(), j_allocator).Move(), j_allocator);
   j.PushBack(value, j_allocator);
   return j;
 }
 
 QLogConnectionMigrationEvent::QLogConnectionMigrationEvent(
-    bool intentionalMigration,
-    VantagePoint vantagePoint,
-    std::chrono::microseconds refTimeIn)
-    : intentionalMigration_{intentionalMigration}, vantagePoint_(vantagePoint) {
-  eventType = QLogEventType::ConnectionMigration;
-  refTime = refTimeIn;
+    bool intentional_migration,
+    VantagePoint vantage_point,
+    std::chrono::microseconds ref_time_in)
+    : intentional_Migration_{intentional_migration}, vantagePoint_(vantage_point) {
+  event_type_ = QLogEventType::CONNECTION_MIGRATION;
+  ref_time_ = ref_time_in;
 }
 
-Document QLogConnectionMigrationEvent::toJson() const {
+Document QLogConnectionMigrationEvent::ToJson() const {
   // creating a json array to hold the information corresponding to
   // the event fields relative_time, category, event_type, trigger, data
   Document j;
@@ -1557,7 +1557,7 @@ Document QLogConnectionMigrationEvent::toJson() const {
   Value value;
   value.SetObject();
   value.AddMember("intentional",
-                  intentionalMigration_,
+                  intentional_Migration_,
                   j_allocator);
   if (vantagePoint_ == VantagePoint::IS_CLIENT) {
     value.AddMember("type",
@@ -1568,23 +1568,23 @@ Document QLogConnectionMigrationEvent::toJson() const {
                     "accepting",
                     j_allocator);  
   }                                                                                                                                                         
-  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(refTime.count()).c_str(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(ref_time_.count()).c_str(), j_allocator).Move(), j_allocator);
   j.PushBack("transport", j_allocator);
-  j.PushBack(Value(toString(eventType).data(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(ToString(event_type_).data(), j_allocator).Move(), j_allocator);
   j.PushBack(value, j_allocator);
   return j;
 }
 
 QLogPathValidationEvent::QLogPathValidationEvent(
     bool success,
-    VantagePoint vantagePoint,
-    std::chrono::microseconds refTimeIn)
-    : success_{success}, vantagePoint_(vantagePoint) {
-  eventType = QLogEventType::PathValidation;
-  refTime = refTimeIn;
+    VantagePoint vantage_point,
+    std::chrono::microseconds ref_time_in)
+    : success_{success}, vantagePoint_(vantage_point) {
+  event_type_ = QLogEventType::PATH_VALIDATION;
+  ref_time_ = ref_time_in;
 }
 
-Document QLogPathValidationEvent::toJson() const {
+Document QLogPathValidationEvent::ToJson() const {
   // creating a json array to hold the information corresponding to
   // the event fields relative_time, category, event_type, trigger, data
   Document j;
@@ -1597,32 +1597,32 @@ Document QLogPathValidationEvent::toJson() const {
                   success_,
                   j_allocator);  
   if (vantagePoint_ == VantagePoint::IS_CLIENT) {
-    value.AddMember("vantagePoint",
+    value.AddMember("vantage_point",
                     "client",
                     j_allocator);
   } else {
-    value.AddMember("vantagePoint",
+    value.AddMember("vantage_point",
                     "server",
                     j_allocator);
   }                                                                                                                                             
-  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(refTime.count()).c_str(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(ref_time_.count()).c_str(), j_allocator).Move(), j_allocator);
   j.PushBack("transport", j_allocator);
-  j.PushBack(Value(toString(eventType).data(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(ToString(event_type_).data(), j_allocator).Move(), j_allocator);
   j.PushBack(value, j_allocator);
   return j;
 }
 
 QLogPriorityUpdateEvent::QLogPriorityUpdateEvent(
-    QuicStreamId streamId,
+    QuicStreamId stream_id,
     uint8_t urgency,
     bool incremental,
-    std::chrono::microseconds refTimeIn)
-    : streamId_(streamId), urgency_(urgency), incremental_(incremental) {
-  eventType = QLogEventType::PriorityUpdate;
-  refTime = refTimeIn;
+    std::chrono::microseconds ref_time_in)
+    : streamId_(stream_id), urgency_(urgency), incremental_(incremental) {
+  event_type_ = QLogEventType::PRIORITY_UPDATE;
+  ref_time_ = ref_time_in;
 }
 
-Document QLogPriorityUpdateEvent::toJson() const {
+Document QLogPriorityUpdateEvent::ToJson() const {
   Document j;
   j.SetArray();
   Document::AllocatorType& j_allocator = j.GetAllocator();  
@@ -1638,62 +1638,62 @@ Document QLogPriorityUpdateEvent::toJson() const {
   value.AddMember("incremental",
                   "incremental_",
                   j_allocator);                                                                                                                                       
-  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(refTime.count()).c_str(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(quiche::QuicheTextUtilsImpl::Uint64ToString(ref_time_.count()).c_str(), j_allocator).Move(), j_allocator);
   j.PushBack("HTTP3", j_allocator);
-  j.PushBack(Value(toString(eventType).data(), j_allocator).Move(), j_allocator);
+  j.PushBack(Value(ToString(event_type_).data(), j_allocator).Move(), j_allocator);
   j.PushBack(value, j_allocator);
   return j;
 }
 
-quiche::QuicheStringPiece toString(QLogEventType type) {
+quiche::QuicheStringPiece ToString(QLogEventType type) {
   switch (type) {
-    case QLogEventType::PacketSent:
+    case QLogEventType::PACKET_SENT:
       return "packet_sent";
-    case QLogEventType::PacketReceived:
+    case QLogEventType::PACKET_RECEIVED:
       return "packet_received";
-    case QLogEventType::ConnectionClose:
+    case QLogEventType::CONNECTION_CLOSE:
       return "connection_close";
-    case QLogEventType::TransportSummary:
+    case QLogEventType::TRANSPORT_SUMMARY:
       return "transport_summary";
-    case QLogEventType::CongestionMetricUpdate:
+    case QLogEventType::CONGESTION_METRIC_UPDATE:
       return "congestion_metric_update";
-    case QLogEventType::PacingMetricUpdate:
+    case QLogEventType::PACING_METRIC_UPDATE:
       return "pacing_metric_update";
-    case QLogEventType::AppIdleUpdate:
+    case QLogEventType::APPIDLE_UPDATE:
       return "app_idle_update";
-    case QLogEventType::PacketDrop:
+    case QLogEventType::PACKET_DROP:
       return "packet_drop";
-    case QLogEventType::DatagramReceived:
+    case QLogEventType::DATAGRAM_RECEIVED:
       return "datagram_received";
-    case QLogEventType::LossAlarm:
+    case QLogEventType::LOSS_ALARM:
       return "loss_alarm";
-    case QLogEventType::PacketLost:
+    case QLogEventType::PACKET_LOST:
       return "packet_lost";
-    case QLogEventType::TransportStateUpdate:
+    case QLogEventType::TRANSPORT_STATE_UPDATE:
       return "transport_state_update";
-    case QLogEventType::PacketBuffered:
+    case QLogEventType::Packet_Buffered:
       return "packet_buffered";
-    case QLogEventType::PacketAck:
+    case QLogEventType::PACKET_ACK:
       return "packet_ack";
-    case QLogEventType::MetricUpdate:
+    case QLogEventType::METRIC_UPDATE:
       return "metric_update";
-    case QLogEventType::StreamStateUpdate:
+    case QLogEventType::STREAM_STATE_UPDATE:
       return "stream_state_update";
-    case QLogEventType::PacingObservation:
+    case QLogEventType::PACING_OBSERVATION:
       return "pacing_observation";
-    case QLogEventType::AppLimitedUpdate:
+    case QLogEventType::APP_LIMITED_UPDATE:
       return "app_limited_update";
-    case QLogEventType::BandwidthEstUpdate:
+    case QLogEventType::BANDWIDTH_ESTUPDATE:
       return "bandwidth_est_update";
-    case QLogEventType::ConnectionMigration:
+    case QLogEventType::CONNECTION_MIGRATION:
       return "connection_migration";
-    case QLogEventType::PathValidation:
+    case QLogEventType::PATH_VALIDATION:
       return "path_validation";
-    case QLogEventType::PriorityUpdate:
+    case QLogEventType::PRIORITY_UPDATE:
       return "priority";
-    case QLogEventType::FramesProcessed:
+    case QLogEventType::FRAMES_PROCESSED:
       return "frames_processed";
-    case QLogEventType::RequestOverStream:
+    case QLogEventType::REQUEST_OVER_STREAM:
       return "http_request";
     default:
       return "unknown_event_type";

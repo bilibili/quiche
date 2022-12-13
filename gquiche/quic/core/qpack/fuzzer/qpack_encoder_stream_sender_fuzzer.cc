@@ -10,7 +10,6 @@
 #include <string>
 
 #include "gquiche/quic/core/qpack/qpack_encoder_stream_sender.h"
-#include "gquiche/quic/test_tools/qpack/qpack_encoder_test_utils.h"
 #include "gquiche/quic/test_tools/qpack/qpack_test_utils.h"
 
 namespace quic {

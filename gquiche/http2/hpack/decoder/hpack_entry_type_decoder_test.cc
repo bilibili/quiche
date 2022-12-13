@@ -6,14 +6,12 @@
 
 #include <vector>
 
-#include "gquiche/http2/hpack/tools/hpack_block_builder.h"
-#include "gquiche/http2/platform/api/http2_logging.h"
-#include "gquiche/http2/platform/api/http2_test_helpers.h"
-#include "gquiche/http2/tools/random_decoder_test.h"
+#include "gquiche/http2/test_tools/hpack_block_builder.h"
+#include "gquiche/http2/test_tools/random_decoder_test_base.h"
+#include "gquiche/http2/test_tools/verify_macros.h"
+#include "gquiche/common/platform/api/quiche_logging.h"
 #include "gquiche/common/platform/api/quiche_test.h"
 
-using ::testing::AssertionFailure;
-using ::testing::AssertionResult;
 using ::testing::AssertionSuccess;
 
 namespace http2 {
@@ -41,8 +39,9 @@ TEST_F(HpackEntryTypeDecoderTest, DynamicTableSizeUpdate) {
     bb.AppendDynamicTableSizeUpdate(size);
     DecodeBuffer db(bb.buffer());
     auto validator = [size, this]() -> AssertionResult {
-      VERIFY_EQ(HpackEntryType::kDynamicTableSizeUpdate, decoder_.entry_type());
-      VERIFY_EQ(size, decoder_.varint());
+      HTTP2_VERIFY_EQ(HpackEntryType::kDynamicTableSizeUpdate,
+                      decoder_.entry_type());
+      HTTP2_VERIFY_EQ(size, decoder_.varint());
       return AssertionSuccess();
     };
     EXPECT_TRUE(DecodeAndValidateSeveralWays(&db, kReturnNonZeroOnFirst,
@@ -68,8 +67,8 @@ TEST_F(HpackEntryTypeDecoderTest, HeaderWithIndex) {
       bb.AppendEntryTypeAndVarint(entry_type, index);
       DecodeBuffer db(bb.buffer());
       auto validator = [entry_type, index, this]() -> AssertionResult {
-        VERIFY_EQ(entry_type, decoder_.entry_type());
-        VERIFY_EQ(index, decoder_.varint());
+        HTTP2_VERIFY_EQ(entry_type, decoder_.entry_type());
+        HTTP2_VERIFY_EQ(index, decoder_.varint());
         return AssertionSuccess();
       };
       EXPECT_TRUE(DecodeAndValidateSeveralWays(&db, kReturnNonZeroOnFirst,

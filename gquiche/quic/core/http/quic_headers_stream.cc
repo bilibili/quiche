@@ -13,9 +13,9 @@
 namespace quic {
 
 QuicHeadersStream::CompressedHeaderInfo::CompressedHeaderInfo(
-    QuicStreamOffset headers_stream_offset,
-    QuicStreamOffset full_length,
-    QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener)
+    QuicStreamOffset headers_stream_offset, QuicStreamOffset full_length,
+    quiche::QuicheReferenceCountedPointer<QuicAckListenerInterface>
+        ack_listener)
     : headers_stream_offset(headers_stream_offset),
       full_length(full_length),
       unacked_length(full_length),
@@ -29,8 +29,7 @@ QuicHeadersStream::CompressedHeaderInfo::~CompressedHeaderInfo() {}
 QuicHeadersStream::QuicHeadersStream(QuicSpdySession* session)
     : QuicStream(QuicUtils::GetHeadersStreamId(session->transport_version()),
                  session,
-                 /*is_static=*/true,
-                 BIDIRECTIONAL),
+                 /*is_static=*/true, BIDIRECTIONAL),
       spdy_session_(session) {
   // The headers stream is exempt from connection level flow control.
   DisableConnectionFlowControlForThisStream();
@@ -138,9 +137,9 @@ void QuicHeadersStream::OnStreamFrameRetransmitted(QuicStreamOffset offset,
 }
 
 void QuicHeadersStream::OnDataBuffered(
-    QuicStreamOffset offset,
-    QuicByteCount data_length,
-    const QuicReferenceCountedPointer<QuicAckListenerInterface>& ack_listener) {
+    QuicStreamOffset offset, QuicByteCount data_length,
+    const quiche::QuicheReferenceCountedPointer<QuicAckListenerInterface>&
+        ack_listener) {
   // Populate unacked_headers_.
   if (!unacked_headers_.empty() &&
       (offset == unacked_headers_.back().headers_stream_offset +

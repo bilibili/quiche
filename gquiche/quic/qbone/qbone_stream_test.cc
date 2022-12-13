@@ -9,14 +9,15 @@
 #include "absl/strings/string_view.h"
 #include "gquiche/quic/core/crypto/quic_random.h"
 #include "gquiche/quic/core/quic_session.h"
-#include "gquiche/quic/core/quic_simple_buffer_allocator.h"
 #include "gquiche/quic/core/quic_utils.h"
 #include "gquiche/quic/platform/api/quic_test.h"
 #include "gquiche/quic/platform/api/quic_test_loopback.h"
 #include "gquiche/quic/qbone/qbone_constants.h"
 #include "gquiche/quic/qbone/qbone_session_base.h"
 #include "gquiche/quic/test_tools/mock_clock.h"
+#include "gquiche/quic/test_tools/mock_connection_id_generator.h"
 #include "gquiche/quic/test_tools/quic_test_utils.h"
+#include "gquiche/common/simple_buffer_allocator.h"
 #include "gquiche/spdy/core/spdy_protocol.h"
 
 namespace quic {
@@ -108,6 +109,10 @@ class DummyPacketWriter : public QuicPacketWriter {
 
   void SetWritable() override {}
 
+  absl::optional<int> MessageTooBigErrorCode() const override {
+    return absl::nullopt;
+  }
+
   QuicByteCount GetMaxPacketSize(
       const QuicSocketAddress& peer_address) const override {
     return 0;
@@ -141,7 +146,8 @@ class QboneReadOnlyStreamTest : public ::testing::Test,
         QuicSocketAddress(TestLoopback(), 0),
         this /*QuicConnectionHelperInterface*/, alarm_factory_.get(),
         new DummyPacketWriter(), owns_writer, perspective,
-        ParsedVersionOfIndex(CurrentSupportedVersions(), 0)));
+        ParsedVersionOfIndex(CurrentSupportedVersions(), 0),
+        connection_id_generator_));
     clock_.AdvanceTime(QuicTime::Delta::FromSeconds(1));
     session_ = std::make_unique<StrictMock<MockQuicSession>>(connection_.get(),
                                                              QuicConfig());
@@ -159,7 +165,7 @@ class QboneReadOnlyStreamTest : public ::testing::Test,
     return QuicRandom::GetInstance();
   }
 
-  QuicBufferAllocator* GetStreamSendBufferAllocator() override {
+  quiche::QuicheBufferAllocator* GetStreamSendBufferAllocator() override {
     return &buffer_allocator_;
   }
 
@@ -170,10 +176,11 @@ class QboneReadOnlyStreamTest : public ::testing::Test,
   std::unique_ptr<QuicAlarmFactory> alarm_factory_;
   std::unique_ptr<QuicConnection> connection_;
   // Used to implement the QuicConnectionHelperInterface.
-  SimpleBufferAllocator buffer_allocator_;
+  quiche::SimpleBufferAllocator buffer_allocator_;
   MockClock clock_;
   const QuicStreamId kStreamId = QuicUtils::GetFirstUnidirectionalStreamId(
       CurrentSupportedVersions()[0].transport_version, Perspective::IS_CLIENT);
+  quic::test::MockConnectionIdGenerator connection_id_generator_;
 };
 
 // Read an entire string.

@@ -64,7 +64,7 @@ SPDLOG_INLINE void sequence_file_sink<Mutex>::sink_it_(const details::log_msg &m
 
   size_t formatted_size = formatted.size();
   char begin_of_msg = formatted[0]; 
-   
+
   if (begin_of_msg == ']') {
     file_helper_.write(formatted, 0);
     current_size_ += formatted_size;
@@ -234,14 +234,13 @@ SPDLOG_INLINE std::string sequence_file_sink<Mutex>::currentSummary() {
 template<typename Mutex>
 SPDLOG_INLINE void sequence_file_sink<Mutex>::sequence_() {
   using details::os::filename_to_str;
-  using details::os::path_exists;
 
   //file close;
   file_helper_.close();
 
   filename_t src = calc_filename(base_filename_, 0);
   if (!path_exists(src)) {
-    throw_spdlog_ex("file path " + details::os::filename_to_str(base_filename_) + " not exist", errno);
+    std::cout<<"file path " + details::os::filename_to_str(base_filename_) + " not exist"<<std::endl;
     details::os::create_dir(details::os::dir_name(src));
     file_helper_.reopen(true);
     is_first_event_ = true;
@@ -255,10 +254,9 @@ SPDLOG_INLINE void sequence_file_sink<Mutex>::sequence_() {
     details::os::sleep_for_millis(100);
     if (!rename_file_(src, target)) {
       // truncate the log file anyway to prevent it to grow beyond its limit!
-      file_helper_.reopen(true);
       current_size_ = 0;
-      throw_spdlog_ex("sequence_file_sink: failed renaming " + filename_to_str(src) + " to " + filename_to_str(target), errno);
-      }
+      std::cout<<"sequence_file_sink: failed renaming " + filename_to_str(src) + " to " + filename_to_str(target)<<std::endl;
+    }
   }
   file_helper_.reopen(true);
   is_first_event_ = true;  

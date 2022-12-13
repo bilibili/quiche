@@ -10,8 +10,7 @@
 #include "gquiche/quic/core/quic_interval_deque.h"
 #include "gquiche/quic/core/quic_interval_set.h"
 #include "gquiche/quic/core/quic_types.h"
-#include "gquiche/quic/platform/api/quic_iovec.h"
-#include "gquiche/quic/platform/api/quic_mem_slice.h"
+#include "gquiche/common/platform/api/quiche_mem_slice.h"
 #include "gquiche/common/quiche_circular_deque.h"
 
 namespace quic {
@@ -28,7 +27,7 @@ class QuicDataWriter;
 // stream data is saved in send buffer and is removed when stream data is fully
 // acked. It is move-only.
 struct QUIC_EXPORT_PRIVATE BufferedSlice {
-  BufferedSlice(QuicMemSlice mem_slice, QuicStreamOffset offset);
+  BufferedSlice(quiche::QuicheMemSlice mem_slice, QuicStreamOffset offset);
   BufferedSlice(BufferedSlice&& other);
   BufferedSlice& operator=(BufferedSlice&& other);
 
@@ -40,7 +39,7 @@ struct QUIC_EXPORT_PRIVATE BufferedSlice {
   QuicInterval<std::size_t> interval() const;
 
   // Stream data of this data slice.
-  QuicMemSlice slice;
+  quiche::QuicheMemSlice slice;
   // Location of this data slice in the stream.
   QuicStreamOffset offset;
 };
@@ -64,36 +63,31 @@ struct QUIC_EXPORT_PRIVATE StreamPendingRetransmission {
 // across slice boundaries.
 class QUIC_EXPORT_PRIVATE QuicStreamSendBuffer {
  public:
-  explicit QuicStreamSendBuffer(QuicBufferAllocator* allocator);
+  explicit QuicStreamSendBuffer(quiche::QuicheBufferAllocator* allocator);
   QuicStreamSendBuffer(const QuicStreamSendBuffer& other) = delete;
   QuicStreamSendBuffer(QuicStreamSendBuffer&& other) = delete;
   ~QuicStreamSendBuffer();
 
-  // Save |data_length| of data starts at |iov_offset| in |iov| to send buffer.
-  void SaveStreamData(const struct iovec* iov,
-                      int iov_count,
-                      size_t iov_offset,
-                      QuicByteCount data_length);
+  // Save |data| to send buffer.
+  void SaveStreamData(absl::string_view data);
 
   // Save |slice| to send buffer.
-  void SaveMemSlice(QuicMemSlice slice);
+  void SaveMemSlice(quiche::QuicheMemSlice slice);
 
   // Save all slices in |span| to send buffer. Return total bytes saved.
-  QuicByteCount SaveMemSliceSpan(absl::Span<QuicMemSlice> span);
+  QuicByteCount SaveMemSliceSpan(absl::Span<quiche::QuicheMemSlice> span);
 
   // Called when |bytes_consumed| bytes has been consumed by the stream.
   void OnStreamDataConsumed(size_t bytes_consumed);
 
   // Write |data_length| of data starts at |offset|.
-  bool WriteStreamData(QuicStreamOffset offset,
-                       QuicByteCount data_length,
+  bool WriteStreamData(QuicStreamOffset offset, QuicByteCount data_length,
                        QuicDataWriter* writer);
 
   // Called when data [offset, offset + data_length) is acked or removed as
   // stream is canceled. Removes fully acked data slice from send buffer. Set
   // |newly_acked_length|. Returns false if trying to ack unsent data.
-  bool OnStreamDataAcked(QuicStreamOffset offset,
-                         QuicByteCount data_length,
+  bool OnStreamDataAcked(QuicStreamOffset offset, QuicByteCount data_length,
                          QuicByteCount* newly_acked_length);
 
   // Called when data [offset, offset + data_length) is considered as lost.
@@ -153,7 +147,7 @@ class QUIC_EXPORT_PRIVATE QuicStreamSendBuffer {
   // Offset of next inserted byte.
   QuicStreamOffset stream_offset_;
 
-  QuicBufferAllocator* allocator_;
+  quiche::QuicheBufferAllocator* allocator_;
 
   // Bytes that have been consumed by the stream.
   uint64_t stream_bytes_written_;

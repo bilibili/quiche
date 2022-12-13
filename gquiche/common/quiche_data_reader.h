@@ -36,8 +36,7 @@ class QUICHE_EXPORT_PRIVATE QuicheDataReader {
   QuicheDataReader(const char* data, const size_t len);
   // Constructs a reader using the specified endianness.
   // Caller must provide an underlying buffer to work on.
-  QuicheDataReader(const char* data,
-                   const size_t len,
+  QuicheDataReader(const char* data, const size_t len,
                    quiche::Endianness endianness);
   QuicheDataReader(const QuicheDataReader&) = delete;
   QuicheDataReader& operator=(const QuicheDataReader&) = delete;
@@ -45,11 +44,12 @@ class QUICHE_EXPORT_PRIVATE QuicheDataReader {
   // Empty destructor.
   ~QuicheDataReader() {}
 
-  // Reads an 8/16/32/64-bit unsigned integer into the given output
+  // Reads an 8/16/24/32/64-bit unsigned integer into the given output
   // parameter. Forwards the internal iterator on success. Returns true on
   // success, false otherwise.
   bool ReadUInt8(uint8_t* result);
   bool ReadUInt16(uint16_t* result);
+  bool ReadUInt24(uint32_t* result);
   bool ReadUInt32(uint32_t* result);
   bool ReadUInt64(uint64_t* result);
 
@@ -91,6 +91,25 @@ class QUICHE_EXPORT_PRIVATE QuicheDataReader {
   // unsigned integer and returns them as a uint64_t.  Forwards internal
   // iterator on success, may forward it even in case of failure.
   bool ReadDecimal64(size_t num_digits, uint64_t* result);
+
+  // Returns the length in bytes of a variable length integer based on the next
+  // two bits available. Returns 1, 2, 4, or 8 on success, and 0 on failure.
+  QuicheVariableLengthIntegerLength PeekVarInt62Length();
+
+  // Read an RFC 9000 62-bit Variable Length Integer and place the result in
+  // |*result|. Returns false if there is not enough space in the buffer to read
+  // the number, true otherwise. If false is returned, |*result| is not altered.
+  bool ReadVarInt62(uint64_t* result);
+
+  // Reads a string prefixed with a RFC 9000 62-bit variable Length integer
+  // length into the given output parameter.
+  //
+  // NOTE: Does not copy but rather references strings in the underlying buffer.
+  // This should be kept in mind when handling memory management!
+  //
+  // Returns false if there is not enough space in the buffer to read
+  // the number and subsequent string, true otherwise.
+  bool ReadStringPieceVarInt62(absl::string_view* result);
 
   // Returns the remaining payload as a absl::string_view.
   //

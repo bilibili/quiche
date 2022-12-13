@@ -6,32 +6,32 @@
 
 namespace quic {
 
-std::string getFlowControlEvent(int offset) {
+std::string GetFlowControlEvent(int offset) {
   return "flow control event, new offset: " + std::to_string(offset);
 }
 
-std::string getRxStreamWU(QuicStreamId streamId, uint64_t packetNum, uint64_t maximumData) {
-  return "rx stream, streamId: " + quiche::QuicheTextUtilsImpl::Uint64ToString(streamId) +
-      ", packetNum: " + quiche::QuicheTextUtilsImpl::Uint64ToString(packetNum) +
+std::string GetRxStreamWU(QuicStreamId stream_id, uint64_t packet_num, uint64_t maximumData) {
+  return "rx stream, stream_id: " + quiche::QuicheTextUtilsImpl::Uint64ToString(stream_id) +
+      ", packet_num: " + quiche::QuicheTextUtilsImpl::Uint64ToString(packet_num) +
       ", maximumData: " + quiche::QuicheTextUtilsImpl::Uint64ToString(maximumData);
 }
 
-std::string getRxConnWU(uint64_t packetNum, uint64_t maximumData) {
-  return "rx, packetNum: " + quiche::QuicheTextUtilsImpl::Uint64ToString(packetNum) +
+std::string GetRxConnWU(uint64_t packet_num, uint64_t maximumData) {
+  return "rx, packet_num: " + quiche::QuicheTextUtilsImpl::Uint64ToString(packet_num) +
       ", maximumData: " + quiche::QuicheTextUtilsImpl::Uint64ToString(maximumData);
 }
 
-std::string getPeerClose(const std::string& peerCloseReason) {
+std::string GetPeerClose(const std::string& peerCloseReason) {
   return "error message: " + peerCloseReason;
 }
 
-std::string getFlowControlWindowAvailable(uint64_t windowAvailable) {
+std::string GetFlowControlWindowAvailable(uint64_t windowAvailable) {
   return "on flow control, window available: " +
       quiche::QuicheTextUtilsImpl::Uint64ToString(windowAvailable);
 }
 
-std::string getClosingStream(const std::string& streamId) {
-  return "closing stream, stream id: " + streamId;
+std::string GetClosingStream(const std::string& stream_id) {
+  return "closing stream, stream id: " + stream_id;
 }
 
 } // namespace quic

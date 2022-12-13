@@ -4,8 +4,8 @@
 
 #include "gquiche/quic/test_tools/server_thread.h"
 
+#include "gquiche/quic/core/quic_default_clock.h"
 #include "gquiche/quic/core/quic_dispatcher.h"
-#include "gquiche/quic/platform/api/quic_containers.h"
 #include "gquiche/quic/test_tools/crypto_test_utils.h"
 #include "gquiche/quic/test_tools/quic_dispatcher_peer.h"
 #include "gquiche/quic/test_tools/quic_server_peer.h"
@@ -13,10 +13,11 @@
 namespace quic {
 namespace test {
 
-ServerThread::ServerThread(QuicServer* server, const QuicSocketAddress& address)
+ServerThread::ServerThread(std::unique_ptr<QuicServer> server,
+                           const QuicSocketAddress& address)
     : QuicThread("server_thread"),
-      server_(server),
-      clock_(server->epoll_server()),
+      server_(std::move(server)),
+      clock_(QuicDefaultClock::Get()),
       address_(address),
       port_(0),
       initialized_(false) {}
@@ -27,8 +28,9 @@ void ServerThread::Initialize() {
   if (initialized_) {
     return;
   }
-
-  server_->CreateUDPSocketAndListen(address_);
+  if (!server_->CreateUDPSocketAndListen(address_)) {
+    return;
+  }
 
   QuicWriterMutexLock lock(&port_lock_);
   port_ = server_->port();
@@ -72,8 +74,8 @@ void ServerThread::WaitForCryptoHandshakeConfirmed() {
 
 bool ServerThread::WaitUntil(std::function<bool()> termination_predicate,
                              QuicTime::Delta timeout) {
-  const QuicTime deadline = clock_.Now() + timeout;
-  while (clock_.Now() < deadline) {
+  const QuicTime deadline = clock_->Now() + timeout;
+  while (clock_->Now() < deadline) {
     QuicNotification done_checking;
     bool should_terminate = false;
     Schedule([&] {

@@ -13,35 +13,10 @@
 namespace quic {
 namespace test {
 
-// static
-size_t QuicSentPacketManagerPeer::GetMaxTailLossProbes(
-    QuicSentPacketManager* sent_packet_manager) {
-  return sent_packet_manager->max_tail_loss_probes_;
-}
-
-// static
-void QuicSentPacketManagerPeer::SetMaxTailLossProbes(
-    QuicSentPacketManager* sent_packet_manager,
-    size_t max_tail_loss_probes) {
-  sent_packet_manager->max_tail_loss_probes_ = max_tail_loss_probes;
-}
-
-// static
-bool QuicSentPacketManagerPeer::GetEnableHalfRttTailLossProbe(
-    QuicSentPacketManager* sent_packet_manager) {
-  return sent_packet_manager->enable_half_rtt_tail_loss_probe_;
-}
-
-// static
-bool QuicSentPacketManagerPeer::GetUseNewRto(
-    QuicSentPacketManager* sent_packet_manager) {
-  return sent_packet_manager->use_new_rto_;
-}
 
 // static
 void QuicSentPacketManagerPeer::SetPerspective(
-    QuicSentPacketManager* sent_packet_manager,
-    Perspective perspective) {
+    QuicSentPacketManager* sent_packet_manager, Perspective perspective) {
   QuicUnackedPacketMapPeer::SetPerspective(
       &sent_packet_manager->unacked_packets_, perspective);
 }
@@ -80,8 +55,7 @@ RttStats* QuicSentPacketManagerPeer::GetRttStats(
 
 // static
 bool QuicSentPacketManagerPeer::IsRetransmission(
-    QuicSentPacketManager* sent_packet_manager,
-    uint64_t packet_number) {
+    QuicSentPacketManager* sent_packet_manager, uint64_t packet_number) {
   QUICHE_DCHECK(HasRetransmittableFrames(sent_packet_manager, packet_number));
   if (!HasRetransmittableFrames(sent_packet_manager, packet_number)) {
     return false;
@@ -93,23 +67,10 @@ bool QuicSentPacketManagerPeer::IsRetransmission(
 
 // static
 void QuicSentPacketManagerPeer::MarkForRetransmission(
-    QuicSentPacketManager* sent_packet_manager,
-    uint64_t packet_number,
+    QuicSentPacketManager* sent_packet_manager, uint64_t packet_number,
     TransmissionType transmission_type) {
   sent_packet_manager->MarkForRetransmission(QuicPacketNumber(packet_number),
                                              transmission_type);
-}
-
-// static
-QuicTime::Delta QuicSentPacketManagerPeer::GetRetransmissionDelay(
-    const QuicSentPacketManager* sent_packet_manager) {
-  return sent_packet_manager->GetRetransmissionDelay();
-}
-
-// static
-QuicTime::Delta QuicSentPacketManagerPeer::GetTailLossProbeDelay(
-    const QuicSentPacketManager* sent_packet_manager) {
-  return sent_packet_manager->GetTailLossProbeDelay();
 }
 
 // static
@@ -126,17 +87,9 @@ size_t QuicSentPacketManagerPeer::GetNumRetransmittablePackets(
 }
 
 // static
-void QuicSentPacketManagerPeer::SetConsecutiveRtoCount(
-    QuicSentPacketManager* sent_packet_manager,
-    size_t count) {
-  sent_packet_manager->consecutive_rto_count_ = count;
-}
-
-// static
-void QuicSentPacketManagerPeer::SetConsecutiveTlpCount(
-    QuicSentPacketManager* sent_packet_manager,
-    size_t count) {
-  sent_packet_manager->consecutive_tlp_count_ = count;
+void QuicSentPacketManagerPeer::SetConsecutivePtoCount(
+    QuicSentPacketManager* sent_packet_manager, size_t count) {
+  sent_packet_manager->consecutive_pto_count_ = count;
 }
 
 // static
@@ -153,15 +106,13 @@ bool QuicSentPacketManagerPeer::UsingPacing(
 
 // static
 void QuicSentPacketManagerPeer::SetUsingPacing(
-    QuicSentPacketManager* sent_packet_manager,
-    bool using_pacing) {
+    QuicSentPacketManager* sent_packet_manager, bool using_pacing) {
   sent_packet_manager->using_pacing_ = using_pacing;
 }
 
 // static
 bool QuicSentPacketManagerPeer::HasRetransmittableFrames(
-    QuicSentPacketManager* sent_packet_manager,
-    uint64_t packet_number) {
+    QuicSentPacketManager* sent_packet_manager, uint64_t packet_number) {
   return sent_packet_manager->unacked_packets_.HasRetransmittableFrames(
       QuicPacketNumber(packet_number));
 }
@@ -180,9 +131,14 @@ void QuicSentPacketManagerPeer::DisablePacerBursts(
 }
 
 // static
+int QuicSentPacketManagerPeer::GetPacerInitialBurstSize(
+    QuicSentPacketManager* sent_packet_manager) {
+  return sent_packet_manager->pacing_sender_.initial_burst_size_;
+}
+
+// static
 void QuicSentPacketManagerPeer::SetNextPacedPacketTime(
-    QuicSentPacketManager* sent_packet_manager,
-    QuicTime time) {
+    QuicSentPacketManager* sent_packet_manager, QuicTime time) {
   sent_packet_manager->pacing_sender_.ideal_next_packet_send_time_ = time;
 }
 

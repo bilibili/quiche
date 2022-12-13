@@ -10,15 +10,19 @@
 #include <utility>
 
 #include "absl/strings/escaping.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "absl/types/optional.h"
 #include "openssl/bn.h"
 #include "openssl/ec.h"
 #include "openssl/ecdsa.h"
 #include "openssl/nid.h"
 #include "openssl/sha.h"
+#include "gquiche/quic/core/crypto/certificate_view.h"
 #include "gquiche/quic/core/crypto/channel_id.h"
-#include "gquiche/quic/core/crypto/common_cert_set.h"
 #include "gquiche/quic/core/crypto/crypto_handshake.h"
+#include "gquiche/quic/core/crypto/crypto_utils.h"
+#include "gquiche/quic/core/crypto/proof_source_x509.h"
 #include "gquiche/quic/core/crypto/quic_crypto_server_config.h"
 #include "gquiche/quic/core/crypto/quic_decrypter.h"
 #include "gquiche/quic/core/crypto/quic_encrypter.h"
@@ -29,9 +33,11 @@
 #include "gquiche/quic/core/quic_crypto_server_stream_base.h"
 #include "gquiche/quic/core/quic_crypto_stream.h"
 #include "gquiche/quic/core/quic_server_id.h"
+#include "gquiche/quic/core/quic_types.h"
 #include "gquiche/quic/core/quic_utils.h"
 #include "gquiche/quic/core/quic_versions.h"
 #include "gquiche/quic/platform/api/quic_bug_tracker.h"
+#include "gquiche/quic/platform/api/quic_hostname_utils.h"
 #include "gquiche/quic/platform/api/quic_logging.h"
 #include "gquiche/quic/platform/api/quic_socket_address.h"
 #include "gquiche/quic/platform/api/quic_test.h"
@@ -40,6 +46,7 @@
 #include "gquiche/quic/test_tools/quic_stream_peer.h"
 #include "gquiche/quic/test_tools/quic_test_utils.h"
 #include "gquiche/quic/test_tools/simple_quic_framer.h"
+#include "gquiche/quic/test_tools/test_certificates.h"
 #include "gquiche/common/test_tools/quiche_test_utils.h"
 
 namespace quic {
@@ -104,12 +111,11 @@ namespace {
 class FullChloGenerator {
  public:
   FullChloGenerator(
-      QuicCryptoServerConfig* crypto_config,
-      QuicSocketAddress server_addr,
-      QuicSocketAddress client_addr,
-      const QuicClock* clock,
+      QuicCryptoServerConfig* crypto_config, QuicSocketAddress server_addr,
+      QuicSocketAddress client_addr, const QuicClock* clock,
       ParsedQuicVersion version,
-      QuicReferenceCountedPointer<QuicSignedServerConfig> signed_config,
+      quiche::QuicheReferenceCountedPointer<QuicSignedServerConfig>
+          signed_config,
       QuicCompressedCertsCache* compressed_certs_cache,
       CryptoHandshakeMessage* out)
       : crypto_config_(crypto_config),
@@ -126,8 +132,9 @@ class FullChloGenerator {
    public:
     explicit ValidateClientHelloCallback(FullChloGenerator* generator)
         : generator_(generator) {}
-    void Run(QuicReferenceCountedPointer<
-                 ValidateClientHelloResultCallback::Result> result,
+    void Run(quiche::QuicheReferenceCountedPointer<
+                 ValidateClientHelloResultCallback::Result>
+                 result,
              std::unique_ptr<ProofSource::Details> /* details */) override {
       generator_->ValidateClientHelloDone(std::move(result));
     }
@@ -142,9 +149,9 @@ class FullChloGenerator {
   }
 
  private:
-  void ValidateClientHelloDone(
-      QuicReferenceCountedPointer<ValidateClientHelloResultCallback::Result>
-          result) {
+  void ValidateClientHelloDone(quiche::QuicheReferenceCountedPointer<
+                               ValidateClientHelloResultCallback::Result>
+                                   result) {
     result_ = result;
     crypto_config_->ProcessClientHello(
         result_, /*reject_only=*/false, TestConnectionId(1), server_addr_,
@@ -158,8 +165,7 @@ class FullChloGenerator {
    public:
     explicit ProcessClientHelloCallback(FullChloGenerator* generator)
         : generator_(generator) {}
-    void Run(QuicErrorCode error,
-             const std::string& error_details,
+    void Run(QuicErrorCode error, const std::string& error_details,
              std::unique_ptr<CryptoHandshakeMessage> message,
              std::unique_ptr<DiversificationNonce> /*diversification_nonce*/,
              std::unique_ptr<ProofSource::Details> /*proof_source_details*/)
@@ -206,12 +212,13 @@ class FullChloGenerator {
   QuicSocketAddress client_addr_;
   const QuicClock* clock_;
   ParsedQuicVersion version_;
-  QuicReferenceCountedPointer<QuicSignedServerConfig> signed_config_;
+  quiche::QuicheReferenceCountedPointer<QuicSignedServerConfig> signed_config_;
   QuicCompressedCertsCache* compressed_certs_cache_;
   CryptoHandshakeMessage* out_;
 
-  QuicReferenceCountedPointer<QuicCryptoNegotiatedParameters> params_;
-  QuicReferenceCountedPointer<ValidateClientHelloResultCallback::Result>
+  quiche::QuicheReferenceCountedPointer<QuicCryptoNegotiatedParameters> params_;
+  quiche::QuicheReferenceCountedPointer<
+      ValidateClientHelloResultCallback::Result>
       result_;
 };
 
@@ -338,8 +345,7 @@ int HandshakeWithFakeClient(MockQuicConnectionHelper* helper,
   return client_session.GetCryptoStream()->num_sent_client_hellos();
 }
 
-void SetupCryptoServerConfigForTest(const QuicClock* clock,
-                                    QuicRandom* rand,
+void SetupCryptoServerConfigForTest(const QuicClock* clock, QuicRandom* rand,
                                     QuicCryptoServerConfig* crypto_config) {
   QuicCryptoServerConfig::ConfigOptions options;
   options.channel_id_enabled = true;
@@ -378,7 +384,7 @@ void CommunicateHandshakeMessages(PacketSavingConnection* client_conn,
                    << client_conn->encrypted_packets_.size() - client_i
                    << " packets client->server";
     MovePackets(client_conn, &client_i, server, server_conn,
-                Perspective::IS_SERVER);
+                Perspective::IS_SERVER, /*process_stream_data=*/false);
 
     if (client->one_rtt_keys_available() && server->one_rtt_keys_available() &&
         server_conn->encrypted_packets_.size() == server_i) {
@@ -389,8 +395,56 @@ void CommunicateHandshakeMessages(PacketSavingConnection* client_conn,
                    << server_conn->encrypted_packets_.size() - server_i
                    << " packets server->client";
     MovePackets(server_conn, &server_i, client, client_conn,
-                Perspective::IS_CLIENT);
+                Perspective::IS_CLIENT, /*process_stream_data=*/false);
   }
+}
+
+bool CommunicateHandshakeMessagesUntil(PacketSavingConnection* client_conn,
+                                       QuicCryptoStream* client,
+                                       std::function<bool()> client_condition,
+                                       PacketSavingConnection* server_conn,
+                                       QuicCryptoStream* server,
+                                       std::function<bool()> server_condition,
+                                       bool process_stream_data) {
+  size_t client_next_packet_to_deliver =
+      client_conn->number_of_packets_delivered_;
+  size_t server_next_packet_to_deliver =
+      server_conn->number_of_packets_delivered_;
+  while (
+      client_conn->connected() && server_conn->connected() &&
+      (!client_condition() || !server_condition()) &&
+      (client_conn->encrypted_packets_.size() > client_next_packet_to_deliver ||
+       server_conn->encrypted_packets_.size() >
+           server_next_packet_to_deliver)) {
+    if (!server_condition()) {
+      QUIC_LOG(INFO) << "Processing "
+                     << client_conn->encrypted_packets_.size() -
+                            client_next_packet_to_deliver
+                     << " packets client->server";
+      MovePackets(client_conn, &client_next_packet_to_deliver, server,
+                  server_conn, Perspective::IS_SERVER, process_stream_data);
+    }
+    if (!client_condition()) {
+      QUIC_LOG(INFO) << "Processing "
+                     << server_conn->encrypted_packets_.size() -
+                            server_next_packet_to_deliver
+                     << " packets server->client";
+      MovePackets(server_conn, &server_next_packet_to_deliver, client,
+                  client_conn, Perspective::IS_CLIENT, process_stream_data);
+    }
+  }
+  client_conn->number_of_packets_delivered_ = client_next_packet_to_deliver;
+  server_conn->number_of_packets_delivered_ = server_next_packet_to_deliver;
+  bool result = client_condition() && server_condition();
+  if (!result) {
+    QUIC_LOG(INFO) << "CommunicateHandshakeMessagesUnti failed with state: "
+                      "client connected? "
+                   << client_conn->connected() << " server connected? "
+                   << server_conn->connected() << " client condition met? "
+                   << client_condition() << " server condition met? "
+                   << server_condition();
+  }
+  return result;
 }
 
 std::pair<size_t, size_t> AdvanceHandshake(PacketSavingConnection* client_conn,
@@ -404,7 +458,7 @@ std::pair<size_t, size_t> AdvanceHandshake(PacketSavingConnection* client_conn,
                    << client_conn->encrypted_packets_.size() - client_i
                    << " packets client->server";
     MovePackets(client_conn, &client_i, server, server_conn,
-                Perspective::IS_SERVER);
+                Perspective::IS_SERVER, /*process_stream_data=*/false);
   }
 
   if (server_conn->encrypted_packets_.size() != server_i) {
@@ -412,7 +466,7 @@ std::pair<size_t, size_t> AdvanceHandshake(PacketSavingConnection* client_conn,
                    << server_conn->encrypted_packets_.size() - server_i
                    << " packets server->client";
     MovePackets(server_conn, &server_i, client, client_conn,
-                Perspective::IS_CLIENT);
+                Perspective::IS_CLIENT, /*process_stream_data=*/false);
   }
 
   return std::make_pair(client_i, server_i);
@@ -427,7 +481,7 @@ std::string GetValueForTag(const CryptoHandshakeMessage& message, QuicTag tag) {
 }
 
 uint64_t LeafCertHashForTesting() {
-  QuicReferenceCountedPointer<ProofSource::Chain> chain;
+  quiche::QuicheReferenceCountedPointer<ProofSource::Chain> chain;
   QuicSocketAddress server_address(QuicIpAddress::Any4(), 42);
   QuicSocketAddress client_address(QuicIpAddress::Any4(), 43);
   QuicCryptoProof proof;
@@ -435,20 +489,22 @@ uint64_t LeafCertHashForTesting() {
 
   class Callback : public ProofSource::Callback {
    public:
-    Callback(bool* ok, QuicReferenceCountedPointer<ProofSource::Chain>* chain)
+    Callback(bool* ok,
+             quiche::QuicheReferenceCountedPointer<ProofSource::Chain>* chain)
         : ok_(ok), chain_(chain) {}
 
-    void Run(bool ok,
-             const QuicReferenceCountedPointer<ProofSource::Chain>& chain,
-             const QuicCryptoProof& /* proof */,
-             std::unique_ptr<ProofSource::Details> /* details */) override {
+    void Run(
+        bool ok,
+        const quiche::QuicheReferenceCountedPointer<ProofSource::Chain>& chain,
+        const QuicCryptoProof& /* proof */,
+        std::unique_ptr<ProofSource::Details> /* details */) override {
       *ok_ = ok;
       *chain_ = chain;
     }
 
    private:
     bool* ok_;
-    QuicReferenceCountedPointer<ProofSource::Chain>* chain_;
+    quiche::QuicheReferenceCountedPointer<ProofSource::Chain>* chain_;
   };
 
   // Note: relies on the callback being invoked synchronously
@@ -463,65 +519,6 @@ uint64_t LeafCertHashForTesting() {
   }
 
   return QuicUtils::FNV1a_64_Hash(chain->certs.at(0));
-}
-
-class MockCommonCertSets : public CommonCertSets {
- public:
-  MockCommonCertSets(absl::string_view cert, uint64_t hash, uint32_t index)
-      : cert_(cert), hash_(hash), index_(index) {}
-
-  absl::string_view GetCommonHashes() const override {
-    QUIC_BUG(quic_bug_10142_1) << "not implemented";
-    return absl::string_view();
-  }
-
-  absl::string_view GetCert(uint64_t hash, uint32_t index) const override {
-    if (hash == hash_ && index == index_) {
-      return cert_;
-    }
-    return absl::string_view();
-  }
-
-  bool MatchCert(absl::string_view cert,
-                 absl::string_view common_set_hashes,
-                 uint64_t* out_hash,
-                 uint32_t* out_index) const override {
-    if (cert != cert_) {
-      return false;
-    }
-
-    if (common_set_hashes.size() % sizeof(uint64_t) != 0) {
-      return false;
-    }
-    bool client_has_set = false;
-    for (size_t i = 0; i < common_set_hashes.size(); i += sizeof(uint64_t)) {
-      uint64_t hash;
-      memcpy(&hash, common_set_hashes.data() + i, sizeof(hash));
-      if (hash == hash_) {
-        client_has_set = true;
-        break;
-      }
-    }
-
-    if (!client_has_set) {
-      return false;
-    }
-
-    *out_hash = hash_;
-    *out_index = index_;
-    return true;
-  }
-
- private:
-  const std::string cert_;
-  const uint64_t hash_;
-  const uint32_t index_;
-};
-
-CommonCertSets* MockCommonCertSets(absl::string_view cert,
-                                   uint64_t hash,
-                                   uint32_t index) {
-  return new class MockCommonCertSets(cert, hash, index);
 }
 
 void FillInDummyReject(CryptoHandshakeMessage* rej) {
@@ -572,8 +569,7 @@ std::string EncryptionLevelString(EncryptionLevel level) {
 }
 
 void CompareCrypters(const QuicEncrypter* encrypter,
-                     const QuicDecrypter* decrypter,
-                     std::string label) {
+                     const QuicDecrypter* decrypter, std::string label) {
   if (encrypter == nullptr || decrypter == nullptr) {
     ADD_FAILURE() << "Expected non-null crypters; have " << encrypter << " and "
                   << decrypter << " for " << label;
@@ -712,10 +708,9 @@ CryptoHandshakeMessage CreateCHLO(
 }
 
 void MovePackets(PacketSavingConnection* source_conn,
-                 size_t* inout_packet_index,
-                 QuicCryptoStream* dest_stream,
+                 size_t* inout_packet_index, QuicCryptoStream* dest_stream,
                  PacketSavingConnection* dest_conn,
-                 Perspective dest_perspective) {
+                 Perspective dest_perspective, bool process_stream_data) {
   SimpleQuicFramer framer(source_conn->supported_versions(), dest_perspective);
   QuicFramerPeer::SetLastSerializedServerConnectionId(framer.framer(),
                                                       TestConnectionId());
@@ -785,10 +780,17 @@ void MovePackets(PacketSavingConnection* source_conn,
     QuicConnectionPeer::SetCurrentPacket(
         dest_conn, source_conn->encrypted_packets_[index]->AsStringPiece());
     for (const auto& stream_frame : framer.stream_frames()) {
-      // Ignore stream frames that are sent on other streams in the crypto
-      // event.
-      if (stream_frame->stream_id == dest_stream->id()) {
-        dest_stream->OnStreamFrame(*stream_frame);
+      if (process_stream_data &&
+          dest_stream->handshake_protocol() == PROTOCOL_TLS1_3) {
+        // Deliver STREAM_FRAME such that application state is available and can
+        // be stored along with resumption ticket in session cache,
+        dest_conn->OnStreamFrame(*stream_frame);
+      } else {
+        // Ignore stream frames that are sent on other streams in the crypto
+        // event.
+        if (stream_frame->stream_id == dest_stream->id()) {
+          dest_stream->OnStreamFrame(*stream_frame);
+        }
       }
     }
     for (const auto& crypto_frame : framer.crypto_frames()) {
@@ -805,8 +807,7 @@ void MovePackets(PacketSavingConnection* source_conn,
 }
 
 CryptoHandshakeMessage GenerateDefaultInchoateCHLO(
-    const QuicClock* clock,
-    QuicTransportVersion version,
+    const QuicClock* clock, QuicTransportVersion version,
     QuicCryptoServerConfig* crypto_config) {
   // clang-format off
   return CreateCHLO(
@@ -851,12 +852,10 @@ std::string GenerateClientPublicValuesHex() {
 
 void GenerateFullCHLO(
     const CryptoHandshakeMessage& inchoate_chlo,
-    QuicCryptoServerConfig* crypto_config,
-    QuicSocketAddress server_addr,
-    QuicSocketAddress client_addr,
-    QuicTransportVersion transport_version,
+    QuicCryptoServerConfig* crypto_config, QuicSocketAddress server_addr,
+    QuicSocketAddress client_addr, QuicTransportVersion transport_version,
     const QuicClock* clock,
-    QuicReferenceCountedPointer<QuicSignedServerConfig> signed_config,
+    quiche::QuicheReferenceCountedPointer<QuicSignedServerConfig> signed_config,
     QuicCompressedCertsCache* compressed_certs_cache,
     CryptoHandshakeMessage* out) {
   // Pass a inchoate CHLO.
@@ -867,6 +866,112 @@ void GenerateFullCHLO(
   crypto_config->ValidateClientHello(
       inchoate_chlo, client_addr, server_addr, transport_version, clock,
       signed_config, generator.GetValidateClientHelloCallback());
+}
+
+namespace {
+
+constexpr char kTestProofHostname[] = "test.example.com";
+
+class TestProofSource : public ProofSourceX509 {
+ public:
+  TestProofSource()
+      : ProofSourceX509(
+            quiche::QuicheReferenceCountedPointer<ProofSource::Chain>(
+                new ProofSource::Chain(
+                    std::vector<std::string>{std::string(kTestCertificate)})),
+            std::move(*CertificatePrivateKey::LoadFromDer(
+                kTestCertificatePrivateKey))) {
+    QUICHE_DCHECK(valid());
+  }
+
+ protected:
+  void MaybeAddSctsForHostname(absl::string_view /*hostname*/,
+                               std::string& leaf_cert_scts) override {
+    leaf_cert_scts = "Certificate Transparency is really nice";
+  }
+};
+
+class TestProofVerifier : public ProofVerifier {
+ public:
+  TestProofVerifier()
+      : certificate_(std::move(
+            *CertificateView::ParseSingleCertificate(kTestCertificate))) {}
+
+  class Details : public ProofVerifyDetails {
+   public:
+    ProofVerifyDetails* Clone() const override { return new Details(*this); }
+  };
+
+  QuicAsyncStatus VerifyProof(
+      const std::string& hostname, const uint16_t port,
+      const std::string& server_config,
+      QuicTransportVersion /*transport_version*/, absl::string_view chlo_hash,
+      const std::vector<std::string>& certs, const std::string& cert_sct,
+      const std::string& signature, const ProofVerifyContext* context,
+      std::string* error_details, std::unique_ptr<ProofVerifyDetails>* details,
+      std::unique_ptr<ProofVerifierCallback> callback) override {
+    absl::optional<std::string> payload =
+        CryptoUtils::GenerateProofPayloadToBeSigned(chlo_hash, server_config);
+    if (!payload.has_value()) {
+      *error_details = "Failed to serialize signed payload";
+      return QUIC_FAILURE;
+    }
+    if (!certificate_.VerifySignature(*payload, signature,
+                                      SSL_SIGN_RSA_PSS_RSAE_SHA256)) {
+      *error_details = "Invalid signature";
+      return QUIC_FAILURE;
+    }
+
+    uint8_t out_alert;
+    return VerifyCertChain(hostname, port, certs, /*ocsp_response=*/"",
+                           cert_sct, context, error_details, details,
+                           &out_alert, std::move(callback));
+  }
+
+  QuicAsyncStatus VerifyCertChain(
+      const std::string& hostname, const uint16_t /*port*/,
+      const std::vector<std::string>& certs,
+      const std::string& /*ocsp_response*/, const std::string& /*cert_sct*/,
+      const ProofVerifyContext* /*context*/, std::string* error_details,
+      std::unique_ptr<ProofVerifyDetails>* details, uint8_t* /*out_alert*/,
+      std::unique_ptr<ProofVerifierCallback> /*callback*/) override {
+    std::string normalized_hostname =
+        QuicHostnameUtils::NormalizeHostname(hostname);
+    if (normalized_hostname != kTestProofHostname) {
+      *error_details = absl::StrCat("Invalid hostname, expected ",
+                                    kTestProofHostname, " got ", hostname);
+      return QUIC_FAILURE;
+    }
+    if (certs.empty() || certs.front() != kTestCertificate) {
+      *error_details = "Received certificate different from the expected";
+      return QUIC_FAILURE;
+    }
+    *details = std::make_unique<Details>();
+    return QUIC_SUCCESS;
+  }
+
+  std::unique_ptr<ProofVerifyContext> CreateDefaultContext() override {
+    return nullptr;
+  }
+
+ private:
+  CertificateView certificate_;
+};
+
+}  // namespace
+
+std::unique_ptr<ProofSource> ProofSourceForTesting() {
+  return std::make_unique<TestProofSource>();
+}
+
+std::unique_ptr<ProofVerifier> ProofVerifierForTesting() {
+  return std::make_unique<TestProofVerifier>();
+}
+
+std::string CertificateHostnameForTesting() { return kTestProofHostname; }
+
+std::unique_ptr<ProofVerifyContext> ProofVerifyContextForTesting() {
+  return nullptr;
 }
 
 }  // namespace crypto_test_utils

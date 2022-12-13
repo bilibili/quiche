@@ -15,7 +15,6 @@
 #include "openssl/ssl.h"
 #include "gquiche/quic/core/crypto/cert_compressor.h"
 #include "gquiche/quic/core/crypto/chacha20_poly1305_encrypter.h"
-#include "gquiche/quic/core/crypto/common_cert_set.h"
 #include "gquiche/quic/core/crypto/crypto_framer.h"
 #include "gquiche/quic/core/crypto/crypto_protocol.h"
 #include "gquiche/quic/core/crypto/crypto_utils.h"
@@ -134,9 +133,7 @@ QuicCryptoClientConfig::CachedState::GetServerConfig() const {
 
 QuicCryptoClientConfig::CachedState::ServerConfigState
 QuicCryptoClientConfig::CachedState::SetServerConfig(
-    absl::string_view server_config,
-    QuicWallTime now,
-    QuicWallTime expiry_time,
+    absl::string_view server_config, QuicWallTime now, QuicWallTime expiry_time,
     std::string* error_details) {
   const bool matches_existing = server_config == server_config_;
 
@@ -188,10 +185,8 @@ void QuicCryptoClientConfig::CachedState::InvalidateServerConfig() {
 }
 
 void QuicCryptoClientConfig::CachedState::SetProof(
-    const std::vector<std::string>& certs,
-    absl::string_view cert_sct,
-    absl::string_view chlo_hash,
-    absl::string_view signature) {
+    const std::vector<std::string>& certs, absl::string_view cert_sct,
+    absl::string_view chlo_hash, absl::string_view signature) {
   bool has_changed = signature != server_config_sig_ ||
                      chlo_hash != chlo_hash_ || certs_.size() != certs.size();
 
@@ -247,13 +242,9 @@ void QuicCryptoClientConfig::CachedState::SetProofInvalid() {
 }
 
 bool QuicCryptoClientConfig::CachedState::Initialize(
-    absl::string_view server_config,
-    absl::string_view source_address_token,
-    const std::vector<std::string>& certs,
-    const std::string& cert_sct,
-    absl::string_view chlo_hash,
-    absl::string_view signature,
-    QuicWallTime now,
+    absl::string_view server_config, absl::string_view source_address_token,
+    const std::vector<std::string>& certs, const std::string& cert_sct,
+    absl::string_view chlo_hash, absl::string_view signature, QuicWallTime now,
     QuicWallTime expiration_time) {
   QUICHE_DCHECK(server_config_.empty());
 
@@ -383,18 +374,15 @@ QuicCryptoClientConfig::CachedState* QuicCryptoClientConfig::LookupOrCreate(
 
 void QuicCryptoClientConfig::ClearCachedStates(const ServerIdFilter& filter) {
   for (auto it = cached_states_.begin(); it != cached_states_.end(); ++it) {
-    if (filter.Matches(it->first))
-      it->second->Clear();
+    if (filter.Matches(it->first)) it->second->Clear();
   }
 }
 
 void QuicCryptoClientConfig::FillInchoateClientHello(
-    const QuicServerId& server_id,
-    const ParsedQuicVersion preferred_version,
-    const CachedState* cached,
-    QuicRandom* rand,
-    bool demand_x509_proof,
-    QuicReferenceCountedPointer<QuicCryptoNegotiatedParameters> out_params,
+    const QuicServerId& server_id, const ParsedQuicVersion preferred_version,
+    const CachedState* cached, QuicRandom* rand, bool demand_x509_proof,
+    quiche::QuicheReferenceCountedPointer<QuicCryptoNegotiatedParameters>
+        out_params,
     CryptoHandshakeMessage* out) const {
   out->set_tag(kCHLO);
   out->set_minimum_size(1);
@@ -439,12 +427,6 @@ void QuicCryptoClientConfig::FillInchoateClientHello(
 
   out->SetVector(kPDMD, QuicTagVector{kX509});
 
-  if (GetQuicRestartFlag(quic_no_common_cert_set)) {
-    // Client only. No flag count.
-  } else if (common_cert_sets) {
-    out->SetStringPiece(kCCS, common_cert_sets->GetCommonHashes());
-  }
-
   out->SetStringPiece(kCertificateSCTTag, "");
 
   const std::vector<std::string>& certs = cached->certs();
@@ -464,16 +446,13 @@ void QuicCryptoClientConfig::FillInchoateClientHello(
 }
 
 QuicErrorCode QuicCryptoClientConfig::FillClientHello(
-    const QuicServerId& server_id,
-    QuicConnectionId connection_id,
+    const QuicServerId& server_id, QuicConnectionId connection_id,
     const ParsedQuicVersion preferred_version,
-    const ParsedQuicVersion actual_version,
-    const CachedState* cached,
-    QuicWallTime now,
-    QuicRandom* rand,
-    QuicReferenceCountedPointer<QuicCryptoNegotiatedParameters> out_params,
-    CryptoHandshakeMessage* out,
-    std::string* error_details) const {
+    const ParsedQuicVersion actual_version, const CachedState* cached,
+    QuicWallTime now, QuicRandom* rand,
+    quiche::QuicheReferenceCountedPointer<QuicCryptoNegotiatedParameters>
+        out_params,
+    CryptoHandshakeMessage* out, std::string* error_details) const {
   QUICHE_DCHECK(error_details != nullptr);
   QUIC_BUG_IF(quic_bug_12943_2,
               !QuicUtils::IsConnectionIdValidForVersion(
@@ -613,12 +592,9 @@ QuicErrorCode QuicCryptoClientConfig::FillClientHello(
 }
 
 QuicErrorCode QuicCryptoClientConfig::CacheNewServerConfig(
-    const CryptoHandshakeMessage& message,
-    QuicWallTime now,
-    QuicTransportVersion /*version*/,
-    absl::string_view chlo_hash,
-    const std::vector<std::string>& cached_certs,
-    CachedState* cached,
+    const CryptoHandshakeMessage& message, QuicWallTime now,
+    QuicTransportVersion /*version*/, absl::string_view chlo_hash,
+    const std::vector<std::string>& cached_certs, CachedState* cached,
     std::string* error_details) {
   QUICHE_DCHECK(error_details != nullptr);
 
@@ -657,8 +633,7 @@ QuicErrorCode QuicCryptoClientConfig::CacheNewServerConfig(
   bool has_cert = message.GetStringPiece(kCertificateTag, &cert_bytes);
   if (has_proof && has_cert) {
     std::vector<std::string> certs;
-    if (!CertCompressor::DecompressChain(cert_bytes, cached_certs,
-                                         common_cert_sets, &certs)) {
+    if (!CertCompressor::DecompressChain(cert_bytes, cached_certs, &certs)) {
       *error_details = "Certificate data invalid";
       return QUIC_INVALID_CRYPTO_MESSAGE_PARAMETER;
     }
@@ -685,12 +660,11 @@ QuicErrorCode QuicCryptoClientConfig::CacheNewServerConfig(
 }
 
 QuicErrorCode QuicCryptoClientConfig::ProcessRejection(
-    const CryptoHandshakeMessage& rej,
-    QuicWallTime now,
-    const QuicTransportVersion version,
-    absl::string_view chlo_hash,
+    const CryptoHandshakeMessage& rej, QuicWallTime now,
+    const QuicTransportVersion version, absl::string_view chlo_hash,
     CachedState* cached,
-    QuicReferenceCountedPointer<QuicCryptoNegotiatedParameters> out_params,
+    quiche::QuicheReferenceCountedPointer<QuicCryptoNegotiatedParameters>
+        out_params,
     std::string* error_details) {
   QUICHE_DCHECK(error_details != nullptr);
 
@@ -716,11 +690,10 @@ QuicErrorCode QuicCryptoClientConfig::ProcessRejection(
 
 QuicErrorCode QuicCryptoClientConfig::ProcessServerHello(
     const CryptoHandshakeMessage& server_hello,
-    QuicConnectionId /*connection_id*/,
-    ParsedQuicVersion version,
-    const ParsedQuicVersionVector& negotiated_versions,
-    CachedState* cached,
-    QuicReferenceCountedPointer<QuicCryptoNegotiatedParameters> out_params,
+    QuicConnectionId /*connection_id*/, ParsedQuicVersion version,
+    const ParsedQuicVersionVector& negotiated_versions, CachedState* cached,
+    quiche::QuicheReferenceCountedPointer<QuicCryptoNegotiatedParameters>
+        out_params,
     std::string* error_details) {
   QUICHE_DCHECK(error_details != nullptr);
 
@@ -778,12 +751,11 @@ QuicErrorCode QuicCryptoClientConfig::ProcessServerHello(
 }
 
 QuicErrorCode QuicCryptoClientConfig::ProcessServerConfigUpdate(
-    const CryptoHandshakeMessage& server_config_update,
-    QuicWallTime now,
-    const QuicTransportVersion version,
-    absl::string_view chlo_hash,
+    const CryptoHandshakeMessage& server_config_update, QuicWallTime now,
+    const QuicTransportVersion version, absl::string_view chlo_hash,
     CachedState* cached,
-    QuicReferenceCountedPointer<QuicCryptoNegotiatedParameters> out_params,
+    quiche::QuicheReferenceCountedPointer<QuicCryptoNegotiatedParameters>
+        out_params,
     std::string* error_details) {
   QUICHE_DCHECK(error_details != nullptr);
 
@@ -812,13 +784,10 @@ void QuicCryptoClientConfig::set_proof_source(
   proof_source_ = std::move(proof_source);
 }
 
-SSL_CTX* QuicCryptoClientConfig::ssl_ctx() const {
-  return ssl_ctx_.get();
-}
+SSL_CTX* QuicCryptoClientConfig::ssl_ctx() const { return ssl_ctx_.get(); }
 
 void QuicCryptoClientConfig::InitializeFrom(
-    const QuicServerId& server_id,
-    const QuicServerId& canonical_server_id,
+    const QuicServerId& server_id, const QuicServerId& canonical_server_id,
     QuicCryptoClientConfig* canonical_crypto_config) {
   CachedState* canonical_cached =
       canonical_crypto_config->LookupOrCreate(canonical_server_id);
@@ -834,9 +803,8 @@ void QuicCryptoClientConfig::AddCanonicalSuffix(const std::string& suffix) {
 }
 
 bool QuicCryptoClientConfig::PopulateFromCanonicalConfig(
-    const QuicServerId& server_id,
-    CachedState* server_state) {
-  QUICHE_DCHECK(server_state->IsEmpty());
+    const QuicServerId& server_id, CachedState* cached) {
+  QUICHE_DCHECK(cached->IsEmpty());
   size_t i = 0;
   for (; i < canonical_suffixes_.size(); ++i) {
     if (absl::EndsWithIgnoreCase(server_id.host(), canonical_suffixes_[i])) {
@@ -867,7 +835,7 @@ bool QuicCryptoClientConfig::PopulateFromCanonicalConfig(
   // Update canonical version to point at the "most recent" entry.
   it->second = server_id;
 
-  server_state->InitializeFrom(*canonical_state);
+  cached->InitializeFrom(*canonical_state);
   return true;
 }
 

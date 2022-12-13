@@ -6,7 +6,9 @@
 #define QUICHE_QUIC_TOOLS_QUIC_BACKEND_RESPONSE_H_
 
 #include "absl/strings/string_view.h"
+#include "gquiche/quic/core/quic_time.h"
 #include "gquiche/quic/tools/quic_url.h"
+#include "gquiche/spdy/core/http2_header_block.h"
 #include "gquiche/spdy/core/spdy_protocol.h"
 
 namespace quic {
@@ -19,10 +21,8 @@ class QuicBackendResponse {
   // comprising a response for the push request.
   // TODO(b/171463363): Remove.
   struct ServerPushInfo {
-    ServerPushInfo(QuicUrl request_url,
-                   spdy::Http2HeaderBlock headers,
-                   spdy::SpdyPriority priority,
-                   std::string body);
+    ServerPushInfo(QuicUrl request_url, spdy::Http2HeaderBlock headers,
+                   spdy::SpdyPriority priority, std::string body);
     ServerPushInfo(const ServerPushInfo& other);
 
     QuicUrl request_url;
@@ -79,12 +79,18 @@ class QuicBackendResponse {
     body_.assign(body.data(), body.size());
   }
 
+  // This would simulate a delay before sending the response
+  // back to the client. Intended for testing purposes.
+  void set_delay(QuicTime::Delta delay) { delay_ = delay; }
+  QuicTime::Delta delay() const { return delay_; }
+
  private:
   std::vector<spdy::Http2HeaderBlock> early_hints_;
   SpecialResponseType response_type_;
   spdy::Http2HeaderBlock headers_;
   spdy::Http2HeaderBlock trailers_;
   std::string body_;
+  QuicTime::Delta delay_;
 };
 
 }  // namespace quic

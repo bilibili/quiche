@@ -12,18 +12,18 @@
 #include "gquiche/quic/core/crypto/proof_source.h"
 #include "gquiche/quic/platform/api/quic_expect_bug.h"
 #include "gquiche/quic/platform/api/quic_ip_address.h"
-#include "gquiche/quic/platform/api/quic_reference_counted.h"
 #include "gquiche/quic/platform/api/quic_socket_address.h"
 #include "gquiche/quic/platform/api/quic_test.h"
 #include "gquiche/quic/test_tools/test_certificates.h"
+#include "gquiche/common/platform/api/quiche_reference_counted.h"
 
 namespace quic {
 namespace test {
 namespace {
 
-QuicReferenceCountedPointer<ProofSource::Chain> MakeChain(
+quiche::QuicheReferenceCountedPointer<ProofSource::Chain> MakeChain(
     absl::string_view cert) {
-  return QuicReferenceCountedPointer<ProofSource::Chain>(
+  return quiche::QuicheReferenceCountedPointer<ProofSource::Chain>(
       new ProofSource::Chain(std::vector<std::string>{std::string(cert)}));
 }
 
@@ -41,7 +41,8 @@ class ProofSourceX509Test : public QuicTest {
   }
 
  protected:
-  QuicReferenceCountedPointer<ProofSource::Chain> test_chain_, wildcard_chain_;
+  quiche::QuicheReferenceCountedPointer<ProofSource::Chain> test_chain_,
+      wildcard_chain_;
   std::unique_ptr<CertificatePrivateKey> test_key_, wildcard_key_;
 };
 
@@ -117,8 +118,7 @@ TEST_F(ProofSourceX509Test, CertificateSelection) {
 TEST_F(ProofSourceX509Test, TlsSignature) {
   class Callback : public ProofSource::SignatureCallback {
    public:
-    void Run(bool ok,
-             std::string signature,
+    void Run(bool ok, std::string signature,
              std::unique_ptr<ProofSource::Details> /*details*/) override {
       ASSERT_TRUE(ok);
       std::unique_ptr<CertificateView> view =

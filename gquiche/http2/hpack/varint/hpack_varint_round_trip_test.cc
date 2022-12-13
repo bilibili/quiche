@@ -16,9 +16,9 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
-#include "gquiche/http2/hpack/tools/hpack_block_builder.h"
-#include "gquiche/http2/platform/api/http2_logging.h"
-#include "gquiche/http2/tools/random_decoder_test.h"
+#include "gquiche/http2/test_tools/hpack_block_builder.h"
+#include "gquiche/http2/test_tools/random_decoder_test_base.h"
+#include "gquiche/common/platform/api/quiche_logging.h"
 #include "gquiche/common/platform/api/quiche_test.h"
 #include "gquiche/common/quiche_text_utils.h"
 
@@ -110,9 +110,7 @@ class HpackVarintRoundTripTest : public RandomDecoderTest {
   // HpackVarintDecoder is as expected, which also acts as confirmation that
   // my thinking about the encodings being used by the tests, i.e. cover the
   // range desired.
-  void ValidateEncoding(uint64_t value,
-                        uint64_t minimum,
-                        uint64_t maximum,
+  void ValidateEncoding(uint64_t value, uint64_t minimum, uint64_t maximum,
                         size_t expected_bytes) {
     ASSERT_EQ(expected_bytes, buffer_.size());
     if (expected_bytes > 1) {
@@ -155,8 +153,7 @@ class HpackVarintRoundTripTest : public RandomDecoderTest {
   }
 
   void EncodeAndDecodeValues(const std::set<uint64_t>& values,
-                             uint8_t prefix_length,
-                             size_t expected_bytes) {
+                             uint8_t prefix_length, size_t expected_bytes) {
     QUICHE_CHECK(!values.empty());
     const uint64_t minimum = *values.begin();
     const uint64_t maximum = *values.rbegin();
@@ -169,9 +166,9 @@ class HpackVarintRoundTripTest : public RandomDecoderTest {
                                      quiche::QuicheTextUtils::HexDump(buffer_));
 
       if (value == minimum) {
-        HTTP2_LOG(INFO) << "Checking minimum; " << msg;
+        QUICHE_LOG(INFO) << "Checking minimum; " << msg;
       } else if (value == maximum) {
-        HTTP2_LOG(INFO) << "Checking maximum; " << msg;
+        QUICHE_LOG(INFO) << "Checking maximum; " << msg;
       }
 
       SCOPED_TRACE(msg);
@@ -201,22 +198,22 @@ class HpackVarintRoundTripTest : public RandomDecoderTest {
   // Encode values (all or some of it) in [start, start+range).  Check
   // that |start| is the smallest value and |start+range-1| is the largest value
   // corresponding to |expected_bytes|, except if |expected_bytes| is maximal.
-  void EncodeAndDecodeValuesInRange(uint64_t start,
-                                    uint64_t range,
+  void EncodeAndDecodeValuesInRange(uint64_t start, uint64_t range,
                                     uint8_t prefix_length,
                                     size_t expected_bytes) {
     const uint8_t prefix_mask = (1 << prefix_length) - 1;
     const uint64_t beyond = start + range;
 
-    HTTP2_LOG(INFO)
+    QUICHE_LOG(INFO)
         << "############################################################";
-    HTTP2_LOG(INFO) << "prefix_length=" << static_cast<int>(prefix_length);
-    HTTP2_LOG(INFO) << "prefix_mask=" << std::hex
-                    << static_cast<int>(prefix_mask);
-    HTTP2_LOG(INFO) << "start=" << start << " (" << std::hex << start << ")";
-    HTTP2_LOG(INFO) << "range=" << range << " (" << std::hex << range << ")";
-    HTTP2_LOG(INFO) << "beyond=" << beyond << " (" << std::hex << beyond << ")";
-    HTTP2_LOG(INFO) << "expected_bytes=" << expected_bytes;
+    QUICHE_LOG(INFO) << "prefix_length=" << static_cast<int>(prefix_length);
+    QUICHE_LOG(INFO) << "prefix_mask=" << std::hex
+                     << static_cast<int>(prefix_mask);
+    QUICHE_LOG(INFO) << "start=" << start << " (" << std::hex << start << ")";
+    QUICHE_LOG(INFO) << "range=" << range << " (" << std::hex << range << ")";
+    QUICHE_LOG(INFO) << "beyond=" << beyond << " (" << std::hex << beyond
+                     << ")";
+    QUICHE_LOG(INFO) << "expected_bytes=" << expected_bytes;
 
     if (expected_bytes < 11) {
       // Confirm the claim that beyond requires more bytes.
@@ -263,12 +260,12 @@ TEST_F(HpackVarintRoundTripTest, Encode) {
     const uint64_t i = HiValueOfExtensionBytes(8, prefix_length);
     const uint64_t j = HiValueOfExtensionBytes(9, prefix_length);
 
-    HTTP2_LOG(INFO)
+    QUICHE_LOG(INFO)
         << "############################################################";
-    HTTP2_LOG(INFO) << "prefix_length=" << prefix_length << "   a=" << a
-                    << "   b=" << b << "   c=" << c << "   d=" << d
-                    << "   e=" << e << "   f=" << f << "   g=" << g
-                    << "   h=" << h << "   i=" << i << "   j=" << j;
+    QUICHE_LOG(INFO) << "prefix_length=" << prefix_length << "   a=" << a
+                     << "   b=" << b << "   c=" << c << "   d=" << d
+                     << "   e=" << e << "   f=" << f << "   g=" << g
+                     << "   h=" << h << "   i=" << i << "   j=" << j;
 
     std::vector<uint64_t> values = {
         0,     1,                       // Force line break.
@@ -287,8 +284,8 @@ TEST_F(HpackVarintRoundTripTest, Encode) {
     for (uint64_t value : values) {
       EncodeNoRandom(value, prefix_length);
       std::string dump = quiche::QuicheTextUtils::HexDump(buffer_);
-      HTTP2_LOG(INFO) << absl::StrFormat("%10llu %0#18x ", value, value)
-                      << quiche::QuicheTextUtils::HexDump(buffer_).substr(7);
+      QUICHE_LOG(INFO) << absl::StrFormat("%10llu %0#18x ", value, value)
+                       << quiche::QuicheTextUtils::HexDump(buffer_).substr(7);
     }
   }
 }

@@ -36,9 +36,13 @@ SimpleSessionNotifier::StreamState::StreamState()
 SimpleSessionNotifier::StreamState::~StreamState() {}
 
 QuicConsumedData SimpleSessionNotifier::WriteOrBufferData(
-    QuicStreamId id,
-    QuicByteCount data_length,
-    StreamSendingState state) {
+    QuicStreamId id, QuicByteCount data_length, StreamSendingState state) {
+  return WriteOrBufferData(id, data_length, state, NOT_RETRANSMISSION);
+}
+
+QuicConsumedData SimpleSessionNotifier::WriteOrBufferData(
+    QuicStreamId id, QuicByteCount data_length, StreamSendingState state,
+    TransmissionType transmission_type) {
   if (!stream_map_.contains(id)) {
     stream_map_[id] = StreamState();
   }
@@ -55,10 +59,9 @@ QuicConsumedData SimpleSessionNotifier::WriteOrBufferData(
     return {0, false};
   }
   const size_t length = stream_state.bytes_total - stream_state.bytes_sent;
-  connection_->SetTransmissionType(NOT_RETRANSMISSION);
+  connection_->SetTransmissionType(transmission_type);
   QuicConsumedData consumed =
-      connection_->SendStreamData(id, length, stream_state.bytes_sent,
-                                  stream_state.fin_buffered ? FIN : NO_FIN);
+      connection_->SendStreamData(id, length, stream_state.bytes_sent, state);
   QUIC_DVLOG(1) << "consumed: " << consumed;
   OnStreamDataConsumed(id, stream_state.bytes_sent, consumed.bytes_consumed,
                        consumed.fin_consumed);
@@ -92,8 +95,7 @@ size_t SimpleSessionNotifier::WriteCryptoData(EncryptionLevel level,
 }
 
 void SimpleSessionNotifier::WriteOrBufferRstStream(
-    QuicStreamId id,
-    QuicRstStreamErrorCode error,
+    QuicStreamId id, QuicRstStreamErrorCode error,
     QuicStreamOffset bytes_written) {
   QUIC_DVLOG(1) << "Writing RST_STREAM_FRAME";
   const bool had_buffered_data =
@@ -117,8 +119,8 @@ void SimpleSessionNotifier::WriteOrBufferWindowUpate(
   const bool had_buffered_data =
       HasBufferedStreamData() || HasBufferedControlFrames();
   QuicControlFrameId control_frame_id = ++last_control_frame_id_;
-  control_frames_.emplace_back((
-      QuicFrame(new QuicWindowUpdateFrame(control_frame_id, id, byte_offset))));
+  control_frames_.emplace_back(
+      (QuicFrame(QuicWindowUpdateFrame(control_frame_id, id, byte_offset))));
   if (had_buffered_data) {
     QUIC_DLOG(WARNING) << "Connection is write blocked";
     return;
@@ -204,6 +206,9 @@ void SimpleSessionNotifier::OnCanWrite() {
     const bool can_bundle_fin =
         state.fin_buffered && (state.bytes_sent + length == state.bytes_total);
     connection_->SetTransmissionType(NOT_RETRANSMISSION);
+    QuicConnection::ScopedEncryptionLevelContext context(
+        connection_,
+        connection_->framer().GetEncryptionLevelToSendApplicationData());
     QuicConsumedData consumed = connection_->SendStreamData(
         pair.first, length, state.bytes_sent, can_bundle_fin ? FIN : NO_FIN);
     QUIC_DVLOG(1) << "Tries to write stream_id: " << pair.first << " ["
@@ -333,7 +338,7 @@ void SimpleSessionNotifier::OnFrameLost(const QuicFrame& frame) {
   state->fin_lost = fin_lost;
 }
 
-void SimpleSessionNotifier::RetransmitFrames(const QuicFrames& frames,
+bool SimpleSessionNotifier::RetransmitFrames(const QuicFrames& frames,
                                              TransmissionType type) {
   QuicConnection::ScopedPacketFlusher retransmission_flusher(connection_);
   connection_->SetTransmissionType(type);
@@ -353,7 +358,7 @@ void SimpleSessionNotifier::RetransmitFrames(const QuicFrames& frames,
         size_t consumed = connection_->SendCryptoData(frame.crypto_frame->level,
                                                       length, offset);
         if (consumed < length) {
-          break;
+          return false;
         }
       }
       connection_->SetDefaultEncryptionLevel(current_encryption_level);
@@ -366,7 +371,7 @@ void SimpleSessionNotifier::RetransmitFrames(const QuicFrames& frames,
       if (!connection_->SendControlFrame(copy)) {
         // Connection is write blocked.
         DeleteFrame(&copy);
-        return;
+        return false;
       }
       continue;
     }
@@ -379,7 +384,6 @@ void SimpleSessionNotifier::RetransmitFrames(const QuicFrames& frames,
         frame.stream_frame.offset + frame.stream_frame.data_length);
     EncryptionLevel retransmission_encryption_level =
         connection_->encryption_level();
-    EncryptionLevel current_encryption_level = connection_->encryption_level();
     if (QuicUtils::IsCryptoStreamId(connection_->transport_version(),
                                     frame.stream_frame.stream_id)) {
       for (size_t i = 0; i < NUM_ENCRYPTION_LEVELS; ++i) {
@@ -399,11 +403,13 @@ void SimpleSessionNotifier::RetransmitFrames(const QuicFrames& frames,
       const bool can_bundle_fin =
           retransmit_fin &&
           (retransmission_offset + retransmission_length == state.bytes_sent);
-      if (QuicUtils::IsCryptoStreamId(connection_->transport_version(),
-                                      frame.stream_frame.stream_id)) {
-        // Set appropriate encryption level for crypto stream.
-        connection_->SetDefaultEncryptionLevel(retransmission_encryption_level);
-      }
+      QuicConnection::ScopedEncryptionLevelContext context(
+          connection_,
+          QuicUtils::IsCryptoStreamId(connection_->transport_version(),
+                                      frame.stream_frame.stream_id)
+              ? retransmission_encryption_level
+              : connection_->framer()
+                    .GetEncryptionLevelToSendApplicationData());
       consumed = connection_->SendStreamData(
           frame.stream_frame.stream_id, retransmission_length,
           retransmission_offset, can_bundle_fin ? FIN : NO_FIN);
@@ -416,15 +422,10 @@ void SimpleSessionNotifier::RetransmitFrames(const QuicFrames& frames,
       if (can_bundle_fin) {
         retransmit_fin = !consumed.fin_consumed;
       }
-      if (QuicUtils::IsCryptoStreamId(connection_->transport_version(),
-                                      frame.stream_frame.stream_id)) {
-        // Restore encryption level.
-        connection_->SetDefaultEncryptionLevel(current_encryption_level);
-      }
       if (consumed.bytes_consumed < retransmission_length ||
           (can_bundle_fin && !consumed.fin_consumed)) {
         // Connection is write blocked.
-        return;
+        return false;
       }
     }
     if (retransmit_fin) {
@@ -432,8 +433,12 @@ void SimpleSessionNotifier::RetransmitFrames(const QuicFrames& frames,
                     << " retransmits fin only frame.";
       consumed = connection_->SendStreamData(frame.stream_frame.stream_id, 0,
                                              state.bytes_sent, FIN);
+      if (!consumed.fin_consumed) {
+        return false;
+      }
     }
   }
+  return true;
 }
 
 bool SimpleSessionNotifier::IsFrameOutstanding(const QuicFrame& frame) const {
@@ -492,8 +497,7 @@ bool SimpleSessionNotifier::HasUnackedCryptoData() const {
 
 bool SimpleSessionNotifier::HasUnackedStreamData() const {
   for (const auto& it : stream_map_) {
-    if (StreamIsWaitingForAcks(it.first))
-      return true;
+    if (StreamIsWaitingForAcks(it.first)) return true;
   }
   return false;
 }

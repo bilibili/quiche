@@ -16,7 +16,7 @@
 #include "gquiche/common/quiche_text_utils.h"
 #include "gquiche/spdy/core/spdy_protocol.h"
 
-using spdy::SpdyHeaderBlock;
+using spdy::Http2HeaderBlock;
 
 namespace quic {
 
@@ -44,9 +44,7 @@ QuicSpdyClientStream::QuicSpdyClientStream(PendingStream* pending,
 QuicSpdyClientStream::~QuicSpdyClientStream() = default;
 
 void QuicSpdyClientStream::OnInitialHeadersComplete(
-    bool fin,
-    size_t frame_len,
-    const QuicHeaderList& header_list) {
+    bool fin, size_t frame_len, const QuicHeaderList& header_list) {
   QuicSpdyStream::OnInitialHeadersComplete(fin, frame_len, header_list);
 
   QUICHE_DCHECK(headers_decompressed());
@@ -118,20 +116,17 @@ void QuicSpdyClientStream::OnInitialHeadersComplete(
 }
 
 void QuicSpdyClientStream::OnTrailingHeadersComplete(
-    bool fin,
-    size_t frame_len,
-    const QuicHeaderList& header_list) {
+    bool fin, size_t frame_len, const QuicHeaderList& header_list) {
   QuicSpdyStream::OnTrailingHeadersComplete(fin, frame_len, header_list);
   MarkTrailersConsumed();
 }
 
 void QuicSpdyClientStream::OnPromiseHeaderList(
-    QuicStreamId promised_id,
-    size_t frame_len,
+    QuicStreamId promised_id, size_t frame_len,
     const QuicHeaderList& header_list) {
   header_bytes_read_ += frame_len;
   int64_t content_length = -1;
-  SpdyHeaderBlock promise_headers;
+  Http2HeaderBlock promise_headers;
   if (!SpdyUtils::CopyAndValidateHeaders(header_list, &content_length,
                                          &promise_headers)) {
     QUIC_DLOG(ERROR) << "Failed to parse promise headers: "
@@ -149,8 +144,7 @@ void QuicSpdyClientStream::OnPromiseHeaderList(
 void QuicSpdyClientStream::OnBodyAvailable() {
   // For push streams, visitor will not be set until the rendezvous
   // between server promise and client request is complete.
-  if (visitor() == nullptr)
-    return;
+  if (visitor() == nullptr) return;
 
   while (HasBytesToRead()) {
     struct iovec iov;
@@ -178,9 +172,8 @@ void QuicSpdyClientStream::OnBodyAvailable() {
   }
 }
 
-size_t QuicSpdyClientStream::SendRequest(SpdyHeaderBlock headers,
-                                         absl::string_view body,
-                                         bool fin) {
+size_t QuicSpdyClientStream::SendRequest(Http2HeaderBlock headers,
+                                         absl::string_view body, bool fin) {
   QuicConnection::ScopedPacketFlusher flusher(session_->connection());
   bool send_fin_with_headers = fin && body.empty();
   size_t bytes_sent = body.size();

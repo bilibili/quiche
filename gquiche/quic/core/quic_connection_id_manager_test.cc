@@ -3,16 +3,18 @@
 // found in the LICENSE file.
 
 #include "gquiche/quic/core/quic_connection_id_manager.h"
+
 #include <cstddef>
 
 #include "gquiche/quic/core/quic_connection_id.h"
 #include "gquiche/quic/core/quic_error_codes.h"
 #include "gquiche/quic/platform/api/quic_test.h"
 #include "gquiche/quic/test_tools/mock_clock.h"
+#include "gquiche/quic/test_tools/mock_connection_id_generator.h"
 #include "gquiche/quic/test_tools/quic_connection_id_manager_peer.h"
 #include "gquiche/quic/test_tools/quic_test_utils.h"
 
-namespace quic {
+namespace quic::test {
 namespace {
 
 using ::quic::test::IsError;
@@ -63,8 +65,10 @@ class TestPeerIssuedConnectionIdManagerVisitor
   bool SendNewConnectionId(const QuicNewConnectionIdFrame& /*frame*/) override {
     return false;
   }
-  void OnNewConnectionIdIssued(
-      const QuicConnectionId& /*connection_id*/) override {}
+  bool MaybeReserveConnectionId(const QuicConnectionId&) override {
+    return false;
+  }
+
   void OnSelfIssuedConnectionIdRetired(
       const QuicConnectionId& /*connection_id*/) override {}
 
@@ -519,18 +523,12 @@ class TestSelfIssuedConnectionIdManagerVisitor
  public:
   void OnPeerIssuedConnectionIdRetired() override {}
 
-  MOCK_METHOD(bool,
-              SendNewConnectionId,
-              (const QuicNewConnectionIdFrame& frame),
-              (override));
-  MOCK_METHOD(void,
-              OnNewConnectionIdIssued,
-              (const QuicConnectionId& connection_id),
-              (override));
-  MOCK_METHOD(void,
-              OnSelfIssuedConnectionIdRetired,
-              (const QuicConnectionId& connection_id),
-              (override));
+  MOCK_METHOD(bool, SendNewConnectionId,
+              (const QuicNewConnectionIdFrame& frame), (override));
+  MOCK_METHOD(bool, MaybeReserveConnectionId,
+              (const QuicConnectionId& connection_id), (override));
+  MOCK_METHOD(void, OnSelfIssuedConnectionIdRetired,
+              (const QuicConnectionId& connection_id), (override));
 };
 
 class QuicSelfIssuedConnectionIdManagerTest : public QuicTest {
@@ -538,7 +536,7 @@ class QuicSelfIssuedConnectionIdManagerTest : public QuicTest {
   QuicSelfIssuedConnectionIdManagerTest()
       : cid_manager_(/*active_connection_id_limit*/ 2, initial_connection_id_,
                      &clock_, &alarm_factory_, &cid_manager_visitor_,
-                     /*context=*/nullptr) {
+                     /*context=*/nullptr, connection_id_generator_) {
     clock_.AdvanceTime(QuicTime::Delta::FromMilliseconds(10));
     retire_self_issued_cid_alarm_ =
         QuicConnectionIdManagerPeer::GetRetireSelfIssuedConnectionIdAlarm(
@@ -546,6 +544,19 @@ class QuicSelfIssuedConnectionIdManagerTest : public QuicTest {
   }
 
  protected:
+  // Verify that a call to GenerateNewConnectionId() does the right thing.
+  QuicConnectionId CheckGenerate(QuicConnectionId old_cid) {
+    QuicConnectionId new_cid =
+        QuicUtils::CreateReplacementConnectionId(old_cid);
+    if (GetQuicReloadableFlag(
+            quic_connection_uses_abstract_connection_id_generator)) {
+      // Ready for the actual call.
+      EXPECT_CALL(connection_id_generator_, GenerateNextConnectionId(old_cid))
+          .WillOnce(Return(new_cid));
+    }
+    return new_cid;
+  }
+
   MockClock clock_;
   test::MockAlarmFactory alarm_factory_;
   TestSelfIssuedConnectionIdManagerVisitor cid_manager_visitor_;
@@ -554,13 +565,11 @@ class QuicSelfIssuedConnectionIdManagerTest : public QuicTest {
   QuicAlarm* retire_self_issued_cid_alarm_ = nullptr;
   std::string error_details_;
   QuicTime::Delta pto_delay_ = QuicTime::Delta::FromMilliseconds(10);
+  MockConnectionIdGenerator connection_id_generator_;
 };
 
-MATCHER_P3(ExpectedNewConnectionIdFrame,
-           connection_id,
-           sequence_number,
-           retire_prior_to,
-           "") {
+MATCHER_P3(ExpectedNewConnectionIdFrame, connection_id, sequence_number,
+           retire_prior_to, "") {
   return (arg.connection_id == connection_id) &&
          (arg.sequence_number == sequence_number) &&
          (arg.retire_prior_to == retire_prior_to);
@@ -569,14 +578,15 @@ MATCHER_P3(ExpectedNewConnectionIdFrame,
 TEST_F(QuicSelfIssuedConnectionIdManagerTest,
        RetireSelfIssuedConnectionIdInOrder) {
   QuicConnectionId cid0 = initial_connection_id_;
-  QuicConnectionId cid1 = cid_manager_.GenerateNewConnectionId(cid0);
-  QuicConnectionId cid2 = cid_manager_.GenerateNewConnectionId(cid1);
-  QuicConnectionId cid3 = cid_manager_.GenerateNewConnectionId(cid2);
-  QuicConnectionId cid4 = cid_manager_.GenerateNewConnectionId(cid3);
-  QuicConnectionId cid5 = cid_manager_.GenerateNewConnectionId(cid4);
+  QuicConnectionId cid1 = CheckGenerate(cid0);
+  QuicConnectionId cid2 = CheckGenerate(cid1);
+  QuicConnectionId cid3 = CheckGenerate(cid2);
+  QuicConnectionId cid4 = CheckGenerate(cid3);
+  QuicConnectionId cid5 = CheckGenerate(cid4);
 
   // Sends CID #1 to peer.
-  EXPECT_CALL(cid_manager_visitor_, OnNewConnectionIdIssued(cid1));
+  EXPECT_CALL(cid_manager_visitor_, MaybeReserveConnectionId(cid1))
+      .WillOnce(Return(true));
   EXPECT_CALL(cid_manager_visitor_,
               SendNewConnectionId(ExpectedNewConnectionIdFrame(cid1, 1u, 0u)))
       .WillOnce(Return(true));
@@ -586,7 +596,8 @@ TEST_F(QuicSelfIssuedConnectionIdManagerTest,
     // Peer retires CID #0;
     // Sends CID #2 and asks peer to retire CIDs prior to #1.
     // Outcome: (#1, #2) are active.
-    EXPECT_CALL(cid_manager_visitor_, OnNewConnectionIdIssued(cid2));
+    EXPECT_CALL(cid_manager_visitor_, MaybeReserveConnectionId(cid2))
+        .WillOnce(Return(true));
     EXPECT_CALL(cid_manager_visitor_,
                 SendNewConnectionId(ExpectedNewConnectionIdFrame(cid2, 2u, 1u)))
         .WillOnce(Return(true));
@@ -601,7 +612,8 @@ TEST_F(QuicSelfIssuedConnectionIdManagerTest,
     // Peer retires CID #1;
     // Sends CID #3 and asks peer to retire CIDs prior to #2.
     // Outcome: (#2, #3) are active.
-    EXPECT_CALL(cid_manager_visitor_, OnNewConnectionIdIssued(cid3));
+    EXPECT_CALL(cid_manager_visitor_, MaybeReserveConnectionId(cid3))
+        .WillOnce(Return(true));
     EXPECT_CALL(cid_manager_visitor_,
                 SendNewConnectionId(ExpectedNewConnectionIdFrame(cid3, 3u, 2u)))
         .WillOnce(Return(true));
@@ -616,7 +628,8 @@ TEST_F(QuicSelfIssuedConnectionIdManagerTest,
     // Peer retires CID #2;
     // Sends CID #4 and asks peer to retire CIDs prior to #3.
     // Outcome: (#3, #4) are active.
-    EXPECT_CALL(cid_manager_visitor_, OnNewConnectionIdIssued(cid4));
+    EXPECT_CALL(cid_manager_visitor_, MaybeReserveConnectionId(cid4))
+        .WillOnce(Return(true));
     EXPECT_CALL(cid_manager_visitor_,
                 SendNewConnectionId(ExpectedNewConnectionIdFrame(cid4, 4u, 3u)))
         .WillOnce(Return(true));
@@ -631,7 +644,8 @@ TEST_F(QuicSelfIssuedConnectionIdManagerTest,
     // Peer retires CID #3;
     // Sends CID #5 and asks peer to retire CIDs prior to #4.
     // Outcome: (#4, #5) are active.
-    EXPECT_CALL(cid_manager_visitor_, OnNewConnectionIdIssued(cid5));
+    EXPECT_CALL(cid_manager_visitor_, MaybeReserveConnectionId(cid5))
+        .WillOnce(Return(true));
     EXPECT_CALL(cid_manager_visitor_,
                 SendNewConnectionId(ExpectedNewConnectionIdFrame(cid5, 5u, 4u)))
         .WillOnce(Return(true));
@@ -646,13 +660,14 @@ TEST_F(QuicSelfIssuedConnectionIdManagerTest,
 TEST_F(QuicSelfIssuedConnectionIdManagerTest,
        RetireSelfIssuedConnectionIdOutOfOrder) {
   QuicConnectionId cid0 = initial_connection_id_;
-  QuicConnectionId cid1 = cid_manager_.GenerateNewConnectionId(cid0);
-  QuicConnectionId cid2 = cid_manager_.GenerateNewConnectionId(cid1);
-  QuicConnectionId cid3 = cid_manager_.GenerateNewConnectionId(cid2);
-  QuicConnectionId cid4 = cid_manager_.GenerateNewConnectionId(cid3);
+  QuicConnectionId cid1 = CheckGenerate(cid0);
+  QuicConnectionId cid2 = CheckGenerate(cid1);
+  QuicConnectionId cid3 = CheckGenerate(cid2);
+  QuicConnectionId cid4 = CheckGenerate(cid3);
 
   // Sends CID #1 to peer.
-  EXPECT_CALL(cid_manager_visitor_, OnNewConnectionIdIssued(cid1));
+  EXPECT_CALL(cid_manager_visitor_, MaybeReserveConnectionId(cid1))
+      .WillOnce(Return(true));
   EXPECT_CALL(cid_manager_visitor_,
               SendNewConnectionId(ExpectedNewConnectionIdFrame(cid1, 1u, 0u)))
       .WillOnce(Return(true));
@@ -662,7 +677,8 @@ TEST_F(QuicSelfIssuedConnectionIdManagerTest,
     // Peer retires CID #1;
     // Sends CID #2 and asks peer to retire CIDs prior to #0.
     // Outcome: (#0, #2) are active.
-    EXPECT_CALL(cid_manager_visitor_, OnNewConnectionIdIssued(cid2));
+    EXPECT_CALL(cid_manager_visitor_, MaybeReserveConnectionId(cid2))
+        .WillOnce(Return(true));
     EXPECT_CALL(cid_manager_visitor_,
                 SendNewConnectionId(ExpectedNewConnectionIdFrame(cid2, 2u, 0u)))
         .WillOnce(Return(true));
@@ -686,7 +702,8 @@ TEST_F(QuicSelfIssuedConnectionIdManagerTest,
     // Peer retires CID #0;
     // Sends CID #3 and asks peer to retire CIDs prior to #2.
     // Outcome: (#2, #3) are active.
-    EXPECT_CALL(cid_manager_visitor_, OnNewConnectionIdIssued(cid3));
+    EXPECT_CALL(cid_manager_visitor_, MaybeReserveConnectionId(cid3))
+        .WillOnce(Return(true));
     EXPECT_CALL(cid_manager_visitor_,
                 SendNewConnectionId(ExpectedNewConnectionIdFrame(cid3, 3u, 2u)))
         .WillOnce(Return(true));
@@ -701,7 +718,8 @@ TEST_F(QuicSelfIssuedConnectionIdManagerTest,
     // Peer retires CID #3;
     // Sends CID #4 and asks peer to retire CIDs prior to #2.
     // Outcome: (#2, #4) are active.
-    EXPECT_CALL(cid_manager_visitor_, OnNewConnectionIdIssued(cid4));
+    EXPECT_CALL(cid_manager_visitor_, MaybeReserveConnectionId(cid4))
+        .WillOnce(Return(true));
     EXPECT_CALL(cid_manager_visitor_,
                 SendNewConnectionId(ExpectedNewConnectionIdFrame(cid4, 4u, 2u)))
         .WillOnce(Return(true));
@@ -725,10 +743,12 @@ TEST_F(QuicSelfIssuedConnectionIdManagerTest,
 TEST_F(QuicSelfIssuedConnectionIdManagerTest,
        ScheduleConnectionIdRetirementOneAtATime) {
   QuicConnectionId cid0 = initial_connection_id_;
-  QuicConnectionId cid1 = cid_manager_.GenerateNewConnectionId(cid0);
-  QuicConnectionId cid2 = cid_manager_.GenerateNewConnectionId(cid1);
-  QuicConnectionId cid3 = cid_manager_.GenerateNewConnectionId(cid2);
-  EXPECT_CALL(cid_manager_visitor_, OnNewConnectionIdIssued(_)).Times(3);
+  QuicConnectionId cid1 = CheckGenerate(cid0);
+  QuicConnectionId cid2 = CheckGenerate(cid1);
+  QuicConnectionId cid3 = CheckGenerate(cid2);
+  EXPECT_CALL(cid_manager_visitor_, MaybeReserveConnectionId(_))
+      .Times(3)
+      .WillRepeatedly(Return(true));
   EXPECT_CALL(cid_manager_visitor_, SendNewConnectionId(_))
       .Times(3)
       .WillRepeatedly(Return(true));
@@ -782,10 +802,12 @@ TEST_F(QuicSelfIssuedConnectionIdManagerTest,
 TEST_F(QuicSelfIssuedConnectionIdManagerTest,
        ScheduleMultipleConnectionIdRetirement) {
   QuicConnectionId cid0 = initial_connection_id_;
-  QuicConnectionId cid1 = cid_manager_.GenerateNewConnectionId(cid0);
-  QuicConnectionId cid2 = cid_manager_.GenerateNewConnectionId(cid1);
-  QuicConnectionId cid3 = cid_manager_.GenerateNewConnectionId(cid2);
-  EXPECT_CALL(cid_manager_visitor_, OnNewConnectionIdIssued(_)).Times(3);
+  QuicConnectionId cid1 = CheckGenerate(cid0);
+  QuicConnectionId cid2 = CheckGenerate(cid1);
+  QuicConnectionId cid3 = CheckGenerate(cid2);
+  EXPECT_CALL(cid_manager_visitor_, MaybeReserveConnectionId(_))
+      .Times(3)
+      .WillRepeatedly(Return(true));
   EXPECT_CALL(cid_manager_visitor_, SendNewConnectionId(_))
       .Times(3)
       .WillRepeatedly(Return(true));
@@ -838,11 +860,13 @@ TEST_F(QuicSelfIssuedConnectionIdManagerTest,
 TEST_F(QuicSelfIssuedConnectionIdManagerTest,
        AllExpiredConnectionIdsAreRetiredInOneBatch) {
   QuicConnectionId cid0 = initial_connection_id_;
-  QuicConnectionId cid1 = cid_manager_.GenerateNewConnectionId(cid0);
-  QuicConnectionId cid2 = cid_manager_.GenerateNewConnectionId(cid1);
-  QuicConnectionId cid3 = cid_manager_.GenerateNewConnectionId(cid2);
+  QuicConnectionId cid1 = CheckGenerate(cid0);
+  QuicConnectionId cid2 = CheckGenerate(cid1);
+  QuicConnectionId cid3 = CheckGenerate(cid2);
   QuicConnectionId cid;
-  EXPECT_CALL(cid_manager_visitor_, OnNewConnectionIdIssued(_)).Times(3);
+  EXPECT_CALL(cid_manager_visitor_, MaybeReserveConnectionId(_))
+      .Times(3)
+      .WillRepeatedly(Return(true));
   EXPECT_CALL(cid_manager_visitor_, SendNewConnectionId(_))
       .Times(3)
       .WillRepeatedly(Return(true));
@@ -898,10 +922,11 @@ TEST_F(QuicSelfIssuedConnectionIdManagerTest,
 TEST_F(QuicSelfIssuedConnectionIdManagerTest,
        ErrorWhenRetireConnectionIdNeverIssued) {
   QuicConnectionId cid0 = initial_connection_id_;
-  QuicConnectionId cid1 = cid_manager_.GenerateNewConnectionId(cid0);
+  QuicConnectionId cid1 = CheckGenerate(cid0);
 
   // CID #1 is sent to peer.
-  EXPECT_CALL(cid_manager_visitor_, OnNewConnectionIdIssued(_)).Times(1);
+  EXPECT_CALL(cid_manager_visitor_, MaybeReserveConnectionId(_))
+      .WillOnce(Return(true));
   EXPECT_CALL(cid_manager_visitor_, SendNewConnectionId(_))
       .WillOnce(Return(true));
   cid_manager_.MaybeSendNewConnectionIds();
@@ -917,24 +942,27 @@ TEST_F(QuicSelfIssuedConnectionIdManagerTest,
 TEST_F(QuicSelfIssuedConnectionIdManagerTest,
        ErrorWhenTooManyConnectionIdWaitingToBeRetired) {
   // CID #0 & #1 are issued.
-  EXPECT_CALL(cid_manager_visitor_, OnNewConnectionIdIssued(_));
+  QuicConnectionId last_connection_id = CheckGenerate(initial_connection_id_);
+  EXPECT_CALL(cid_manager_visitor_,
+              MaybeReserveConnectionId(last_connection_id))
+      .WillOnce(Return(true));
   EXPECT_CALL(cid_manager_visitor_, SendNewConnectionId(_))
       .WillOnce(Return(true));
   cid_manager_.MaybeSendNewConnectionIds();
 
   // Add 8 connection IDs to the to-be-retired list.
-  QuicConnectionId last_connection_id =
-      cid_manager_.GenerateNewConnectionId(initial_connection_id_);
+
   for (int i = 0; i < 8; ++i) {
-    EXPECT_CALL(cid_manager_visitor_, OnNewConnectionIdIssued(_));
+    last_connection_id = CheckGenerate(last_connection_id);
+    EXPECT_CALL(cid_manager_visitor_,
+                MaybeReserveConnectionId(last_connection_id))
+        .WillOnce(Return(true));
     EXPECT_CALL(cid_manager_visitor_, SendNewConnectionId(_));
     QuicRetireConnectionIdFrame retire_cid_frame;
     retire_cid_frame.sequence_number = i;
     ASSERT_THAT(cid_manager_.OnRetireConnectionIdFrame(
                     retire_cid_frame, pto_delay_, &error_details_),
                 IsQuicNoError());
-    last_connection_id =
-        cid_manager_.GenerateNewConnectionId(last_connection_id);
   }
   QuicRetireConnectionIdFrame retire_cid_frame;
   retire_cid_frame.sequence_number = 8u;
@@ -945,20 +973,63 @@ TEST_F(QuicSelfIssuedConnectionIdManagerTest,
               IsError(QUIC_TOO_MANY_CONNECTION_ID_WAITING_TO_RETIRE));
 }
 
+TEST_F(QuicSelfIssuedConnectionIdManagerTest, CannotIssueNewCidDueToVisitor) {
+  QuicConnectionId cid0 = initial_connection_id_;
+  QuicConnectionId cid1 = CheckGenerate(cid0);
+  EXPECT_CALL(cid_manager_visitor_, MaybeReserveConnectionId(cid1))
+      .WillOnce(Return(false));
+  if (GetQuicReloadableFlag(quic_check_cid_collision_when_issue_new_cid)) {
+    EXPECT_CALL(cid_manager_visitor_, SendNewConnectionId(_)).Times(0);
+  } else {
+    EXPECT_CALL(cid_manager_visitor_, SendNewConnectionId(_)).Times(1);
+  }
+  cid_manager_.MaybeSendNewConnectionIds();
+}
+
+TEST_F(QuicSelfIssuedConnectionIdManagerTest,
+       CannotIssueNewCidUponRetireConnectionIdDueToVisitor) {
+  QuicConnectionId cid0 = initial_connection_id_;
+  QuicConnectionId cid1 = CheckGenerate(cid0);
+  QuicConnectionId cid2 = CheckGenerate(cid1);
+  // CID #0 & #1 are issued.
+  EXPECT_CALL(cid_manager_visitor_, MaybeReserveConnectionId(cid1))
+      .WillOnce(Return(true));
+  EXPECT_CALL(cid_manager_visitor_, SendNewConnectionId(_))
+      .WillOnce(Return(true));
+  cid_manager_.MaybeSendNewConnectionIds();
+
+  // CID #2 is not issued.
+  EXPECT_CALL(cid_manager_visitor_, MaybeReserveConnectionId(cid2))
+      .WillOnce(Return(false));
+  if (GetQuicReloadableFlag(quic_check_cid_collision_when_issue_new_cid)) {
+    EXPECT_CALL(cid_manager_visitor_, SendNewConnectionId(_)).Times(0);
+  } else {
+    EXPECT_CALL(cid_manager_visitor_, SendNewConnectionId(_)).Times(1);
+  }
+  QuicRetireConnectionIdFrame retire_cid_frame;
+  retire_cid_frame.sequence_number = 1;
+  ASSERT_THAT(cid_manager_.OnRetireConnectionIdFrame(
+                  retire_cid_frame, pto_delay_, &error_details_),
+              IsQuicNoError());
+}
+
 TEST_F(QuicSelfIssuedConnectionIdManagerTest,
        DoNotIssueConnectionIdVoluntarilyIfOneHasIssuedForPerferredAddress) {
   QuicConnectionId cid0 = initial_connection_id_;
-  QuicConnectionId cid1 = cid_manager_.GenerateNewConnectionId(cid0);
-  EXPECT_CALL(cid_manager_visitor_, OnNewConnectionIdIssued(cid1));
-  ASSERT_THAT(cid_manager_.IssueNewConnectionIdForPreferredAddress(),
-              ExpectedNewConnectionIdFrame(cid1, 1u, 0u));
+  QuicConnectionId cid1 = CheckGenerate(cid0);
+  EXPECT_CALL(cid_manager_visitor_, MaybeReserveConnectionId(cid1))
+      .WillOnce(Return(true));
+  absl::optional<QuicNewConnectionIdFrame> new_cid_frame =
+      cid_manager_.MaybeIssueNewConnectionIdForPreferredAddress();
+  ASSERT_TRUE(new_cid_frame.has_value());
+  ASSERT_THAT(*new_cid_frame, ExpectedNewConnectionIdFrame(cid1, 1u, 0u));
   EXPECT_THAT(cid_manager_.GetUnretiredConnectionIds(),
               ElementsAre(cid0, cid1));
 
-  EXPECT_CALL(cid_manager_visitor_, OnNewConnectionIdIssued(_)).Times(0);
+  EXPECT_CALL(cid_manager_visitor_, MaybeReserveConnectionId(_)).Times(0);
   EXPECT_CALL(cid_manager_visitor_, SendNewConnectionId(_)).Times(0);
   cid_manager_.MaybeSendNewConnectionIds();
 }
 
 }  // namespace
-}  // namespace quic
+}  // namespace quic::test

@@ -28,15 +28,14 @@
 #include "gquiche/quic/test_tools/simulator/quic_endpoint.h"
 #include "gquiche/quic/test_tools/simulator/simulator.h"
 #include "gquiche/quic/test_tools/simulator/switch.h"
+#include "gquiche/common/platform/api/quiche_command_line_flags.h"
 
 using testing::AllOf;
 using testing::Ge;
 using testing::Le;
 
-DEFINE_QUIC_COMMAND_LINE_FLAG(
-    std::string,
-    quic_bbr_test_regression_mode,
-    "",
+DEFINE_QUICHE_COMMAND_LINE_FLAG(
+    std::string, quic_bbr_test_regression_mode, "",
     "One of a) 'record' to record test result (one file per test), or "
     "b) 'regress' to regress against recorded results, or "
     "c) <anything else> for non-regression mode.");
@@ -87,25 +86,16 @@ class BbrSenderTest : public QuicTest {
  protected:
   BbrSenderTest()
       : simulator_(&random_),
-        bbr_sender_(&simulator_,
-                    "BBR sender",
-                    "Receiver",
+        bbr_sender_(&simulator_, "BBR sender", "Receiver",
                     Perspective::IS_CLIENT,
                     /*connection_id=*/TestConnectionId(42)),
-        competing_sender_(&simulator_,
-                          "Competing sender",
-                          "Competing receiver",
+        competing_sender_(&simulator_, "Competing sender", "Competing receiver",
                           Perspective::IS_CLIENT,
                           /*connection_id=*/TestConnectionId(43)),
-        receiver_(&simulator_,
-                  "Receiver",
-                  "BBR sender",
-                  Perspective::IS_SERVER,
+        receiver_(&simulator_, "Receiver", "BBR sender", Perspective::IS_SERVER,
                   /*connection_id=*/TestConnectionId(42)),
-        competing_receiver_(&simulator_,
-                            "Competing receiver",
-                            "Competing sender",
-                            Perspective::IS_SERVER,
+        competing_receiver_(&simulator_, "Competing receiver",
+                            "Competing sender", Perspective::IS_SERVER,
                             /*connection_id=*/TestConnectionId(43)),
         receiver_multiplexer_("Receiver multiplexer",
                               {&receiver_, &competing_receiver_}) {
@@ -118,7 +108,8 @@ class BbrSenderTest : public QuicTest {
   }
 
   void SetUp() override {
-    if (GetQuicFlag(FLAGS_quic_bbr_test_regression_mode) == "regress") {
+    if (quiche::GetQuicheCommandLineFlag(FLAGS_quic_bbr_test_regression_mode) ==
+        "regress") {
       SendAlgorithmTestResult expected;
       ASSERT_TRUE(LoadSendAlgorithmTestResult(&expected));
       random_seed_ = expected.random_seed();
@@ -131,7 +122,7 @@ class BbrSenderTest : public QuicTest {
 
   ~BbrSenderTest() {
     const std::string regression_mode =
-        GetQuicFlag(FLAGS_quic_bbr_test_regression_mode);
+        quiche::GetQuicheCommandLineFlag(FLAGS_quic_bbr_test_regression_mode);
     const QuicTime::Delta simulated_duration = clock_->Now() - QuicTime::Zero();
     if (regression_mode == "record") {
       RecordSendAlgorithmTestResult(random_seed_,
@@ -259,8 +250,7 @@ class BbrSenderTest : public QuicTest {
 
   // Send |bytes|-sized bursts of data |number_of_bursts| times, waiting for
   // |wait_time| between each burst.
-  void SendBursts(size_t number_of_bursts,
-                  QuicByteCount bytes,
+  void SendBursts(size_t number_of_bursts, QuicByteCount bytes,
                   QuicTime::Delta wait_time) {
     ASSERT_EQ(0u, bbr_sender_.bytes_to_transfer());
     for (size_t i = 0; i < number_of_bursts; i++) {
@@ -326,7 +316,6 @@ TEST_F(BbrSenderTest, SimpleTransfer) {
 }
 
 TEST_F(BbrSenderTest, SimpleTransferBBRB) {
-  SetQuicReloadableFlag(quic_bbr_use_send_rate_in_max_ack_height_tracker, true);
   SetConnectionOption(kBBRB);
   CreateDefaultSetup();
 
@@ -473,9 +462,8 @@ TEST_F(BbrSenderTest, SimpleTransferAckDecimation) {
 
 // Test a simple long data transfer with 2 rtts of aggregation.
 // TODO(b/172302465) Re-enable this test.
-TEST_F(BbrSenderTest,
-       QUIC_TEST_DISABLED_IN_CHROME(
-           SimpleTransfer2RTTAggregationBytes20RTTWindow)) {
+TEST_F(BbrSenderTest, QUIC_TEST_DISABLED_IN_CHROME(
+                          SimpleTransfer2RTTAggregationBytes20RTTWindow)) {
   SetConnectionOption(kBSAO);
   CreateDefaultSetup();
   SetConnectionOption(kBBR4);
@@ -592,12 +580,15 @@ TEST_F(BbrSenderTest, RecoveryStates) {
 // small bursts of data after sending continuously for a while.
 TEST_F(BbrSenderTest, ApplicationLimitedBursts) {
   CreateDefaultSetup();
+  EXPECT_FALSE(sender_->HasGoodBandwidthEstimateForResumption());
 
   DriveOutOfStartup();
   EXPECT_FALSE(sender_->ExportDebugState().last_sample_is_app_limited);
+  EXPECT_TRUE(sender_->HasGoodBandwidthEstimateForResumption());
 
   SendBursts(20, 512, QuicTime::Delta::FromSeconds(3));
   EXPECT_TRUE(sender_->ExportDebugState().last_sample_is_app_limited);
+  EXPECT_TRUE(sender_->HasGoodBandwidthEstimateForResumption());
   EXPECT_APPROX_EQ(kTestLinkBandwidth,
                    sender_->ExportDebugState().max_bandwidth, 0.01f);
 }

@@ -16,7 +16,6 @@
 #include "gquiche/quic/test_tools/mock_random.h"
 #include "gquiche/quic/test_tools/quic_path_validator_peer.h"
 #include "gquiche/quic/test_tools/quic_test_utils.h"
-#include "gquiche/quic/test_tools/quic_transport_test_tools.h"
 
 using testing::_;
 using testing::Invoke;
@@ -30,25 +29,21 @@ class MockSendDelegate : public QuicPathValidator::SendDelegate {
   // Send a PATH_CHALLENGE frame using given path information and populate
   // |data_buffer| with the frame payload. Return true if the validator should
   // move forward in validation, i.e. arm the retry timer.
-  MOCK_METHOD(bool,
-              SendPathChallenge,
-              (const QuicPathFrameBuffer&,
-               const QuicSocketAddress&,
-               const QuicSocketAddress&,
-               const QuicSocketAddress&,
+  MOCK_METHOD(bool, SendPathChallenge,
+              (const QuicPathFrameBuffer&, const QuicSocketAddress&,
+               const QuicSocketAddress&, const QuicSocketAddress&,
                QuicPacketWriter*),
               (override));
 
-  MOCK_METHOD(QuicTime,
-              GetRetryTimeout,
-              (const QuicSocketAddress&, QuicPacketWriter*),
-              (const, override));
+  MOCK_METHOD(QuicTime, GetRetryTimeout,
+              (const QuicSocketAddress&, QuicPacketWriter*), (const, override));
 };
 
 class QuicPathValidatorTest : public QuicTest {
  public:
   QuicPathValidatorTest()
       : path_validator_(&alarm_factory_, &arena_, &send_delegate_, &random_,
+                        &clock_,
                         /*context=*/nullptr),
         context_(new MockQuicPathValidationContext(
             self_address_, peer_address_, effective_peer_address_, &writer_)),
@@ -88,15 +83,19 @@ TEST_F(QuicPathValidatorTest, PathValidationSuccessOnFirstRound) {
         return true;
       }));
   EXPECT_CALL(send_delegate_, GetRetryTimeout(peer_address_, &writer_));
+  const QuicTime expected_start_time = clock_.Now();
   path_validator_.StartPathValidation(
       std::unique_ptr<QuicPathValidationContext>(context_),
       std::unique_ptr<MockQuicPathValidationResultDelegate>(result_delegate_));
   EXPECT_TRUE(path_validator_.HasPendingPathValidation());
   EXPECT_TRUE(path_validator_.IsValidatingPeerAddress(effective_peer_address_));
-  EXPECT_CALL(*result_delegate_, OnPathValidationSuccess(_))
-      .WillOnce(Invoke([=](std::unique_ptr<QuicPathValidationContext> context) {
+  EXPECT_CALL(*result_delegate_, OnPathValidationSuccess(_, _))
+      .WillOnce(Invoke([=](std::unique_ptr<QuicPathValidationContext> context,
+                           QuicTime start_time) {
         EXPECT_EQ(context.get(), context_);
+        EXPECT_EQ(start_time, expected_start_time);
       }));
+  clock_.AdvanceTime(QuicTime::Delta::FromMilliseconds(kInitialRttMs));
   path_validator_.OnPathResponse(challenge_data, self_address_);
   EXPECT_FALSE(path_validator_.HasPendingPathValidation());
 }
@@ -113,6 +112,7 @@ TEST_F(QuicPathValidatorTest, RespondWithDifferentSelfAddress) {
         return true;
       }));
   EXPECT_CALL(send_delegate_, GetRetryTimeout(peer_address_, &writer_));
+  const QuicTime expected_start_time = clock_.Now();
   path_validator_.StartPathValidation(
       std::unique_ptr<QuicPathValidationContext>(context_),
       std::unique_ptr<MockQuicPathValidationResultDelegate>(result_delegate_));
@@ -120,12 +120,16 @@ TEST_F(QuicPathValidatorTest, RespondWithDifferentSelfAddress) {
   // Reception of a PATH_RESPONSE on a different self address should be ignored.
   const QuicSocketAddress kAlternativeSelfAddress(QuicIpAddress::Any6(), 54321);
   EXPECT_NE(kAlternativeSelfAddress, self_address_);
+  clock_.AdvanceTime(QuicTime::Delta::FromMilliseconds(kInitialRttMs));
   path_validator_.OnPathResponse(challenge_data, kAlternativeSelfAddress);
 
-  EXPECT_CALL(*result_delegate_, OnPathValidationSuccess(_))
-      .WillOnce(Invoke([=](std::unique_ptr<QuicPathValidationContext> context) {
+  EXPECT_CALL(*result_delegate_, OnPathValidationSuccess(_, _))
+      .WillOnce(Invoke([=](std::unique_ptr<QuicPathValidationContext> context,
+                           QuicTime start_time) {
         EXPECT_EQ(context->self_address(), self_address_);
+        EXPECT_EQ(start_time, expected_start_time);
       }));
+  clock_.AdvanceTime(QuicTime::Delta::FromMilliseconds(kInitialRttMs));
   path_validator_.OnPathResponse(challenge_data, self_address_);
 }
 
@@ -149,6 +153,7 @@ TEST_F(QuicPathValidatorTest, RespondAfter1stRetry) {
       }));
   EXPECT_CALL(send_delegate_, GetRetryTimeout(peer_address_, &writer_))
       .Times(2u);
+  const QuicTime start_time = clock_.Now();
   path_validator_.StartPathValidation(
       std::unique_ptr<QuicPathValidationContext>(context_),
       std::unique_ptr<MockQuicPathValidationResultDelegate>(result_delegate_));
@@ -158,7 +163,7 @@ TEST_F(QuicPathValidatorTest, RespondAfter1stRetry) {
   alarm_factory_.FireAlarm(
       QuicPathValidatorPeer::retry_timer(&path_validator_));
 
-  EXPECT_CALL(*result_delegate_, OnPathValidationSuccess(_));
+  EXPECT_CALL(*result_delegate_, OnPathValidationSuccess(_, start_time));
   // Respond to the 1st PATH_CHALLENGE should complete the validation.
   path_validator_.OnPathResponse(challenge_data, self_address_);
   EXPECT_FALSE(path_validator_.HasPendingPathValidation());
@@ -189,12 +194,13 @@ TEST_F(QuicPathValidatorTest, RespondToRetryChallenge) {
       std::unique_ptr<MockQuicPathValidationResultDelegate>(result_delegate_));
 
   clock_.AdvanceTime(QuicTime::Delta::FromMilliseconds(3 * kInitialRttMs));
+  const QuicTime start_time = clock_.Now();
   random_.ChangeValue();
   alarm_factory_.FireAlarm(
       QuicPathValidatorPeer::retry_timer(&path_validator_));
 
   // Respond to the 2nd PATH_CHALLENGE should complete the validation.
-  EXPECT_CALL(*result_delegate_, OnPathValidationSuccess(_));
+  EXPECT_CALL(*result_delegate_, OnPathValidationSuccess(_, start_time));
   path_validator_.OnPathResponse(challenge_data, self_address_);
   EXPECT_FALSE(path_validator_.HasPendingPathValidation());
 }

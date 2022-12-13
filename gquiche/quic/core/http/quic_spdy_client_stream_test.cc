@@ -12,7 +12,6 @@
 #include "gquiche/quic/core/crypto/null_encrypter.h"
 #include "gquiche/quic/core/http/quic_spdy_client_session.h"
 #include "gquiche/quic/core/http/spdy_utils.h"
-#include "gquiche/quic/core/quic_simple_buffer_allocator.h"
 #include "gquiche/quic/core/quic_utils.h"
 #include "gquiche/quic/platform/api/quic_logging.h"
 #include "gquiche/quic/platform/api/quic_socket_address.h"
@@ -20,8 +19,9 @@
 #include "gquiche/quic/test_tools/crypto_test_utils.h"
 #include "gquiche/quic/test_tools/quic_spdy_session_peer.h"
 #include "gquiche/quic/test_tools/quic_test_utils.h"
+#include "gquiche/common/simple_buffer_allocator.h"
 
-using spdy::SpdyHeaderBlock;
+using spdy::Http2HeaderBlock;
 using testing::_;
 using testing::StrictMock;
 
@@ -36,22 +36,18 @@ class MockQuicSpdyClientSession : public QuicSpdyClientSession {
       const ParsedQuicVersionVector& supported_versions,
       QuicConnection* connection,
       QuicClientPushPromiseIndex* push_promise_index)
-      : QuicSpdyClientSession(DefaultQuicConfig(),
-                              supported_versions,
+      : QuicSpdyClientSession(DefaultQuicConfig(), supported_versions,
                               connection,
                               QuicServerId("example.com", 443, false),
-                              &crypto_config_,
-                              push_promise_index),
+                              &crypto_config_, push_promise_index),
         crypto_config_(crypto_test_utils::ProofVerifierForTesting()) {}
   MockQuicSpdyClientSession(const MockQuicSpdyClientSession&) = delete;
   MockQuicSpdyClientSession& operator=(const MockQuicSpdyClientSession&) =
       delete;
   ~MockQuicSpdyClientSession() override = default;
 
-  MOCK_METHOD(bool,
-              WriteControlFrame,
-              (const QuicFrame& frame, TransmissionType type),
-              (override));
+  MOCK_METHOD(bool, WriteControlFrame,
+              (const QuicFrame& frame, TransmissionType type), (override));
 
   using QuicSession::ActivateStream;
 
@@ -64,13 +60,10 @@ class QuicSpdyClientStreamTest : public QuicTestWithParam<ParsedQuicVersion> {
   class StreamVisitor;
 
   QuicSpdyClientStreamTest()
-      : connection_(
-            new StrictMock<MockQuicConnection>(&helper_,
-                                               &alarm_factory_,
-                                               Perspective::IS_CLIENT,
-                                               SupportedVersions(GetParam()))),
-        session_(connection_->supported_versions(),
-                 connection_,
+      : connection_(new StrictMock<MockQuicConnection>(
+            &helper_, &alarm_factory_, Perspective::IS_CLIENT,
+            SupportedVersions(GetParam()))),
+        session_(connection_->supported_versions(), connection_,
                  &push_promise_index_),
         body_("hello world") {
     session_.Initialize();
@@ -106,12 +99,11 @@ class QuicSpdyClientStreamTest : public QuicTestWithParam<ParsedQuicVersion> {
   MockQuicSpdyClientSession session_;
   QuicSpdyClientStream* stream_;
   std::unique_ptr<StreamVisitor> stream_visitor_;
-  SpdyHeaderBlock headers_;
+  Http2HeaderBlock headers_;
   std::string body_;
 };
 
-INSTANTIATE_TEST_SUITE_P(Tests,
-                         QuicSpdyClientStreamTest,
+INSTANTIATE_TEST_SUITE_P(Tests, QuicSpdyClientStreamTest,
                          ::testing::ValuesIn(AllSupportedVersions()),
                          ::testing::PrintToStringParamName());
 
@@ -158,8 +150,8 @@ TEST_P(QuicSpdyClientStreamTest, TestFraming) {
   auto headers = AsHeaderList(headers_);
   stream_->OnStreamHeaderList(false, headers.uncompressed_header_bytes(),
                               headers);
-  QuicBuffer header = HttpEncoder::SerializeDataFrameHeader(
-      body_.length(), SimpleBufferAllocator::Get());
+  quiche::QuicheBuffer header = HttpEncoder::SerializeDataFrameHeader(
+      body_.length(), quiche::SimpleBufferAllocator::Get());
   std::string data = VersionUsesHttp3(connection_->transport_version())
                          ? absl::StrCat(header.AsStringView(), body_)
                          : body_;
@@ -185,8 +177,8 @@ TEST_P(QuicSpdyClientStreamTest, Test100ContinueBeforeSuccessful) {
   headers = AsHeaderList(headers_);
   stream_->OnStreamHeaderList(false, headers.uncompressed_header_bytes(),
                               headers);
-  QuicBuffer header = HttpEncoder::SerializeDataFrameHeader(
-      body_.length(), SimpleBufferAllocator::Get());
+  quiche::QuicheBuffer header = HttpEncoder::SerializeDataFrameHeader(
+      body_.length(), quiche::SimpleBufferAllocator::Get());
   std::string data = VersionUsesHttp3(connection_->transport_version())
                          ? absl::StrCat(header.AsStringView(), body_)
                          : body_;
@@ -214,8 +206,8 @@ TEST_P(QuicSpdyClientStreamTest, TestUnknownInformationalBeforeSuccessful) {
   headers = AsHeaderList(headers_);
   stream_->OnStreamHeaderList(false, headers.uncompressed_header_bytes(),
                               headers);
-  QuicBuffer header = HttpEncoder::SerializeDataFrameHeader(
-      body_.length(), SimpleBufferAllocator::Get());
+  quiche::QuicheBuffer header = HttpEncoder::SerializeDataFrameHeader(
+      body_.length(), quiche::SimpleBufferAllocator::Get());
   std::string data = VersionUsesHttp3(connection_->transport_version())
                          ? absl::StrCat(header.AsStringView(), body_)
                          : body_;
@@ -245,8 +237,8 @@ TEST_P(QuicSpdyClientStreamTest, TestFramingOnePacket) {
   auto headers = AsHeaderList(headers_);
   stream_->OnStreamHeaderList(false, headers.uncompressed_header_bytes(),
                               headers);
-  QuicBuffer header = HttpEncoder::SerializeDataFrameHeader(
-      body_.length(), SimpleBufferAllocator::Get());
+  quiche::QuicheBuffer header = HttpEncoder::SerializeDataFrameHeader(
+      body_.length(), quiche::SimpleBufferAllocator::Get());
   std::string data = VersionUsesHttp3(connection_->transport_version())
                          ? absl::StrCat(header.AsStringView(), body_)
                          : body_;
@@ -268,8 +260,8 @@ TEST_P(QuicSpdyClientStreamTest,
   EXPECT_THAT(stream_->stream_error(), IsQuicStreamNoError());
   EXPECT_EQ("200", stream_->response_headers().find(":status")->second);
   EXPECT_EQ(200, stream_->response_code());
-  QuicBuffer header = HttpEncoder::SerializeDataFrameHeader(
-      large_body.length(), SimpleBufferAllocator::Get());
+  quiche::QuicheBuffer header = HttpEncoder::SerializeDataFrameHeader(
+      large_body.length(), quiche::SimpleBufferAllocator::Get());
   std::string data = VersionUsesHttp3(connection_->transport_version())
                          ? absl::StrCat(header.AsStringView(), large_body)
                          : large_body;
@@ -300,7 +292,7 @@ TEST_P(QuicSpdyClientStreamTest, ReceivingTrailers) {
   // Send trailers before sending the body. Even though a FIN has been received
   // the stream should not be closed, as it does not yet have all the data bytes
   // promised by the final offset field.
-  SpdyHeaderBlock trailer_block;
+  Http2HeaderBlock trailer_block;
   trailer_block["trailer key"] = "trailer value";
   trailer_block[kFinalOffsetHeaderKey] = absl::StrCat(body_.size());
   auto trailers = AsHeaderList(trailer_block);
@@ -309,8 +301,8 @@ TEST_P(QuicSpdyClientStreamTest, ReceivingTrailers) {
 
   // Now send the body, which should close the stream as the FIN has been
   // received, as well as all data.
-  QuicBuffer header = HttpEncoder::SerializeDataFrameHeader(
-      body_.length(), SimpleBufferAllocator::Get());
+  quiche::QuicheBuffer header = HttpEncoder::SerializeDataFrameHeader(
+      body_.length(), quiche::SimpleBufferAllocator::Get());
   std::string data = VersionUsesHttp3(connection_->transport_version())
                          ? absl::StrCat(header.AsStringView(), body_)
                          : body_;

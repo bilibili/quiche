@@ -5,7 +5,10 @@
 #include "gquiche/quic/core/quic_idle_network_detector.h"
 
 #include "gquiche/quic/core/quic_constants.h"
+#include "gquiche/quic/core/quic_time.h"
 #include "gquiche/quic/platform/api/quic_flag_utils.h"
+#include "gquiche/quic/platform/api/quic_flags.h"
+#include "gquiche/common/platform/api/quiche_logging.h"
 
 namespace quic {
 
@@ -36,10 +39,18 @@ QuicIdleNetworkDetector::QuicIdleNetworkDetector(
       time_of_last_received_packet_(now),
       time_of_first_packet_sent_after_receiving_(QuicTime::Zero()),
       idle_network_timeout_(QuicTime::Delta::Infinite()),
+      bandwidth_update_timeout_(QuicTime::Delta::Infinite()),
       alarm_(alarm_factory->CreateAlarm(
           arena->New<AlarmDelegate>(this, context), arena)) {}
 
 void QuicIdleNetworkDetector::OnAlarm() {
+  if (!bandwidth_update_timeout_.IsInfinite()) {
+    QUICHE_DCHECK(handshake_timeout_.IsInfinite());
+    bandwidth_update_timeout_ = QuicTime::Delta::Infinite();
+    SetAlarm();
+    delegate_->OnBandwidthUpdateTimeout();
+    return;
+  }
   if (handshake_timeout_.IsInfinite()) {
     delegate_->OnIdleNetworkDetected();
     return;
@@ -57,10 +68,18 @@ void QuicIdleNetworkDetector::OnAlarm() {
 }
 
 void QuicIdleNetworkDetector::SetTimeouts(
-    QuicTime::Delta handshake_timeout,
-    QuicTime::Delta idle_network_timeout) {
+    QuicTime::Delta handshake_timeout, QuicTime::Delta idle_network_timeout) {
   handshake_timeout_ = handshake_timeout;
   idle_network_timeout_ = idle_network_timeout;
+  bandwidth_update_timeout_ = QuicTime::Delta::Infinite();
+
+  if (GetQuicRestartFlag(
+          quic_enable_sending_bandwidth_estimate_when_network_idle_v2) &&
+      handshake_timeout_.IsInfinite()) {
+    QUIC_RESTART_FLAG_COUNT_N(
+        quic_enable_sending_bandwidth_estimate_when_network_idle_v2, 1, 3);
+    bandwidth_update_timeout_ = idle_network_timeout_ * 0.5;
+  }
 
   SetAlarm();
 }
@@ -69,6 +88,7 @@ void QuicIdleNetworkDetector::StopDetection() {
   alarm_->PermanentCancel();
   handshake_timeout_ = QuicTime::Delta::Infinite();
   idle_network_timeout_ = QuicTime::Delta::Infinite();
+  handshake_timeout_ = QuicTime::Delta::Infinite();
   stopped_ = true;
 }
 
@@ -116,6 +136,9 @@ void QuicIdleNetworkDetector::SetAlarm() {
       new_deadline = idle_network_deadline;
     }
   }
+  if (!bandwidth_update_timeout_.IsInfinite()) {
+    new_deadline = std::min(new_deadline, GetBandwidthUpdateDeadline());
+  }
   alarm_->Update(new_deadline, kAlarmGranularity);
 }
 
@@ -140,6 +163,11 @@ QuicTime QuicIdleNetworkDetector::GetIdleNetworkDeadline() const {
     return QuicTime::Zero();
   }
   return last_network_activity_time() + idle_network_timeout_;
+}
+
+QuicTime QuicIdleNetworkDetector::GetBandwidthUpdateDeadline() const {
+  QUICHE_DCHECK(!bandwidth_update_timeout_.IsInfinite());
+  return last_network_activity_time() + bandwidth_update_timeout_;
 }
 
 }  // namespace quic

@@ -3,7 +3,9 @@
 // found in the LICENSE file.
 
 #include "gquiche/quic/test_tools/simple_session_cache.h"
+
 #include <memory>
+
 #include "gquiche/quic/core/crypto/quic_crypto_client_config.h"
 
 namespace quic {

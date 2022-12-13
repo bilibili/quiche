@@ -16,6 +16,7 @@
 #include "absl/hash/hash.h"
 #include "absl/strings/string_view.h"
 #include "gquiche/common/platform/api/quiche_export.h"
+#include "gquiche/common/quiche_circular_deque.h"
 #include "gquiche/spdy/core/hpack/hpack_entry.h"
 
 // All section references below are to http://tools.ietf.org/html/rfc7541.
@@ -42,9 +43,8 @@ class QUICHE_EXPORT_PRIVATE HpackHeaderTable {
 
   // HpackHeaderTable takes advantage of the deque property that references
   // remain valid, so long as insertions & deletions are at the head & tail.
-  // This precludes the use of base::circular_deque.
-  // TODO(b/182349990): Change to a more memory efficient container.
-  using DynamicEntryTable = std::deque<HpackEntry>;
+  using DynamicEntryTable =
+      quiche::QuicheCircularDeque<std::unique_ptr<HpackEntry>>;
 
   using NameValueToEntryMap = absl::flat_hash_map<HpackLookupEntry, size_t>;
   using NameToEntryMap = absl::flat_hash_map<absl::string_view, size_t>;
@@ -85,8 +85,7 @@ class QUICHE_EXPORT_PRIVATE HpackHeaderTable {
   // Determine the set of entries which would be evicted by the insertion
   // of |name| & |value| into the table, as per section 4.4. No eviction
   // actually occurs. The set is returned via range [begin_out, end_out).
-  void EvictionSet(absl::string_view name,
-                   absl::string_view value,
+  void EvictionSet(absl::string_view name, absl::string_view value,
                    DynamicEntryTable::iterator* begin_out,
                    DynamicEntryTable::iterator* end_out);
 

@@ -11,33 +11,32 @@
 #include "absl/base/macros.h"
 #include "absl/strings/escaping.h"
 #include "absl/strings/string_view.h"
-#include "gquiche/http2/platform/api/http2_logging.h"
-#include "gquiche/http2/tools/random_decoder_test.h"
+#include "gquiche/http2/test_tools/random_decoder_test_base.h"
+#include "gquiche/http2/test_tools/verify_macros.h"
+#include "gquiche/common/platform/api/quiche_logging.h"
 #include "gquiche/common/platform/api/quiche_test.h"
 
-using ::testing::AssertionFailure;
 using ::testing::AssertionSuccess;
 
 namespace http2 {
 namespace test {
 namespace {
 
-class HpackVarintDecoderTest : public RandomDecoderTest,
-                               public ::testing::WithParamInterface<
-                                   ::testing::tuple<uint8_t, const char*>> {
+class HpackVarintDecoderTest
+    : public RandomDecoderTest,
+      public ::testing::WithParamInterface<std::tuple<uint8_t, const char*>> {
  protected:
   HpackVarintDecoderTest()
-      : high_bits_(::testing::get<0>(GetParam())),
-        suffix_(absl::HexStringToBytes(::testing::get<1>(GetParam()))),
+      : high_bits_(std::get<0>(GetParam())),
+        suffix_(absl::HexStringToBytes(std::get<1>(GetParam()))),
         prefix_length_(0) {}
 
-  void DecodeExpectSuccess(absl::string_view data,
-                           uint32_t prefix_length,
+  void DecodeExpectSuccess(absl::string_view data, uint32_t prefix_length,
                            uint64_t expected_value) {
     Validator validator = [expected_value, this](
                               const DecodeBuffer& /*db*/,
                               DecodeStatus /*status*/) -> AssertionResult {
-      VERIFY_EQ(expected_value, decoder_.value())
+      HTTP2_VERIFY_EQ(expected_value, decoder_.value())
           << "Value doesn't match expected: " << decoder_.value()
           << " != " << expected_value;
       return AssertionSuccess();
@@ -55,7 +54,7 @@ class HpackVarintDecoderTest : public RandomDecoderTest,
   void DecodeExpectError(absl::string_view data, uint32_t prefix_length) {
     Validator validator = [](const DecodeBuffer& /*db*/,
                              DecodeStatus status) -> AssertionResult {
-      VERIFY_EQ(DecodeStatus::kDecodeError, status);
+      HTTP2_VERIFY_EQ(DecodeStatus::kDecodeError, status);
       return AssertionSuccess();
     };
 
@@ -63,8 +62,7 @@ class HpackVarintDecoderTest : public RandomDecoderTest,
   }
 
  private:
-  AssertionResult Decode(absl::string_view data,
-                         uint32_t prefix_length,
+  AssertionResult Decode(absl::string_view data, uint32_t prefix_length,
                          const Validator validator) {
     prefix_length_ = prefix_length;
 
@@ -108,8 +106,7 @@ class HpackVarintDecoderTest : public RandomDecoderTest,
 };
 
 INSTANTIATE_TEST_SUITE_P(
-    HpackVarintDecoderTest,
-    HpackVarintDecoderTest,
+    HpackVarintDecoderTest, HpackVarintDecoderTest,
     ::testing::Combine(
         // Bits of the first byte not part of the prefix should be ignored.
         ::testing::Values(0b00000000, 0b11111111, 0b10101010),

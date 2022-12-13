@@ -5,19 +5,20 @@
 #ifndef QUICHE_QUIC_MASQUE_MASQUE_ENCAPSULATED_EPOLL_CLIENT_H_
 #define QUICHE_QUIC_MASQUE_MASQUE_ENCAPSULATED_EPOLL_CLIENT_H_
 
+#include "gquiche/quic/core/io/quic_event_loop.h"
 #include "gquiche/quic/masque/masque_encapsulated_client_session.h"
 #include "gquiche/quic/masque/masque_epoll_client.h"
 #include "gquiche/quic/platform/api/quic_export.h"
-#include "gquiche/quic/tools/quic_client.h"
+#include "gquiche/quic/tools/quic_default_client.h"
 
 namespace quic {
 
 // QUIC client for QUIC encapsulated in MASQUE.
-class QUIC_NO_EXPORT MasqueEncapsulatedEpollClient : public QuicClient {
+class QUIC_NO_EXPORT MasqueEncapsulatedEpollClient : public QuicDefaultClient {
  public:
   MasqueEncapsulatedEpollClient(QuicSocketAddress server_address,
                                 const QuicServerId& server_id,
-                                QuicEpollServer* epoll_server,
+                                QuicEventLoop* event_loop,
                                 std::unique_ptr<ProofVerifier> proof_verifier,
                                 MasqueEpollClient* masque_client);
   ~MasqueEncapsulatedEpollClient() override;
@@ -32,8 +33,6 @@ class QUIC_NO_EXPORT MasqueEncapsulatedEpollClient : public QuicClient {
       const ParsedQuicVersionVector& supported_versions,
       QuicConnection* connection) override;
 
-  QuicConnectionId GetClientConnectionId() override;
-
   // MASQUE client that this client is encapsulated in.
   MasqueEpollClient* masque_client() { return masque_client_; }
 
@@ -42,7 +41,6 @@ class QUIC_NO_EXPORT MasqueEncapsulatedEpollClient : public QuicClient {
 
  private:
   MasqueEpollClient* masque_client_;  // Unowned.
-  QuicConnectionId client_connection_id_;
 };
 
 }  // namespace quic

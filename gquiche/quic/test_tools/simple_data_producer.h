@@ -7,10 +7,9 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/strings/string_view.h"
-#include "gquiche/quic/core/quic_simple_buffer_allocator.h"
 #include "gquiche/quic/core/quic_stream_frame_data_producer.h"
 #include "gquiche/quic/core/quic_stream_send_buffer.h"
-#include "gquiche/quic/platform/api/quic_containers.h"
+#include "gquiche/common/simple_buffer_allocator.h"
 
 namespace quic {
 
@@ -23,20 +22,12 @@ class SimpleDataProducer : public QuicStreamFrameDataProducer {
   SimpleDataProducer();
   ~SimpleDataProducer() override;
 
-  // Saves data to be provided when WriteStreamData is called. Data of length
-  // |data_length| is buffered to be provided for stream |id|. Multiple calls to
-  // SaveStreamData for the same stream ID append to the buffer for that stream.
-  // The data to be buffered is provided in |iov_count| iovec structs, with
-  // |iov| pointing to the first, and |iov_offset| indicating how many bytes
-  // into the iovec structs the data starts.
-  void SaveStreamData(QuicStreamId id,
-                      const struct iovec* iov,
-                      int iov_count,
-                      size_t iov_offset,
-                      QuicByteCount data_length);
+  // Saves `data` to be provided when WriteStreamData() is called. Multiple
+  // calls to SaveStreamData() for the same stream ID append to the buffer for
+  // that stream.
+  void SaveStreamData(QuicStreamId id, absl::string_view data);
 
-  void SaveCryptoData(EncryptionLevel level,
-                      QuicStreamOffset offset,
+  void SaveCryptoData(EncryptionLevel level, QuicStreamOffset offset,
                       absl::string_view data);
 
   // QuicStreamFrameDataProducer
@@ -44,8 +35,7 @@ class SimpleDataProducer : public QuicStreamFrameDataProducer {
                                         QuicStreamOffset offset,
                                         QuicByteCount data_length,
                                         QuicDataWriter* writer) override;
-  bool WriteCryptoData(EncryptionLevel level,
-                       QuicStreamOffset offset,
+  bool WriteCryptoData(EncryptionLevel level, QuicStreamOffset offset,
                        QuicByteCount data_length,
                        QuicDataWriter* writer) override;
 
@@ -55,9 +45,9 @@ class SimpleDataProducer : public QuicStreamFrameDataProducer {
 
   using CryptoBufferMap =
       absl::flat_hash_map<std::pair<EncryptionLevel, QuicStreamOffset>,
-                          absl::string_view>;
+                          std::string>;
 
-  SimpleBufferAllocator allocator_;
+  quiche::SimpleBufferAllocator allocator_;
 
   SendBufferMap send_buffer_map_;
 

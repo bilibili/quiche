@@ -10,10 +10,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
-#include "gquiche/quic/core/quic_buffer_allocator.h"
-#include "gquiche/quic/core/quic_simple_buffer_allocator.h"
 #include "gquiche/quic/core/web_transport_interface.h"
-#include "gquiche/quic/platform/api/quic_mem_slice.h"
 #include "gquiche/quic/test_tools/web_transport_resets_backend.h"
 #include "gquiche/quic/tools/web_transport_test_visitors.h"
 
@@ -31,7 +28,7 @@ class SessionCloseVisitor : public WebTransportVisitor {
  public:
   SessionCloseVisitor(WebTransportSession* session) : session_(session) {}
 
-  void OnSessionReady(const spdy::SpdyHeaderBlock& /*headers*/) override {}
+  void OnSessionReady(const spdy::Http2HeaderBlock& /*headers*/) override {}
   void OnSessionClosed(WebTransportSessionError /*error_code*/,
                        const std::string& /*error_message*/) override {}
 

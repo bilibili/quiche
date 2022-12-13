@@ -23,6 +23,7 @@
 #include "gquiche/quic/core/quic_versions.h"
 #include "gquiche/quic/platform/api/quic_bug_tracker.h"
 #include "gquiche/quic/platform/api/quic_flag_utils.h"
+#include "gquiche/quic/platform/api/quic_ip_address.h"
 
 namespace quic {
 
@@ -54,9 +55,9 @@ enum TransportParameters::TransportParameterId : uint64_t {
 
   kInitialRoundTripTime = 0x3127,
   kGoogleConnectionOptions = 0x3128,
-  kGoogleUserAgentId = 0x3129,
+  // 0x3129 was used to convey the user agent string.
   // 0x312A was used only in T050 to indicate support for HANDSHAKE_DONE.
-  kGoogleKeyUpdateNotYetSupported = 0x312B,
+  // 0x312B was used to indicate that QUIC+TLS key updates were not supported.
   // 0x4751 was used for non-standard Google-specific parameters encoded as a
   // Google QUIC_CRYPTO CHLO, it has been replaced by individual parameters.
   kGoogleQuicVersion =
@@ -122,10 +123,6 @@ std::string TransportParameterIdToString(
       return "initial_round_trip_time";
     case TransportParameters::kGoogleConnectionOptions:
       return "google_connection_options";
-    case TransportParameters::kGoogleUserAgentId:
-      return "user_agent_id";
-    case TransportParameters::kGoogleKeyUpdateNotYetSupported:
-      return "key_update_not_yet_supported";
     case TransportParameters::kGoogleQuicVersion:
       return "google-version";
     case TransportParameters::kMinAckDelay:
@@ -161,13 +158,8 @@ bool TransportParameterIdIsKnown(
     case TransportParameters::kGoogleConnectionOptions:
     case TransportParameters::kGoogleQuicVersion:
     case TransportParameters::kMinAckDelay:
-      return true;
     case TransportParameters::kVersionInformation:
-      return GetQuicReloadableFlag(quic_version_information);
-    case TransportParameters::kGoogleUserAgentId:
-      return !GetQuicReloadableFlag(quic_ignore_user_agent_transport_parameter);
-    case TransportParameters::kGoogleKeyUpdateNotYetSupported:
-      return !GetQuicReloadableFlag(quic_ignore_key_update_not_yet_supported);
+      return true;
   }
   return false;
 }
@@ -175,10 +167,8 @@ bool TransportParameterIdIsKnown(
 }  // namespace
 
 TransportParameters::IntegerParameter::IntegerParameter(
-    TransportParameters::TransportParameterId param_id,
-    uint64_t default_value,
-    uint64_t min_value,
-    uint64_t max_value)
+    TransportParameters::TransportParameterId param_id, uint64_t default_value,
+    uint64_t min_value, uint64_t max_value)
     : param_id_(param_id),
       value_(default_value),
       default_value_(default_value),
@@ -187,24 +177,19 @@ TransportParameters::IntegerParameter::IntegerParameter(
       has_been_read_(false) {
   QUICHE_DCHECK_LE(min_value, default_value);
   QUICHE_DCHECK_LE(default_value, max_value);
-  QUICHE_DCHECK_LE(max_value, kVarInt62MaxValue);
+  QUICHE_DCHECK_LE(max_value, quiche::kVarInt62MaxValue);
 }
 
 TransportParameters::IntegerParameter::IntegerParameter(
     TransportParameters::TransportParameterId param_id)
     : TransportParameters::IntegerParameter::IntegerParameter(
-          param_id,
-          0,
-          0,
-          kVarInt62MaxValue) {}
+          param_id, 0, 0, quiche::kVarInt62MaxValue) {}
 
 void TransportParameters::IntegerParameter::set_value(uint64_t value) {
   value_ = value;
 }
 
-uint64_t TransportParameters::IntegerParameter::value() const {
-  return value_;
-}
+uint64_t TransportParameters::IntegerParameter::value() const { return value_; }
 
 bool TransportParameters::IntegerParameter::IsValid() const {
   return min_value_ <= value_ && value_ <= max_value_;
@@ -221,13 +206,13 @@ bool TransportParameters::IntegerParameter::Write(
     QUIC_BUG(quic_bug_10743_1) << "Failed to write param_id for " << *this;
     return false;
   }
-  const QuicVariableLengthIntegerLength value_length =
+  const quiche::QuicheVariableLengthIntegerLength value_length =
       QuicDataWriter::GetVarInt62Len(value_);
   if (!writer->WriteVarInt62(value_length)) {
     QUIC_BUG(quic_bug_10743_2) << "Failed to write value_length for " << *this;
     return false;
   }
-  if (!writer->WriteVarInt62(value_, value_length)) {
+  if (!writer->WriteVarInt62WithForcedLength(value_, value_length)) {
     QUIC_BUG(quic_bug_10743_3) << "Failed to write value for " << *this;
     return false;
   }
@@ -447,13 +432,6 @@ std::string TransportParameters::ToString() const {
       rv += QuicTagToString(connection_option);
     }
   }
-  if (user_agent_id.has_value()) {
-    rv += " " + TransportParameterIdToString(kGoogleUserAgentId) + " \"" +
-          user_agent_id.value() + "\"";
-  }
-  if (key_update_not_yet_supported) {
-    rv += " " + TransportParameterIdToString(kGoogleKeyUpdateNotYetSupported);
-  }
   for (const auto& kv : custom_parameters) {
     absl::StrAppend(&rv, " 0x", absl::Hex(static_cast<uint32_t>(kv.first)),
                     "=");
@@ -473,7 +451,8 @@ std::string TransportParameters::ToString() const {
 TransportParameters::TransportParameters()
     : max_idle_timeout_ms(kMaxIdleTimeout),
       max_udp_payload_size(kMaxPacketSize, kDefaultMaxPacketSizeTransportParam,
-                           kMinMaxPacketSizeTransportParam, kVarInt62MaxValue),
+                           kMinMaxPacketSizeTransportParam,
+                           quiche::kVarInt62MaxValue),
       initial_max_data(kInitialMaxData),
       initial_max_stream_data_bidi_local(kInitialMaxStreamDataBidiLocal),
       initial_max_stream_data_bidi_remote(kInitialMaxStreamDataBidiRemote),
@@ -491,10 +470,9 @@ TransportParameters::TransportParameters()
       active_connection_id_limit(kActiveConnectionIdLimit,
                                  kDefaultActiveConnectionIdLimitTransportParam,
                                  kMinActiveConnectionIdLimitTransportParam,
-                                 kVarInt62MaxValue),
+                                 quiche::kVarInt62MaxValue),
       max_datagram_frame_size(kMaxDatagramFrameSize),
-      initial_round_trip_time_us(kInitialRoundTripTime),
-      key_update_not_yet_supported(false)
+      initial_round_trip_time_us(kInitialRoundTripTime)
 // Important note: any new transport parameters must be added
 // to TransportParameters::AreValid, SerializeTransportParameters and
 // ParseTransportParameters, TransportParameters's custom copy constructor, the
@@ -528,8 +506,6 @@ TransportParameters::TransportParameters(const TransportParameters& other)
       max_datagram_frame_size(other.max_datagram_frame_size),
       initial_round_trip_time_us(other.initial_round_trip_time_us),
       google_connection_options(other.google_connection_options),
-      user_agent_id(other.user_agent_id),
-      key_update_not_yet_supported(other.key_update_not_yet_supported),
       custom_parameters(other.custom_parameters) {
   if (other.preferred_address) {
     preferred_address = std::make_unique<TransportParameters::PreferredAddress>(
@@ -570,8 +546,6 @@ bool TransportParameters::operator==(const TransportParameters& rhs) const {
         initial_round_trip_time_us.value() ==
             rhs.initial_round_trip_time_us.value() &&
         google_connection_options == rhs.google_connection_options &&
-        user_agent_id == rhs.user_agent_id &&
-        key_update_not_yet_supported == rhs.key_update_not_yet_supported &&
         custom_parameters == rhs.custom_parameters)) {
     return false;
   }
@@ -646,10 +620,6 @@ bool TransportParameters::AreValid(std::string* error_details) const {
     *error_details = "Server cannot send initial round trip time";
     return false;
   }
-  if (perspective == Perspective::IS_SERVER && user_agent_id.has_value()) {
-    *error_details = "Server cannot send user agent ID";
-    return false;
-  }
   if (version_information.has_value()) {
     const QuicVersionLabel& chosen_version =
         version_information.value().chosen_version;
@@ -691,8 +661,7 @@ bool TransportParameters::AreValid(std::string* error_details) const {
 
 TransportParameters::~TransportParameters() = default;
 
-bool SerializeTransportParameters(ParsedQuicVersion /*version*/,
-                                  const TransportParameters& in,
+bool SerializeTransportParameters(const TransportParameters& in,
                                   std::vector<uint8_t>* out) {
   std::string error_details;
   if (!in.AreValid(&error_details)) {
@@ -758,8 +727,6 @@ bool SerializeTransportParameters(ParsedQuicVersion /*version*/,
       kIntegerParameterLength +           // max_datagram_frame_size
       kIntegerParameterLength +           // initial_round_trip_time_us
       kTypeAndValueLength +               // google_connection_options
-      kTypeAndValueLength +               // user_agent_id
-      kTypeAndValueLength +               // key_update_not_yet_supported
       kTypeAndValueLength;                // google-version
 
   std::vector<TransportParameters::TransportParameterId> parameter_ids = {
@@ -784,8 +751,6 @@ bool SerializeTransportParameters(ParsedQuicVersion /*version*/,
       TransportParameters::kInitialSourceConnectionId,
       TransportParameters::kRetrySourceConnectionId,
       TransportParameters::kGoogleConnectionOptions,
-      TransportParameters::kGoogleUserAgentId,
-      TransportParameters::kGoogleKeyUpdateNotYetSupported,
       TransportParameters::kGoogleQuicVersion,
       TransportParameters::kVersionInformation,
   };
@@ -795,10 +760,6 @@ bool SerializeTransportParameters(ParsedQuicVersion /*version*/,
   if (in.google_connection_options.has_value()) {
     max_transport_param_length +=
         in.google_connection_options.value().size() * sizeof(QuicTag);
-  }
-  // user_agent_id.
-  if (in.user_agent_id.has_value()) {
-    max_transport_param_length += in.user_agent_id.value().length();
   }
   // Google-specific version extension.
   if (in.legacy_version_information.has_value()) {
@@ -1124,30 +1085,6 @@ bool SerializeTransportParameters(ParsedQuicVersion /*version*/,
           }
         }
       } break;
-      // Google-specific user agent identifier.
-      case TransportParameters::kGoogleUserAgentId: {
-        if (in.user_agent_id.has_value()) {
-          if (!writer.WriteVarInt62(TransportParameters::kGoogleUserAgentId) ||
-              !writer.WriteStringPieceVarInt62(in.user_agent_id.value())) {
-            QUIC_BUG(Failed to write Google user agent ID)
-                << "Failed to write Google user agent ID \""
-                << in.user_agent_id.value() << "\" for " << in;
-            return false;
-          }
-        }
-      } break;
-      // Google-specific indicator for key update not yet supported.
-      case TransportParameters::kGoogleKeyUpdateNotYetSupported: {
-        if (in.key_update_not_yet_supported) {
-          if (!writer.WriteVarInt62(
-                  TransportParameters::kGoogleKeyUpdateNotYetSupported) ||
-              !writer.WriteVarInt62(/* transport parameter length */ 0)) {
-            QUIC_BUG(Failed to write key_update_not_yet_supported)
-                << "Failed to write key_update_not_yet_supported for " << in;
-            return false;
-          }
-        }
-      } break;
       // Google-specific version extension.
       case TransportParameters::kGoogleQuicVersion: {
         if (!in.legacy_version_information.has_value()) {
@@ -1251,10 +1188,8 @@ bool SerializeTransportParameters(ParsedQuicVersion /*version*/,
 }
 
 bool ParseTransportParameters(ParsedQuicVersion version,
-                              Perspective perspective,
-                              const uint8_t* in,
-                              size_t in_len,
-                              TransportParameters* out,
+                              Perspective perspective, const uint8_t* in,
+                              size_t in_len, TransportParameters* out,
                               std::string* error_details) {
   out->perspective = perspective;
   QuicDataReader reader(reinterpret_cast<const char*>(in), in_len);
@@ -1470,54 +1405,6 @@ bool ParseTransportParameters(ParsedQuicVersion version,
           out->google_connection_options.value().push_back(connection_option);
         }
       } break;
-      case TransportParameters::kGoogleUserAgentId:
-        if (GetQuicReloadableFlag(quic_ignore_user_agent_transport_parameter)) {
-          QUIC_RELOADABLE_FLAG_COUNT(
-              quic_ignore_user_agent_transport_parameter);
-          // This is a copy of the default switch statement below.
-          // TODO(dschinazi) remove this case entirely when deprecating the
-          // quic_ignore_user_agent_transport_parameter flag.
-          if (out->custom_parameters.find(param_id) !=
-              out->custom_parameters.end()) {
-            *error_details = "Received a second unknown parameter" +
-                             TransportParameterIdToString(param_id);
-            return false;
-          }
-          out->custom_parameters[param_id] =
-              std::string(value_reader.ReadRemainingPayload());
-          break;
-        }
-        if (out->user_agent_id.has_value()) {
-          *error_details = "Received a second user_agent_id";
-          return false;
-        }
-        out->user_agent_id = std::string(value_reader.ReadRemainingPayload());
-        break;
-      case TransportParameters::kGoogleKeyUpdateNotYetSupported:
-        if (GetQuicReloadableFlag(quic_ignore_key_update_not_yet_supported)) {
-          QUIC_RELOADABLE_FLAG_COUNT_N(quic_ignore_key_update_not_yet_supported,
-                                       1, 2);
-          QUIC_CODE_COUNT(quic_ignore_key_update_not_yet_supported_ignored);
-          // This is a copy of the default switch statement below.
-          // TODO(dschinazi) remove this case entirely when deprecating the
-          // quic_ignore_key_update_not_yet_supported flag.
-          if (out->custom_parameters.find(param_id) !=
-              out->custom_parameters.end()) {
-            *error_details = "Received a second unknown parameter" +
-                             TransportParameterIdToString(param_id);
-            return false;
-          }
-          out->custom_parameters[param_id] =
-              std::string(value_reader.ReadRemainingPayload());
-          break;
-        }
-        QUIC_CODE_COUNT(quic_ignore_key_update_not_yet_supported_received);
-        if (out->key_update_not_yet_supported) {
-          *error_details = "Received a second key_update_not_yet_supported";
-          return false;
-        }
-        out->key_update_not_yet_supported = true;
-        break;
       case TransportParameters::kGoogleQuicVersion: {
         if (!out->legacy_version_information.has_value()) {
           out->legacy_version_information =
@@ -1547,20 +1434,6 @@ bool ParseTransportParameters(ParsedQuicVersion version,
         }
       } break;
       case TransportParameters::kVersionInformation: {
-        if (!GetQuicReloadableFlag(quic_version_information)) {
-          // This duplicates the default case and will be removed when this flag
-          // is deprecated.
-          if (out->custom_parameters.find(param_id) !=
-              out->custom_parameters.end()) {
-            *error_details = "Received a second unknown parameter" +
-                             TransportParameterIdToString(param_id);
-            return false;
-          }
-          out->custom_parameters[param_id] =
-              std::string(value_reader.ReadRemainingPayload());
-          break;
-        }
-        QUIC_RELOADABLE_FLAG_COUNT_N(quic_version_information, 2, 2);
         if (out->version_information.has_value()) {
           *error_details = "Received a second version_information";
           return false;
@@ -1622,8 +1495,7 @@ bool ParseTransportParameters(ParsedQuicVersion version,
 namespace {
 
 bool DigestUpdateIntegerParam(
-    EVP_MD_CTX* hash_ctx,
-    const TransportParameters::IntegerParameter& param) {
+    EVP_MD_CTX* hash_ctx, const TransportParameters::IntegerParameter& param) {
   uint64_t value = param.value();
   return EVP_DigestUpdate(hash_ctx, &value, sizeof(value));
 }
@@ -1631,8 +1503,7 @@ bool DigestUpdateIntegerParam(
 }  // namespace
 
 bool SerializeTransportParametersForTicket(
-    const TransportParameters& in,
-    const std::vector<uint8_t>& application_data,
+    const TransportParameters& in, const std::vector<uint8_t>& application_data,
     std::vector<uint8_t>* out) {
   std::string error_details;
   if (!in.AreValid(&error_details)) {

@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef QUICHE_QUIC_CORE_WEB_TRANSPORT_STREAM_ADAPTER_H_
-#define QUICHE_QUIC_CORE_WEB_TRANSPORT_STREAM_ADAPTER_H_
+#ifndef QUICHE_QUIC_CORE_HTTP_WEB_TRANSPORT_STREAM_ADAPTER_H_
+#define QUICHE_QUIC_CORE_HTTP_WEB_TRANSPORT_STREAM_ADAPTER_H_
 
 #include "gquiche/quic/core/quic_session.h"
 #include "gquiche/quic/core/quic_stream.h"
@@ -18,8 +18,7 @@ namespace quic {
 class QUIC_EXPORT_PRIVATE WebTransportStreamAdapter
     : public WebTransportStream {
  public:
-  WebTransportStreamAdapter(QuicSession* session,
-                            QuicStream* stream,
+  WebTransportStreamAdapter(QuicSession* session, QuicStream* stream,
                             QuicStreamSequencer* sequencer);
 
   // WebTransportStream implementation.
@@ -63,4 +62,4 @@ class QUIC_EXPORT_PRIVATE WebTransportStreamAdapter
 
 }  // namespace quic
 
-#endif  // QUICHE_QUIC_CORE_WEB_TRANSPORT_STREAM_ADAPTER_H_
+#endif  // QUICHE_QUIC_CORE_HTTP_WEB_TRANSPORT_STREAM_ADAPTER_H_

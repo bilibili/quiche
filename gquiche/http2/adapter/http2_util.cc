@@ -97,6 +97,12 @@ absl::string_view ConnectionErrorToString(ConnectionError error) {
       return "InvalidPushPromise";
     case ConnectionError::kExceededMaxConcurrentStreams:
       return "ExceededMaxConcurrentStreams";
+    case ConnectionError::kFlowControlError:
+      return "FlowControlError";
+    case ConnectionError::kInvalidGoAwayLastStreamId:
+      return "InvalidGoAwayLastStreamId";
+    case ConnectionError::kInvalidSetting:
+      return "InvalidSetting";
   }
   return "UnknownConnectionError";
 }
@@ -118,6 +124,10 @@ absl::string_view InvalidFrameErrorToString(
       return "StreamClosed";
   }
   return "UnknownInvalidFrameError";
+}
+
+bool DeltaAtLeastHalfLimit(int64_t limit, int64_t /*size*/, int64_t delta) {
+  return delta > 0 && delta >= limit / 2;
 }
 
 }  // namespace adapter

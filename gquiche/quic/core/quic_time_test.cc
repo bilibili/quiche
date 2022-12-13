@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "gquiche/quic/core/quic_time.h"
+
 #include "gquiche/quic/platform/api/quic_test.h"
 #include "gquiche/quic/test_tools/mock_clock.h"
 

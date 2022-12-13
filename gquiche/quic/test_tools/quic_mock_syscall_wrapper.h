@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef QUICHE_QUIC_PLATFORM_IMPL_QUIC_MOCK_SYSCALL_WRAPPER_H_
-#define QUICHE_QUIC_PLATFORM_IMPL_QUIC_MOCK_SYSCALL_WRAPPER_H_
+#ifndef QUICHE_QUIC_TEST_TOOLS_QUIC_MOCK_SYSCALL_WRAPPER_H_
+#define QUICHE_QUIC_TEST_TOOLS_QUIC_MOCK_SYSCALL_WRAPPER_H_
 
 #include "gquiche/quic/core/quic_syscall_wrapper.h"
 #include "gquiche/quic/platform/api/quic_test.h"
@@ -20,18 +20,14 @@ class MockQuicSyscallWrapper : public QuicSyscallWrapper {
   // default.
   explicit MockQuicSyscallWrapper(QuicSyscallWrapper* delegate);
 
-  MOCK_METHOD(ssize_t,
-              Sendmsg,
-              (int sockfd, const msghdr*, int flags),
+  MOCK_METHOD(ssize_t, Sendmsg, (int sockfd, const msghdr*, int flags),
               (override));
 
-  MOCK_METHOD(int,
-              Sendmmsg,
-              (int sockfd, mmsghdr*, unsigned int vlen, int flags),
-              (override));
+  MOCK_METHOD(int, Sendmmsg,
+              (int sockfd, mmsghdr*, unsigned int vlen, int flags), (override));
 };
 
 }  // namespace test
 }  // namespace quic
 
-#endif  // QUICHE_QUIC_PLATFORM_IMPL_QUIC_MOCK_SYSCALL_WRAPPER_H_
+#endif  // QUICHE_QUIC_TEST_TOOLS_QUIC_MOCK_SYSCALL_WRAPPER_H_

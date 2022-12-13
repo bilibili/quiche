@@ -4,39 +4,34 @@
 
 #include "gquiche/quic/tools/quic_server.h"
 
-#include <errno.h>
-#include <features.h>
-#include <netinet/in.h>
-#include <string.h>
-#include <sys/epoll.h>
-#include <sys/socket.h>
-
 #include <cstdint>
 #include <memory>
 
 #include "gquiche/quic/core/crypto/crypto_handshake.h"
 #include "gquiche/quic/core/crypto/quic_random.h"
+#include "gquiche/quic/core/io/event_loop_socket_factory.h"
+#include "gquiche/quic/core/io/quic_default_event_loop.h"
+#include "gquiche/quic/core/io/quic_event_loop.h"
 #include "gquiche/quic/core/quic_clock.h"
 #include "gquiche/quic/core/quic_crypto_stream.h"
 #include "gquiche/quic/core/quic_data_reader.h"
+#include "gquiche/quic/core/quic_default_clock.h"
+#include "gquiche/quic/core/quic_default_connection_helper.h"
 #include "gquiche/quic/core/quic_default_packet_writer.h"
 #include "gquiche/quic/core/quic_dispatcher.h"
-#include "gquiche/quic/core/quic_epoll_alarm_factory.h"
-#include "gquiche/quic/core/quic_epoll_connection_helper.h"
 #include "gquiche/quic/core/quic_packet_reader.h"
 #include "gquiche/quic/core/quic_packets.h"
 #include "gquiche/quic/platform/api/quic_flags.h"
 #include "gquiche/quic/platform/api/quic_logging.h"
-#include "platform/epoll_platform_impl/quic_epoll_clock.h"
 #include "gquiche/quic/tools/quic_simple_crypto_server_stream_helper.h"
 #include "gquiche/quic/tools/quic_simple_dispatcher.h"
 #include "gquiche/quic/tools/quic_simple_server_backend.h"
+#include "gquiche/common/simple_buffer_allocator.h"
 
 namespace quic {
 
 namespace {
 
-const int kEpollFlags = EPOLLIN | EPOLLOUT | EPOLLET;
 const char kSourceAddressTokenSecret[] = "secret";
 
 }  // namespace
@@ -45,23 +40,18 @@ const size_t kNumSessionsToCreatePerSocketEvent = 16;
 
 QuicServer::QuicServer(std::unique_ptr<ProofSource> proof_source,
                        QuicSimpleServerBackend* quic_simple_server_backend)
-    : QuicServer(std::move(proof_source),
-                 quic_simple_server_backend,
+    : QuicServer(std::move(proof_source), quic_simple_server_backend,
                  AllSupportedVersions()) {}
 
 QuicServer::QuicServer(std::unique_ptr<ProofSource> proof_source,
                        QuicSimpleServerBackend* quic_simple_server_backend,
                        const ParsedQuicVersionVector& supported_versions)
-    : QuicServer(std::move(proof_source),
-                 QuicConfig(),
-                 QuicCryptoServerConfig::ConfigOptions(),
-                 supported_versions,
-                 quic_simple_server_backend,
-                 kQuicDefaultConnectionIdLength) {}
+    : QuicServer(std::move(proof_source), QuicConfig(),
+                 QuicCryptoServerConfig::ConfigOptions(), supported_versions,
+                 quic_simple_server_backend, kQuicDefaultConnectionIdLength) {}
 
 QuicServer::QuicServer(
-    std::unique_ptr<ProofSource> proof_source,
-    const QuicConfig& config,
+    std::unique_ptr<ProofSource> proof_source, const QuicConfig& config,
     const QuicCryptoServerConfig::ConfigOptions& crypto_config_options,
     const ParsedQuicVersionVector& supported_versions,
     QuicSimpleServerBackend* quic_simple_server_backend,
@@ -72,16 +62,15 @@ QuicServer::QuicServer(
       overflow_supported_(false),
       silent_close_(false),
       config_(config),
-      crypto_config_(kSourceAddressTokenSecret,
-                     QuicRandom::GetInstance(),
-                     std::move(proof_source),
-                     KeyExchangeSource::Default()),
+      crypto_config_(kSourceAddressTokenSecret, QuicRandom::GetInstance(),
+                     std::move(proof_source), KeyExchangeSource::Default()),
       crypto_config_options_(crypto_config_options),
       version_manager_(supported_versions),
       packet_reader_(new QuicPacketReader()),
       quic_simple_server_backend_(quic_simple_server_backend),
       expected_server_connection_id_length_(
-          expected_server_connection_id_length) {
+          expected_server_connection_id_length),
+      connection_id_generator_(expected_server_connection_id_length) {
   QUICHE_DCHECK(quic_simple_server_backend_);
   Initialize();
 }
@@ -102,17 +91,28 @@ void QuicServer::Initialize() {
         kInitialSessionFlowControlWindow);
   }
 
-  epoll_server_.set_timeout_in_us(50 * 1000);
-
-  QuicEpollClock clock(&epoll_server_);
-
   std::unique_ptr<CryptoHandshakeMessage> scfg(crypto_config_.AddDefaultConfig(
-      QuicRandom::GetInstance(), &clock, crypto_config_options_));
+      QuicRandom::GetInstance(), QuicDefaultClock::Get(),
+      crypto_config_options_));
 }
 
-QuicServer::~QuicServer() = default;
+QuicServer::~QuicServer() {
+  close(fd_);
+  fd_ = -1;
+
+  // Should be fine without because nothing should send requests to the backend
+  // after `this` is destroyed, but for extra pointer safety, clear the socket
+  // factory from the backend before the socket factory is destroyed.
+  quic_simple_server_backend_->SetSocketFactory(nullptr);
+}
 
 bool QuicServer::CreateUDPSocketAndListen(const QuicSocketAddress& address) {
+  event_loop_ = CreateEventLoop();
+
+  socket_factory_ = std::make_unique<EventLoopSocketFactory>(
+      event_loop_.get(), quiche::SimpleBufferAllocator::Get());
+  quic_simple_server_backend_->SetSocketFactory(socket_factory_.get());
+
   QuicUdpSocketApi socket_api;
   fd_ = socket_api.Create(address.host().AddressFamilyToInt(),
                           /*receive_buffer_size =*/kDefaultSocketReceiveBuffer,
@@ -142,7 +142,11 @@ bool QuicServer::CreateUDPSocketAndListen(const QuicSocketAddress& address) {
     port_ = address.port();
   }
 
-  epoll_server_.RegisterFD(fd_, this, kEpollFlags);
+  bool register_result = event_loop_->RegisterSocket(
+      fd_, kSocketEventReadable | kSocketEventWritable, this);
+  if (!register_result) {
+    return false;
+  }
   dispatcher_.reset(CreateQuicDispatcher());
   dispatcher_->InitializeWithWriter(CreateWriter(fd_));
 
@@ -154,16 +158,17 @@ QuicPacketWriter* QuicServer::CreateWriter(int fd) {
 }
 
 QuicDispatcher* QuicServer::CreateQuicDispatcher() {
-  QuicEpollAlarmFactory alarm_factory(&epoll_server_);
   return new QuicSimpleDispatcher(
       &config_, &crypto_config_, &version_manager_,
-      std::unique_ptr<QuicEpollConnectionHelper>(new QuicEpollConnectionHelper(
-          &epoll_server_, QuicAllocator::BUFFER_POOL)),
+      std::make_unique<QuicDefaultConnectionHelper>(),
       std::unique_ptr<QuicCryptoServerStreamBase::Helper>(
           new QuicSimpleCryptoServerStreamHelper()),
-      std::unique_ptr<QuicEpollAlarmFactory>(
-          new QuicEpollAlarmFactory(&epoll_server_)),
-      quic_simple_server_backend_, expected_server_connection_id_length_);
+      event_loop_->CreateAlarmFactory(), quic_simple_server_backend_,
+      expected_server_connection_id_length_, connection_id_generator_);
+}
+
+std::unique_ptr<QuicEventLoop> QuicServer::CreateEventLoop() {
+  return GetDefaultEventLoop()->Create(QuicDefaultClock::Get());
 }
 
 void QuicServer::HandleEventsForever() {
@@ -173,7 +178,7 @@ void QuicServer::HandleEventsForever() {
 }
 
 void QuicServer::WaitForEvents() {
-  epoll_server_.WaitForEventsAndExecuteCallbacks();
+  event_loop_->RunEventLoopOnce(QuicTime::Delta::FromMilliseconds(50));
 }
 
 void QuicServer::Shutdown() {
@@ -183,17 +188,15 @@ void QuicServer::Shutdown() {
     dispatcher_->Shutdown();
   }
 
-  epoll_server_.Shutdown();
-
-  close(fd_);
-  fd_ = -1;
+  dispatcher_.reset();
+  event_loop_.reset();
 }
 
-void QuicServer::OnEvent(int fd, QuicEpollEvent* event) {
+void QuicServer::OnSocketEvent(QuicEventLoop* /*event_loop*/,
+                               QuicUdpSocketFd fd, QuicSocketEventMask events) {
   QUICHE_DCHECK_EQ(fd, fd_);
-  event->out_ready_mask = 0;
 
-  if (event->in_events & EPOLLIN) {
+  if (events & kSocketEventReadable) {
     QUIC_DVLOG(1) << "EPOLLIN";
 
     dispatcher_->ProcessBufferedChlos(kNumSessionsToCreatePerSocketEvent);
@@ -201,19 +204,27 @@ void QuicServer::OnEvent(int fd, QuicEpollEvent* event) {
     bool more_to_read = true;
     while (more_to_read) {
       more_to_read = packet_reader_->ReadAndDispatchPackets(
-          fd_, port_, QuicEpollClock(&epoll_server_), dispatcher_.get(),
+          fd_, port_, *QuicDefaultClock::Get(), dispatcher_.get(),
           overflow_supported_ ? &packets_dropped_ : nullptr);
     }
 
     if (dispatcher_->HasChlosBuffered()) {
       // Register EPOLLIN event to consume buffered CHLO(s).
-      event->out_ready_mask |= EPOLLIN;
+      bool success =
+          event_loop_->ArtificiallyNotifyEvent(fd_, kSocketEventReadable);
+      QUICHE_DCHECK(success);
+    }
+    if (!event_loop_->SupportsEdgeTriggered()) {
+      bool success = event_loop_->RearmSocket(fd_, kSocketEventReadable);
+      QUICHE_DCHECK(success);
     }
   }
-  if (event->in_events & EPOLLOUT) {
+  if (events & kSocketEventWritable) {
     dispatcher_->OnCanWrite();
-    if (dispatcher_->HasPendingWrites()) {
-      event->out_ready_mask |= EPOLLOUT;
+    if (!event_loop_->SupportsEdgeTriggered() &&
+        dispatcher_->HasPendingWrites()) {
+      bool success = event_loop_->RearmSocket(fd_, kSocketEventWritable);
+      QUICHE_DCHECK(success);
     }
   }
 }

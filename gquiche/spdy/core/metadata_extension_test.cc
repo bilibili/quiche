@@ -6,28 +6,25 @@
 #include "absl/strings/string_view.h"
 #include "gquiche/common/platform/api/quiche_test.h"
 #include "gquiche/spdy/core/array_output_buffer.h"
-#include "gquiche/spdy/core/mock_spdy_framer_visitor.h"
 #include "gquiche/spdy/core/spdy_framer.h"
-#include "gquiche/spdy/core/spdy_header_block.h"
 #include "gquiche/spdy/core/spdy_no_op_visitor.h"
 #include "gquiche/spdy/core/spdy_protocol.h"
+#include "gquiche/spdy/test_tools/mock_spdy_framer_visitor.h"
 
 namespace spdy {
 namespace test {
 namespace {
 
 using ::absl::bind_front;
-using ::spdy::SpdyFramer;
-using ::spdy::SpdyHeaderBlock;
-using ::spdy::test::MockSpdyFramerVisitor;
 using ::testing::_;
 using ::testing::ElementsAre;
+using ::testing::HasSubstr;
 using ::testing::IsEmpty;
 
 const size_t kBufferSize = 64 * 1024;
 char kBuffer[kBufferSize];
 
-class MetadataExtensionTest : public QuicheTest {
+class MetadataExtensionTest : public quiche::test::QuicheTest {
  protected:
   MetadataExtensionTest() : test_buffer_(kBuffer, kBufferSize) {}
 
@@ -48,14 +45,14 @@ class MetadataExtensionTest : public QuicheTest {
     received_metadata_support_.push_back(peer_supports_metadata);
   }
 
-  MetadataSerializer::MetadataPayload PayloadForData(absl::string_view data) {
-    SpdyHeaderBlock block;
+  Http2HeaderBlock PayloadForData(absl::string_view data) {
+    Http2HeaderBlock block;
     block["example-payload"] = data;
     return block;
   }
 
   std::unique_ptr<MetadataVisitor> extension_;
-  absl::flat_hash_map<spdy::SpdyStreamId, SpdyHeaderBlock>
+  absl::flat_hash_map<spdy::SpdyStreamId, Http2HeaderBlock>
       received_payload_map_;
   std::vector<bool> received_metadata_support_;
   size_t received_count_ = 0;
@@ -83,16 +80,14 @@ TEST_F(MetadataExtensionTest, MetadataSupported) {
   EXPECT_THAT(received_metadata_support_, ElementsAre(true, false));
 }
 
-TEST_F(MetadataExtensionTest, MetadataIgnoredWithoutExtension) {
+TEST_F(MetadataExtensionTest, MetadataDeliveredToUnknownFrameCallbacks) {
   const char kData[] = "some payload";
-  SpdyHeaderBlock payload = PayloadForData(kData);
+  Http2HeaderBlock payload = PayloadForData(kData);
 
   extension_->OnSetting(MetadataVisitor::kMetadataExtensionId, 1);
   ASSERT_TRUE(extension_->PeerSupportsMetadata());
 
-  MetadataSerializer serializer;
-  auto sequence = serializer.FrameSequenceForPayload(3, std::move(payload));
-  ASSERT_TRUE(sequence != nullptr);
+  MetadataFrameSequence sequence(3, std::move(payload));
 
   http2::Http2DecoderAdapter deframer;
   ::testing::StrictMock<MockSpdyFramerVisitor> visitor;
@@ -103,9 +98,13 @@ TEST_F(MetadataExtensionTest, MetadataIgnoredWithoutExtension) {
   // The Return(true) should not be necessary. http://b/36023792
   EXPECT_CALL(visitor, OnUnknownFrame(3, MetadataVisitor::kMetadataFrameType))
       .WillOnce(::testing::Return(true));
+  EXPECT_CALL(visitor,
+              OnUnknownFrameStart(3, _, MetadataVisitor::kMetadataFrameType,
+                                  MetadataVisitor::kEndMetadataFlag));
+  EXPECT_CALL(visitor, OnUnknownFramePayload(3, HasSubstr(kData)));
 
   SpdyFramer framer(SpdyFramer::ENABLE_COMPRESSION);
-  auto frame = sequence->Next();
+  auto frame = sequence.Next();
   ASSERT_TRUE(frame != nullptr);
   while (frame != nullptr) {
     const size_t frame_size = framer.SerializeFrame(*frame, &test_buffer_);
@@ -114,7 +113,7 @@ TEST_F(MetadataExtensionTest, MetadataIgnoredWithoutExtension) {
     ASSERT_EQ(frame_size, test_buffer_.Size());
     EXPECT_EQ(frame_size, deframer.ProcessInput(kBuffer, frame_size));
     test_buffer_.Reset();
-    frame = sequence->Next();
+    frame = sequence.Next();
   }
   EXPECT_FALSE(deframer.HasError());
   EXPECT_THAT(received_metadata_support_, ElementsAre(true));
@@ -123,9 +122,9 @@ TEST_F(MetadataExtensionTest, MetadataIgnoredWithoutExtension) {
 // This test verifies that the METADATA frame emitted by a MetadataExtension
 // can be parsed by another SpdyFramer with a MetadataVisitor.
 TEST_F(MetadataExtensionTest, MetadataPayloadEndToEnd) {
-  SpdyHeaderBlock block1;
+  Http2HeaderBlock block1;
   block1["foo"] = "Some metadata value.";
-  SpdyHeaderBlock block2;
+  Http2HeaderBlock block2;
   block2["bar"] =
       "The color taupe truly represents a triumph of the human spirit over "
       "adversity.";
@@ -135,22 +134,18 @@ TEST_F(MetadataExtensionTest, MetadataPayloadEndToEnd) {
   const absl::string_view binary_payload{"binary\0payload", 14};
   block2["qux"] = binary_payload;
   EXPECT_EQ(binary_payload, block2["qux"]);
-  for (const SpdyHeaderBlock& payload_block :
+  for (const Http2HeaderBlock& payload_block :
        {std::move(block1), std::move(block2)}) {
     extension_->OnSetting(MetadataVisitor::kMetadataExtensionId, 1);
     ASSERT_TRUE(extension_->PeerSupportsMetadata());
 
-    MetadataSerializer serializer;
-    auto sequence =
-        serializer.FrameSequenceForPayload(3, payload_block.Clone());
-    ASSERT_TRUE(sequence != nullptr);
-
+    MetadataFrameSequence sequence(3, payload_block.Clone());
     http2::Http2DecoderAdapter deframer;
     ::spdy::SpdyNoOpVisitor visitor;
     deframer.set_visitor(&visitor);
     deframer.set_extension_visitor(extension_.get());
     SpdyFramer framer(SpdyFramer::ENABLE_COMPRESSION);
-    auto frame = sequence->Next();
+    auto frame = sequence.Next();
     ASSERT_TRUE(frame != nullptr);
     while (frame != nullptr) {
       const size_t frame_size = framer.SerializeFrame(*frame, &test_buffer_);
@@ -159,7 +154,7 @@ TEST_F(MetadataExtensionTest, MetadataPayloadEndToEnd) {
       ASSERT_EQ(frame_size, test_buffer_.Size());
       EXPECT_EQ(frame_size, deframer.ProcessInput(kBuffer, frame_size));
       test_buffer_.Reset();
-      frame = sequence->Next();
+      frame = sequence.Next();
     }
     EXPECT_EQ(1u, received_count_);
     auto it = received_payload_map_.find(3);
@@ -177,18 +172,14 @@ TEST_F(MetadataExtensionTest, MetadataPayloadEndToEnd) {
 TEST_F(MetadataExtensionTest, MetadataPayloadInterleaved) {
   const std::string kData1 = std::string(65 * 1024, 'a');
   const std::string kData2 = std::string(65 * 1024, 'b');
-  const SpdyHeaderBlock payload1 = PayloadForData(kData1);
-  const SpdyHeaderBlock payload2 = PayloadForData(kData2);
+  const Http2HeaderBlock payload1 = PayloadForData(kData1);
+  const Http2HeaderBlock payload2 = PayloadForData(kData2);
 
   extension_->OnSetting(MetadataVisitor::kMetadataExtensionId, 1);
   ASSERT_TRUE(extension_->PeerSupportsMetadata());
 
-  MetadataSerializer serializer;
-  auto sequence1 = serializer.FrameSequenceForPayload(3, payload1.Clone());
-  ASSERT_TRUE(sequence1 != nullptr);
-
-  auto sequence2 = serializer.FrameSequenceForPayload(5, payload2.Clone());
-  ASSERT_TRUE(sequence2 != nullptr);
+  MetadataFrameSequence sequence1(3, payload1.Clone());
+  MetadataFrameSequence sequence2(5, payload2.Clone());
 
   http2::Http2DecoderAdapter deframer;
   ::spdy::SpdyNoOpVisitor visitor;
@@ -196,9 +187,9 @@ TEST_F(MetadataExtensionTest, MetadataPayloadInterleaved) {
   deframer.set_extension_visitor(extension_.get());
 
   SpdyFramer framer(SpdyFramer::ENABLE_COMPRESSION);
-  auto frame1 = sequence1->Next();
+  auto frame1 = sequence1.Next();
   ASSERT_TRUE(frame1 != nullptr);
-  auto frame2 = sequence2->Next();
+  auto frame2 = sequence2.Next();
   ASSERT_TRUE(frame2 != nullptr);
   while (frame1 != nullptr || frame2 != nullptr) {
     for (auto frame : {frame1.get(), frame2.get()}) {
@@ -211,8 +202,8 @@ TEST_F(MetadataExtensionTest, MetadataPayloadInterleaved) {
         test_buffer_.Reset();
       }
     }
-    frame1 = sequence1->Next();
-    frame2 = sequence2->Next();
+    frame1 = sequence1.Next();
+    frame2 = sequence2.Next();
   }
   EXPECT_EQ(2u, received_count_);
   auto it = received_payload_map_.find(3);
@@ -222,6 +213,65 @@ TEST_F(MetadataExtensionTest, MetadataPayloadInterleaved) {
   it = received_payload_map_.find(5);
   ASSERT_TRUE(it != received_payload_map_.end());
   EXPECT_EQ(payload2, it->second);
+}
+
+// Test that an empty metadata block is serialized as a single frame with
+// END_METADATA set and empty frame payload.
+TEST_F(MetadataExtensionTest, EmptyBlock) {
+  MetadataFrameSequence sequence(1, Http2HeaderBlock{});
+
+  EXPECT_TRUE(sequence.HasNext());
+  std::unique_ptr<SpdyFrameIR> frame = sequence.Next();
+  EXPECT_FALSE(sequence.HasNext());
+
+  auto* const metadata_frame = static_cast<SpdyUnknownIR*>(frame.get());
+  EXPECT_EQ(MetadataVisitor::kEndMetadataFlag,
+            metadata_frame->flags() & MetadataVisitor::kEndMetadataFlag);
+  EXPECT_TRUE(metadata_frame->payload().empty());
+}
+
+// Test that a small metadata block is serialized as a single frame with
+// END_METADATA set and non-empty frame payload.
+TEST_F(MetadataExtensionTest, SmallBlock) {
+  Http2HeaderBlock metadata_block;
+  metadata_block["foo"] = "bar";
+  MetadataFrameSequence sequence(1, std::move(metadata_block));
+
+  EXPECT_TRUE(sequence.HasNext());
+  std::unique_ptr<SpdyFrameIR> frame = sequence.Next();
+  EXPECT_FALSE(sequence.HasNext());
+
+  auto* const metadata_frame = static_cast<SpdyUnknownIR*>(frame.get());
+  EXPECT_EQ(MetadataVisitor::kEndMetadataFlag,
+            metadata_frame->flags() & MetadataVisitor::kEndMetadataFlag);
+  EXPECT_LT(0u, metadata_frame->payload().size());
+}
+
+// Test that a large metadata block is serialized as multiple frames,
+// with END_METADATA set only on the last one.
+TEST_F(MetadataExtensionTest, LargeBlock) {
+  Http2HeaderBlock metadata_block;
+  metadata_block["foo"] = std::string(65 * 1024, 'a');
+  MetadataFrameSequence sequence(1, std::move(metadata_block));
+
+  int frame_count = 0;
+  while (sequence.HasNext()) {
+    std::unique_ptr<SpdyFrameIR> frame = sequence.Next();
+    ++frame_count;
+
+    auto* const metadata_frame = static_cast<SpdyUnknownIR*>(frame.get());
+    EXPECT_LT(0u, metadata_frame->payload().size());
+
+    if (sequence.HasNext()) {
+      EXPECT_EQ(0u,
+                metadata_frame->flags() & MetadataVisitor::kEndMetadataFlag);
+    } else {
+      EXPECT_EQ(MetadataVisitor::kEndMetadataFlag,
+                metadata_frame->flags() & MetadataVisitor::kEndMetadataFlag);
+    }
+  }
+
+  EXPECT_LE(2, frame_count);
 }
 
 }  // anonymous namespace

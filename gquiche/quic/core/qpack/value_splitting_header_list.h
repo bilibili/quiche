@@ -7,7 +7,7 @@
 
 #include "absl/strings/string_view.h"
 #include "gquiche/quic/platform/api/quic_export.h"
-#include "gquiche/spdy/core/spdy_header_block.h"
+#include "gquiche/spdy/core/http2_header_block.h"
 
 namespace quic {
 

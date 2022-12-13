@@ -9,7 +9,6 @@
 #include <ostream>
 
 #include "absl/strings/string_view.h"
-#include "gquiche/quic/core/quic_buffer_allocator.h"
 #include "gquiche/quic/core/quic_constants.h"
 #include "gquiche/quic/core/quic_types.h"
 #include "gquiche/quic/platform/api/quic_export.h"
@@ -22,8 +21,7 @@ struct QUIC_EXPORT_PRIVATE QuicNewTokenFrame {
                     absl::string_view token);
 
   friend QUIC_EXPORT_PRIVATE std::ostream& operator<<(
-      std::ostream& os,
-      const QuicNewTokenFrame& s);
+      std::ostream& os, const QuicNewTokenFrame& s);
 
   // A unique identifier of this control frame. 0 when this frame is received,
   // and non-zero when sent.

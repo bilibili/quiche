@@ -2,10 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef QUICHE_QUIC_PLATFORM_IMPL_BATCH_WRITER_QUIC_BATCH_WRITER_BASE_H_
-#define QUICHE_QUIC_PLATFORM_IMPL_BATCH_WRITER_QUIC_BATCH_WRITER_BASE_H_
+#ifndef QUICHE_QUIC_CORE_BATCH_WRITER_QUIC_BATCH_WRITER_BASE_H_
+#define QUICHE_QUIC_CORE_BATCH_WRITER_QUIC_BATCH_WRITER_BASE_H_
 
 #include <cstdint>
+
 #include "gquiche/quic/core/batch_writer/quic_batch_writer_buffer.h"
 #include "gquiche/quic/core/quic_packet_writer.h"
 #include "gquiche/quic/core/quic_types.h"
@@ -28,8 +29,7 @@ class QUIC_EXPORT_PRIVATE QuicBatchWriterBase : public QuicPacketWriter {
   // ATTENTION: If this write triggered a flush, and the flush failed, all
   // buffered packets will be dropped to allow the next write to work. The
   // number of dropped packets can be found in WriteResult.dropped_packets.
-  WriteResult WritePacket(const char* buffer,
-                          size_t buf_len,
+  WriteResult WritePacket(const char* buffer, size_t buf_len,
                           const QuicIpAddress& self_address,
                           const QuicSocketAddress& peer_address,
                           PerPacketOptions* options) override;
@@ -37,6 +37,10 @@ class QUIC_EXPORT_PRIVATE QuicBatchWriterBase : public QuicPacketWriter {
   bool IsWriteBlocked() const final { return write_blocked_; }
 
   void SetWritable() final { write_blocked_ = false; }
+
+  absl::optional<int> MessageTooBigErrorCode() const override {
+    return EMSGSIZE;
+  }
 
   QuicByteCount GetMaxPacketSize(
       const QuicSocketAddress& /*peer_address*/) const final {
@@ -93,8 +97,7 @@ class QUIC_EXPORT_PRIVATE QuicBatchWriterBase : public QuicPacketWriter {
 
   // Given the existing buffered writes(in buffered_writes()), whether a new
   // write(in the arguments) can be batched.
-  virtual CanBatchResult CanBatch(const char* buffer,
-                                  size_t buf_len,
+  virtual CanBatchResult CanBatch(const char* buffer, size_t buf_len,
                                   const QuicIpAddress& self_address,
                                   const QuicSocketAddress& peer_address,
                                   const PerPacketOptions* options,
@@ -123,8 +126,7 @@ class QUIC_EXPORT_PRIVATE QuicBatchWriterBase : public QuicPacketWriter {
   virtual FlushImplResult FlushImpl() = 0;
 
  private:
-  WriteResult InternalWritePacket(const char* buffer,
-                                  size_t buf_len,
+  WriteResult InternalWritePacket(const char* buffer, size_t buf_len,
                                   const QuicIpAddress& self_address,
                                   const QuicSocketAddress& peer_address,
                                   PerPacketOptions* options);
@@ -151,4 +153,4 @@ class QUIC_EXPORT_PRIVATE QuicUdpBatchWriter : public QuicBatchWriterBase {
 
 }  // namespace quic
 
-#endif  // QUICHE_QUIC_PLATFORM_IMPL_BATCH_WRITER_QUIC_BATCH_WRITER_BASE_H_
+#endif  // QUICHE_QUIC_CORE_BATCH_WRITER_QUIC_BATCH_WRITER_BASE_H_

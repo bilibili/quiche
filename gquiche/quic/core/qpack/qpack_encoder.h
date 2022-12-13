@@ -20,7 +20,7 @@
 #include "gquiche/quic/core/quic_types.h"
 #include "gquiche/quic/platform/api/quic_export.h"
 #include "gquiche/quic/platform/api/quic_exported_stats.h"
-#include "gquiche/spdy/core/spdy_header_block.h"
+#include "gquiche/spdy/core/http2_header_block.h"
 
 namespace quic {
 
@@ -111,16 +111,13 @@ class QUIC_EXPORT_PRIVATE QpackEncoder
   // Generate indexed header field representation
   // and optionally update |*referred_indices|.
   static Representation EncodeIndexedHeaderField(
-      bool is_static,
-      uint64_t index,
+      bool is_static, uint64_t index,
       QpackBlockingManager::IndexSet* referred_indices);
 
   // Generate literal header field with name reference representation
   // and optionally update |*referred_indices|.
   static Representation EncodeLiteralHeaderFieldWithNameReference(
-      bool is_static,
-      uint64_t index,
-      absl::string_view value,
+      bool is_static, uint64_t index, absl::string_view value,
       QpackBlockingManager::IndexSet* referred_indices);
 
   // Generate literal header field representation.
@@ -139,8 +136,7 @@ class QUIC_EXPORT_PRIVATE QpackEncoder
   // absolute indices.  Returned representation objects may have
   // absl::string_views pointing to strings owned by |*header_list|.
   Representations FirstPassEncode(
-      QuicStreamId stream_id,
-      const spdy::Http2HeaderBlock& header_list,
+      QuicStreamId stream_id, const spdy::Http2HeaderBlock& header_list,
       QpackBlockingManager::IndexSet* referred_indices,
       QuicByteCount* encoder_stream_sent_byte_count);
 
@@ -157,6 +153,16 @@ class QUIC_EXPORT_PRIVATE QpackEncoder
   uint64_t maximum_blocked_streams_;
   QpackBlockingManager blocking_manager_;
   int header_list_count_;
+};
+
+// QpackEncoder::DecoderStreamErrorDelegate implementation that does nothing.
+class QUIC_EXPORT_PRIVATE NoopDecoderStreamErrorDelegate
+    : public QpackEncoder::DecoderStreamErrorDelegate {
+ public:
+  ~NoopDecoderStreamErrorDelegate() override = default;
+
+  void OnDecoderStreamError(QuicErrorCode /*error_code*/, absl::string_view
+                            /*error_message*/) override {}
 };
 
 }  // namespace quic

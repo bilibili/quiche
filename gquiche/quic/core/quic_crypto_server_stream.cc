@@ -10,8 +10,10 @@
 #include "absl/base/macros.h"
 #include "absl/strings/string_view.h"
 #include "openssl/sha.h"
+#include "gquiche/quic/core/quic_types.h"
 #include "gquiche/quic/platform/api/quic_flag_utils.h"
 #include "gquiche/quic/platform/api/quic_testvalue.h"
+#include "gquiche/common/platform/api/quiche_logging.h"
 #include "gquiche/common/quiche_text_utils.h"
 
 namespace quic {
@@ -21,13 +23,12 @@ class QuicCryptoServerStream::ProcessClientHelloCallback
  public:
   ProcessClientHelloCallback(
       QuicCryptoServerStream* parent,
-      const QuicReferenceCountedPointer<
+      const quiche::QuicheReferenceCountedPointer<
           ValidateClientHelloResultCallback::Result>& result)
       : parent_(parent), result_(result) {}
 
   void Run(
-      QuicErrorCode error,
-      const std::string& error_details,
+      QuicErrorCode error, const std::string& error_details,
       std::unique_ptr<CryptoHandshakeMessage> message,
       std::unique_ptr<DiversificationNonce> diversification_nonce,
       std::unique_ptr<ProofSource::Details> proof_source_details) override {
@@ -44,14 +45,14 @@ class QuicCryptoServerStream::ProcessClientHelloCallback
 
  private:
   QuicCryptoServerStream* parent_;
-  QuicReferenceCountedPointer<ValidateClientHelloResultCallback::Result>
+  quiche::QuicheReferenceCountedPointer<
+      ValidateClientHelloResultCallback::Result>
       result_;
 };
 
 QuicCryptoServerStream::QuicCryptoServerStream(
     const QuicCryptoServerConfig* crypto_config,
-    QuicCompressedCertsCache* compressed_certs_cache,
-    QuicSession* session,
+    QuicCompressedCertsCache* compressed_certs_cache, QuicSession* session,
     QuicCryptoServerStreamBase::Helper* helper)
     : QuicCryptoServerStreamBase(session),
       QuicCryptoHandshaker(this, session),
@@ -68,7 +69,6 @@ QuicCryptoServerStream::QuicCryptoServerStream(
       zero_rtt_attempted_(false),
       chlo_packet_size_(0),
       validate_client_hello_cb_(nullptr),
-      process_client_hello_cb_(nullptr),
       encryption_established_(false),
       one_rtt_keys_available_(false),
       one_rtt_packet_decrypted_(false),
@@ -88,9 +88,10 @@ void QuicCryptoServerStream::CancelOutstandingCallbacks() {
     send_server_config_update_cb_->Cancel();
     send_server_config_update_cb_ = nullptr;
   }
-  if (process_client_hello_cb_ != nullptr) {
-    process_client_hello_cb_->Cancel();
-    process_client_hello_cb_ = nullptr;
+  if (std::shared_ptr<ProcessClientHelloCallback> cb =
+          process_client_hello_cb_.lock()) {
+    cb->Cancel();
+    process_client_hello_cb_.reset();
   }
 }
 
@@ -114,7 +115,7 @@ void QuicCryptoServerStream::OnHandshakeMessage(
   }
 
   if (validate_client_hello_cb_ != nullptr ||
-      process_client_hello_cb_ != nullptr) {
+      !process_client_hello_cb_.expired()) {
     // Already processing some other handshake message.  The protocol
     // does not allow for clients to send multiple handshake messages
     // before the server has a chance to respond.
@@ -128,7 +129,7 @@ void QuicCryptoServerStream::OnHandshakeMessage(
 
   std::unique_ptr<ValidateCallback> cb(new ValidateCallback(this));
   QUICHE_DCHECK(validate_client_hello_cb_ == nullptr);
-  QUICHE_DCHECK(process_client_hello_cb_ == nullptr);
+  QUICHE_DCHECK(process_client_hello_cb_.expired());
   validate_client_hello_cb_ = cb.get();
   crypto_config_->ValidateClientHello(
       message, GetClientAddress(), session()->connection()->self_address(),
@@ -137,47 +138,42 @@ void QuicCryptoServerStream::OnHandshakeMessage(
 }
 
 void QuicCryptoServerStream::FinishProcessingHandshakeMessage(
-    QuicReferenceCountedPointer<ValidateClientHelloResultCallback::Result>
+    quiche::QuicheReferenceCountedPointer<
+        ValidateClientHelloResultCallback::Result>
         result,
     std::unique_ptr<ProofSource::Details> details) {
   // Clear the callback that got us here.
   QUICHE_DCHECK(validate_client_hello_cb_ != nullptr);
-  QUICHE_DCHECK(process_client_hello_cb_ == nullptr);
+  QUICHE_DCHECK(process_client_hello_cb_.expired());
   validate_client_hello_cb_ = nullptr;
 
-  std::unique_ptr<ProcessClientHelloCallback> cb(
-      new ProcessClientHelloCallback(this, result));
-  process_client_hello_cb_ = cb.get();
+  auto cb = std::make_shared<ProcessClientHelloCallback>(this, result);
+  process_client_hello_cb_ = cb;
   ProcessClientHello(result, std::move(details), std::move(cb));
 }
 
 void QuicCryptoServerStream::
     FinishProcessingHandshakeMessageAfterProcessClientHello(
         const ValidateClientHelloResultCallback::Result& result,
-        QuicErrorCode error,
-        const std::string& error_details,
+        QuicErrorCode error, const std::string& error_details,
         std::unique_ptr<CryptoHandshakeMessage> reply,
         std::unique_ptr<DiversificationNonce> diversification_nonce,
         std::unique_ptr<ProofSource::Details> proof_source_details) {
   // Clear the callback that got us here.
-  QUICHE_DCHECK(process_client_hello_cb_ != nullptr);
+  QUICHE_DCHECK(!process_client_hello_cb_.expired());
   QUICHE_DCHECK(validate_client_hello_cb_ == nullptr);
-  process_client_hello_cb_ = nullptr;
+  process_client_hello_cb_.reset();
   proof_source_details_ = std::move(proof_source_details);
 
   AdjustTestValue("quic::QuicCryptoServerStream::after_process_client_hello",
                   session());
 
-  if (noop_if_disconnected_after_process_chlo_) {
-    QUIC_RELOADABLE_FLAG_COUNT(
-        quic_crypto_noop_if_disconnected_after_process_chlo);
-    if (!session()->connection()->connected()) {
-      QUIC_CODE_COUNT(quic_crypto_disconnected_after_process_client_hello);
-      QUIC_LOG_FIRST_N(INFO, 10)
-          << "After processing CHLO, QUIC connection has been closed with code "
-          << session()->error() << ", details: " << session()->error_details();
-      return;
-    }
+  if (!session()->connection()->connected()) {
+    QUIC_CODE_COUNT(quic_crypto_disconnected_after_process_client_hello);
+    QUIC_LOG_FIRST_N(INFO, 10)
+        << "After processing CHLO, QUIC connection has been closed with code "
+        << session()->error() << ", details: " << session()->error_details();
+    return;
   }
 
   const CryptoHandshakeMessage& message = result.client_hello;
@@ -280,8 +276,7 @@ void QuicCryptoServerStream::SendServerConfigUpdateCallback::Cancel() {
 
 // From BuildServerConfigUpdateMessageResultCallback
 void QuicCryptoServerStream::SendServerConfigUpdateCallback::Run(
-    bool ok,
-    const CryptoHandshakeMessage& message) {
+    bool ok, const CryptoHandshakeMessage& message) {
   if (parent_ == nullptr) {
     return;
   }
@@ -289,8 +284,7 @@ void QuicCryptoServerStream::SendServerConfigUpdateCallback::Run(
 }
 
 void QuicCryptoServerStream::FinishSendServerConfigUpdate(
-    bool ok,
-    const CryptoHandshakeMessage& message) {
+    bool ok, const CryptoHandshakeMessage& message) {
   // Clear the callback that got us here.
   QUICHE_DCHECK(send_server_config_update_cb_ != nullptr);
   send_server_config_update_cb_ = nullptr;
@@ -307,6 +301,11 @@ void QuicCryptoServerStream::FinishSendServerConfigUpdate(
   SendHandshakeMessage(message, ENCRYPTION_FORWARD_SECURE);
 
   ++num_server_config_update_messages_sent_;
+}
+
+bool QuicCryptoServerStream::DisableResumption() {
+  QUICHE_DCHECK(false) << "Not supported for QUIC crypto.";
+  return false;
 }
 
 bool QuicCryptoServerStream::IsZeroRtt() const {
@@ -332,6 +331,11 @@ bool QuicCryptoServerStream::ResumptionAttempted() const {
   return zero_rtt_attempted_;
 }
 
+bool QuicCryptoServerStream::EarlyDataAttempted() const {
+  QUICHE_DCHECK(false) << "Not supported for QUIC crypto.";
+  return zero_rtt_attempted_;
+}
+
 void QuicCryptoServerStream::SetPreviousCachedNetworkParams(
     CachedNetworkParameters cached_network_params) {
   previous_cached_network_params_.reset(
@@ -345,9 +349,7 @@ void QuicCryptoServerStream::OnPacketDecrypted(EncryptionLevel level) {
   }
 }
 
-void QuicCryptoServerStream::OnHandshakeDoneReceived() {
-  QUICHE_DCHECK(false);
-}
+void QuicCryptoServerStream::OnHandshakeDoneReceived() { QUICHE_DCHECK(false); }
 
 void QuicCryptoServerStream::OnNewTokenReceived(absl::string_view /*token*/) {
   QUICHE_DCHECK(false);
@@ -435,10 +437,6 @@ size_t QuicCryptoServerStream::BufferSizeLimitForLevel(
   return QuicCryptoHandshaker::BufferSizeLimitForLevel(level);
 }
 
-bool QuicCryptoServerStream::KeyUpdateSupportedLocally() const {
-  return false;
-}
-
 std::unique_ptr<QuicDecrypter>
 QuicCryptoServerStream::AdvanceKeysAndCreateCurrentOneRttDecrypter() {
   // Key update is only defined in QUIC+TLS.
@@ -454,10 +452,11 @@ QuicCryptoServerStream::CreateCurrentOneRttEncrypter() {
 }
 
 void QuicCryptoServerStream::ProcessClientHello(
-    QuicReferenceCountedPointer<ValidateClientHelloResultCallback::Result>
+    quiche::QuicheReferenceCountedPointer<
+        ValidateClientHelloResultCallback::Result>
         result,
     std::unique_ptr<ProofSource::Details> proof_source_details,
-    std::unique_ptr<ProcessClientHelloResultCallback> done_cb) {
+    std::shared_ptr<ProcessClientHelloResultCallback> done_cb) {
   proof_source_details_ = std::move(proof_source_details);
   const CryptoHandshakeMessage& message = result->client_hello;
   std::string error_details;
@@ -511,12 +510,10 @@ QuicCryptoServerStream::ValidateCallback::ValidateCallback(
     QuicCryptoServerStream* parent)
     : parent_(parent) {}
 
-void QuicCryptoServerStream::ValidateCallback::Cancel() {
-  parent_ = nullptr;
-}
+void QuicCryptoServerStream::ValidateCallback::Cancel() { parent_ = nullptr; }
 
 void QuicCryptoServerStream::ValidateCallback::Run(
-    QuicReferenceCountedPointer<Result> result,
+    quiche::QuicheReferenceCountedPointer<Result> result,
     std::unique_ptr<ProofSource::Details> details) {
   if (parent_ != nullptr) {
     parent_->FinishProcessingHandshakeMessage(std::move(result),
@@ -529,5 +526,23 @@ const QuicSocketAddress QuicCryptoServerStream::GetClientAddress() {
 }
 
 SSL* QuicCryptoServerStream::GetSsl() const { return nullptr; }
+
+bool QuicCryptoServerStream::IsCryptoFrameExpectedForEncryptionLevel(
+    EncryptionLevel /*level*/) const {
+  return true;
+}
+
+EncryptionLevel
+QuicCryptoServerStream::GetEncryptionLevelToSendCryptoDataOfSpace(
+    PacketNumberSpace space) const {
+  if (space == INITIAL_DATA) {
+    return ENCRYPTION_INITIAL;
+  }
+  if (space == APPLICATION_DATA) {
+    return ENCRYPTION_ZERO_RTT;
+  }
+  QUICHE_DCHECK(false);
+  return NUM_ENCRYPTION_LEVELS;
+}
 
 }  // namespace quic

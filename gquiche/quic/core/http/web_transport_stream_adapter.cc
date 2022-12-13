@@ -6,18 +6,16 @@
 
 #include "gquiche/quic/core/http/web_transport_http3.h"
 #include "gquiche/quic/core/quic_error_codes.h"
+#include "gquiche/common/platform/api/quiche_mem_slice.h"
 
 namespace quic {
 
 WebTransportStreamAdapter::WebTransportStreamAdapter(
-    QuicSession* session,
-    QuicStream* stream,
-    QuicStreamSequencer* sequencer)
+    QuicSession* session, QuicStream* stream, QuicStreamSequencer* sequencer)
     : session_(session), stream_(stream), sequencer_(sequencer) {}
 
 WebTransportStream::ReadResult WebTransportStreamAdapter::Read(
-    char* buffer,
-    size_t buffer_size) {
+    char* buffer, size_t buffer_size) {
   iovec iov;
   iov.iov_base = buffer;
   iov.iov_len = buffer_size;
@@ -45,7 +43,7 @@ bool WebTransportStreamAdapter::Write(absl::string_view data) {
     return false;
   }
 
-  QuicMemSlice memslice(QuicBuffer::Copy(
+  quiche::QuicheMemSlice memslice(quiche::QuicheBuffer::Copy(
       session_->connection()->helper()->GetStreamSendBufferAllocator(), data));
   QuicConsumedData consumed =
       stream_->WriteMemSlices(absl::MakeSpan(&memslice, 1), /*fin=*/false);
@@ -76,7 +74,7 @@ bool WebTransportStreamAdapter::SendFin() {
     return false;
   }
 
-  QuicMemSlice empty;
+  quiche::QuicheMemSlice empty;
   QuicConsumedData consumed =
       stream_->WriteMemSlices(absl::MakeSpan(&empty, 1), /*fin=*/true);
   QUICHE_DCHECK_EQ(consumed.bytes_consumed, 0u);

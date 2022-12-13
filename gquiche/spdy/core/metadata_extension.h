@@ -6,8 +6,10 @@
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
+#include "gquiche/common/platform/api/quiche_export.h"
+#include "gquiche/spdy/core/hpack/hpack_encoder.h"
 #include "gquiche/spdy/core/http2_frame_decoder_adapter.h"
-#include "gquiche/spdy/core/spdy_header_block.h"
+#include "gquiche/spdy/core/http2_header_block.h"
 #include "gquiche/spdy/core/spdy_protocol.h"
 #include "gquiche/spdy/core/zero_copy_output_buffer.h"
 
@@ -19,9 +21,10 @@ namespace spdy {
 // a setting with a setting ID of kMetadataExtensionId and a value of 1.
 //
 // Metadata is represented as a HPACK header block with literal encoding.
-class MetadataVisitor : public spdy::ExtensionVisitorInterface {
+class QUICHE_EXPORT_PRIVATE MetadataVisitor
+    : public spdy::ExtensionVisitorInterface {
  public:
-  using MetadataPayload = spdy::SpdyHeaderBlock;
+  using MetadataPayload = spdy::Http2HeaderBlock;
 
   static_assert(!std::is_copy_constructible<MetadataPayload>::value,
                 "MetadataPayload should be a move-only type!");
@@ -88,27 +91,31 @@ class MetadataVisitor : public spdy::ExtensionVisitorInterface {
   MetadataSupportState peer_supports_metadata_;
 };
 
-// A class that serializes metadata blocks as sequences of frames.
-class MetadataSerializer {
+// This class uses an HpackEncoder to serialize a METADATA block as a series of
+// METADATA frames.
+class QUICHE_EXPORT_PRIVATE MetadataFrameSequence {
  public:
-  using MetadataPayload = spdy::SpdyHeaderBlock;
+  MetadataFrameSequence(SpdyStreamId stream_id, spdy::Http2HeaderBlock payload);
 
-  class FrameSequence {
-   public:
-    virtual ~FrameSequence() {}
+  // Copies are not allowed.
+  MetadataFrameSequence(const MetadataFrameSequence& other) = delete;
+  MetadataFrameSequence& operator=(const MetadataFrameSequence& other) = delete;
 
-    // Returns nullptr once the sequence has been exhausted.
-    virtual std::unique_ptr<spdy::SpdyFrameIR> Next() = 0;
-  };
+  // True if Next() would return non-nullptr.
+  bool HasNext() const;
 
-  MetadataSerializer() {}
+  // Returns the next HTTP/2 METADATA frame for this block, unless the block has
+  // been entirely serialized in frames returned by previous calls of Next(), in
+  // which case returns nullptr.
+  std::unique_ptr<spdy::SpdyFrameIR> Next();
 
-  MetadataSerializer(const MetadataSerializer&) = delete;
-  MetadataSerializer& operator=(const MetadataSerializer&) = delete;
+  SpdyStreamId stream_id() const { return stream_id_; }
 
-  // Returns nullptr on failure.
-  std::unique_ptr<FrameSequence> FrameSequenceForPayload(
-      spdy::SpdyStreamId stream_id, MetadataPayload payload);
+ private:
+  SpdyStreamId stream_id_;
+  Http2HeaderBlock payload_;
+  HpackEncoder encoder_;
+  std::unique_ptr<HpackEncoder::ProgressiveEncoder> progressive_encoder_;
 };
 
 }  // namespace spdy

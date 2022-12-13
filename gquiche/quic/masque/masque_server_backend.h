@@ -9,6 +9,7 @@
 #include "gquiche/quic/masque/masque_utils.h"
 #include "gquiche/quic/platform/api/quic_export.h"
 #include "gquiche/quic/tools/quic_memory_cache_backend.h"
+#include "gquiche/spdy/core/http2_header_block.h"
 
 namespace quic {
 
@@ -21,9 +22,7 @@ class QUIC_NO_EXPORT MasqueServerBackend : public QuicMemoryCacheBackend {
   class QUIC_NO_EXPORT BackendClient {
    public:
     virtual std::unique_ptr<QuicBackendResponse> HandleMasqueRequest(
-        const std::string& masque_path,
         const spdy::Http2HeaderBlock& request_headers,
-        const std::string& request_body,
         QuicSimpleServerBackend::RequestHandler* request_handler) = 0;
     virtual ~BackendClient() = default;
   };
@@ -41,6 +40,8 @@ class QUIC_NO_EXPORT MasqueServerBackend : public QuicMemoryCacheBackend {
       const spdy::Http2HeaderBlock& request_headers,
       const std::string& request_body,
       QuicSimpleServerBackend::RequestHandler* request_handler) override;
+  void HandleConnectHeaders(const spdy::Http2HeaderBlock& request_headers,
+                            RequestHandler* request_handler) override;
 
   void CloseBackendResponseStream(
       QuicSimpleServerBackend::RequestHandler* request_handler) override;
@@ -56,7 +57,6 @@ class QUIC_NO_EXPORT MasqueServerBackend : public QuicMemoryCacheBackend {
   // Handle MASQUE request.
   bool MaybeHandleMasqueRequest(
       const spdy::Http2HeaderBlock& request_headers,
-      const std::string& request_body,
       QuicSimpleServerBackend::RequestHandler* request_handler);
 
   MasqueMode masque_mode_;
@@ -66,9 +66,9 @@ class QUIC_NO_EXPORT MasqueServerBackend : public QuicMemoryCacheBackend {
     BackendClient* backend_client;
     std::vector<std::unique_ptr<QuicBackendResponse>> responses;
   };
-  absl::
-      flat_hash_map<QuicConnectionId, BackendClientState, QuicConnectionIdHash>
-          backend_client_states_;
+  absl::flat_hash_map<QuicConnectionId, BackendClientState,
+                      QuicConnectionIdHash>
+      backend_client_states_;
 };
 
 }  // namespace quic

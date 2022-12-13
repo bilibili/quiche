@@ -9,8 +9,7 @@
 #include "gquiche/quic/core/quic_session.h"
 
 namespace quic {
-QpackSendStream::QpackSendStream(QuicStreamId id,
-                                 QuicSession* session,
+QpackSendStream::QpackSendStream(QuicStreamId id, QuicSession* session,
                                  uint64_t http3_stream_type)
     : QuicStream(id, session, /*is_static = */ true, WRITE_UNIDIRECTIONAL),
       http3_stream_type_(http3_stream_type),
@@ -32,6 +31,10 @@ void QpackSendStream::WriteStreamData(absl::string_view data) {
   QuicConnection::ScopedPacketFlusher flusher(session()->connection());
   MaybeSendStreamType();
   WriteOrBufferData(data, false, nullptr);
+}
+
+uint64_t QpackSendStream::NumBytesBuffered() const {
+  return QuicStream::BufferedDataBytes();
 }
 
 void QpackSendStream::MaybeSendStreamType() {

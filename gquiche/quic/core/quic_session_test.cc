@@ -28,7 +28,6 @@
 #include "gquiche/quic/core/quic_versions.h"
 #include "gquiche/quic/platform/api/quic_expect_bug.h"
 #include "gquiche/quic/platform/api/quic_flags.h"
-#include "gquiche/quic/platform/api/quic_mem_slice_storage.h"
 #include "gquiche/quic/platform/api/quic_test.h"
 #include "gquiche/quic/test_tools/mock_quic_session_visitor.h"
 #include "gquiche/quic/test_tools/quic_config_peer.h"
@@ -39,6 +38,8 @@
 #include "gquiche/quic/test_tools/quic_stream_peer.h"
 #include "gquiche/quic/test_tools/quic_stream_send_buffer_peer.h"
 #include "gquiche/quic/test_tools/quic_test_utils.h"
+#include "gquiche/common/platform/api/quiche_logging.h"
+#include "gquiche/common/quiche_mem_slice_storage.h"
 
 using spdy::kV3HighestPriority;
 using spdy::SpdyPriority;
@@ -159,14 +160,9 @@ class TestCryptoStream : public QuicCryptoStream, public QuicCryptoHandshaker {
   }
   void SetServerApplicationStateForResumption(
       std::unique_ptr<ApplicationState> /*application_state*/) override {}
-  MOCK_METHOD(bool, KeyUpdateSupportedLocally, (), (const, override));
   MOCK_METHOD(std::unique_ptr<QuicDecrypter>,
-              AdvanceKeysAndCreateCurrentOneRttDecrypter,
-              (),
-              (override));
-  MOCK_METHOD(std::unique_ptr<QuicEncrypter>,
-              CreateCurrentOneRttEncrypter,
-              (),
+              AdvanceKeysAndCreateCurrentOneRttDecrypter, (), (override));
+  MOCK_METHOD(std::unique_ptr<QuicEncrypter>, CreateCurrentOneRttEncrypter, (),
               (override));
 
   MOCK_METHOD(void, OnCanWrite, (), (override));
@@ -186,12 +182,32 @@ class TestCryptoStream : public QuicCryptoStream, public QuicCryptoHandshaker {
 
   SSL* GetSsl() const override { return nullptr; }
 
+  bool IsCryptoFrameExpectedForEncryptionLevel(
+      EncryptionLevel level) const override {
+    return level != ENCRYPTION_ZERO_RTT;
+  }
+
+  EncryptionLevel GetEncryptionLevelToSendCryptoDataOfSpace(
+      PacketNumberSpace space) const override {
+    switch (space) {
+      case INITIAL_DATA:
+        return ENCRYPTION_INITIAL;
+      case HANDSHAKE_DATA:
+        return ENCRYPTION_HANDSHAKE;
+      case APPLICATION_DATA:
+        return ENCRYPTION_FORWARD_SECURE;
+      default:
+        QUICHE_DCHECK(false);
+        return NUM_ENCRYPTION_LEVELS;
+    }
+  }
+
  private:
   using QuicCryptoStream::session;
 
   bool encryption_established_;
   bool one_rtt_keys_available_;
-  QuicReferenceCountedPointer<QuicCryptoNegotiatedParameters> params_;
+  quiche::QuicheReferenceCountedPointer<QuicCryptoNegotiatedParameters> params_;
 };
 
 class TestStream : public QuicStream {
@@ -199,9 +215,7 @@ class TestStream : public QuicStream {
   TestStream(QuicStreamId id, QuicSession* session, StreamType type)
       : TestStream(id, session, /*is_static=*/false, type) {}
 
-  TestStream(QuicStreamId id,
-             QuicSession* session,
-             bool is_static,
+  TestStream(QuicStreamId id, QuicSession* session, bool is_static,
              StreamType type)
       : QuicStream(id, session, is_static, type) {}
 
@@ -214,8 +228,7 @@ class TestStream : public QuicStream {
   void OnDataAvailable() override {}
 
   MOCK_METHOD(void, OnCanWrite, (), (override));
-  MOCK_METHOD(bool,
-              RetransmitStreamData,
+  MOCK_METHOD(bool, RetransmitStreamData,
               (QuicStreamOffset, QuicByteCount, bool, TransmissionType),
               (override));
 
@@ -226,17 +239,13 @@ class TestSession : public QuicSession {
  public:
   explicit TestSession(QuicConnection* connection,
                        MockQuicSessionVisitor* session_visitor)
-      : QuicSession(connection,
-                    session_visitor,
-                    DefaultQuicConfig(),
+      : QuicSession(connection, session_visitor, DefaultQuicConfig(),
                     CurrentSupportedVersions(),
                     /*num_expected_unidirectional_static_streams = */ 0),
         crypto_stream_(this),
         writev_consumes_all_data_(false),
         uses_pending_streams_(false),
         num_incoming_streams_created_(0) {
-    EXPECT_CALL(*GetMutableCryptoStream(), KeyUpdateSupportedLocally())
-        .WillRepeatedly(Return(false));
     Initialize();
     this->connection()->SetEncrypter(
         ENCRYPTION_FORWARD_SECURE,
@@ -345,9 +354,7 @@ class TestSession : public QuicSession {
     return consumed;
   }
 
-  MOCK_METHOD(void,
-              OnCanCreateNewOutgoingStream,
-              (bool unidirectional),
+  MOCK_METHOD(void, OnCanCreateNewOutgoingStream, (bool unidirectional),
               (override));
 
   void set_writev_consumes_all_data(bool val) {
@@ -355,14 +362,12 @@ class TestSession : public QuicSession {
   }
 
   QuicConsumedData SendStreamData(QuicStream* stream) {
-    struct iovec iov;
     if (!QuicUtils::IsCryptoStreamId(connection()->transport_version(),
                                      stream->id()) &&
         this->connection()->encryption_level() != ENCRYPTION_FORWARD_SECURE) {
       this->connection()->SetDefaultEncryptionLevel(ENCRYPTION_FORWARD_SECURE);
     }
-    MakeIOVector("not empty", &iov);
-    QuicStreamPeer::SendBuffer(stream).SaveStreamData(&iov, 1, 0, 9);
+    QuicStreamPeer::SendBuffer(stream).SaveStreamData("not empty");
     QuicConsumedData consumed =
         WritevData(stream->id(), 9, 0, FIN, NOT_RETRANSMISSION,
                    GetEncryptionLevelToSendApplicationData());
@@ -448,11 +453,9 @@ class TestSession : public QuicSession {
 class QuicSessionTestBase : public QuicTestWithParam<ParsedQuicVersion> {
  protected:
   QuicSessionTestBase(Perspective perspective, bool configure_session)
-      : connection_(
-            new StrictMock<MockQuicConnection>(&helper_,
-                                               &alarm_factory_,
-                                               perspective,
-                                               SupportedVersions(GetParam()))),
+      : connection_(new StrictMock<MockQuicConnection>(
+            &helper_, &alarm_factory_, perspective,
+            SupportedVersions(GetParam()))),
         session_(connection_, &session_visitor_),
         configure_session_(configure_session) {
     session_.config()->SetInitialStreamFlowControlWindowToSend(
@@ -585,8 +588,7 @@ class QuicSessionTestBase : public QuicTestWithParam<ParsedQuicVersion> {
   }
 
   QuicStreamId StreamCountToId(QuicStreamCount stream_count,
-                               Perspective perspective,
-                               bool bidirectional) {
+                               Perspective perspective, bool bidirectional) {
     // Calculate and build up stream ID rather than use
     // GetFirst... because tests that rely on this method
     // needs to do the stream count where #1 is 0/1/2/3, and not
@@ -615,8 +617,7 @@ class QuicSessionTestServer : public QuicSessionTestBase {
  public:
   // CheckMultiPathResponse validates that a written packet
   // contains both expected path responses.
-  WriteResult CheckMultiPathResponse(const char* buffer,
-                                     size_t buf_len,
+  WriteResult CheckMultiPathResponse(const char* buffer, size_t buf_len,
                                      const QuicIpAddress& /*self_address*/,
                                      const QuicSocketAddress& /*peer_address*/,
                                      PerPacketOptions* /*options*/) {
@@ -651,10 +652,8 @@ class QuicSessionTestServer : public QuicSessionTestBase {
       : QuicSessionTestBase(Perspective::IS_SERVER, /*configure_session=*/true),
         path_frame_buffer1_({0, 1, 2, 3, 4, 5, 6, 7}),
         path_frame_buffer2_({8, 9, 10, 11, 12, 13, 14, 15}),
-        client_framer_(SupportedVersions(GetParam()),
-                       QuicTime::Zero(),
-                       Perspective::IS_CLIENT,
-                       kQuicDefaultConnectionIdLength) {
+        client_framer_(SupportedVersions(GetParam()), QuicTime::Zero(),
+                       Perspective::IS_CLIENT, kQuicDefaultConnectionIdLength) {
     client_framer_.set_visitor(&framer_visitor_);
     client_framer_.SetInitialObfuscators(TestConnectionId());
     if (client_framer_.version().KnowsWhichDecrypterToUse()) {
@@ -671,8 +670,7 @@ class QuicSessionTestServer : public QuicSessionTestBase {
   QuicFramer client_framer_;
 };
 
-INSTANTIATE_TEST_SUITE_P(Tests,
-                         QuicSessionTestServer,
+INSTANTIATE_TEST_SUITE_P(Tests, QuicSessionTestServer,
                          ::testing::ValuesIn(AllSupportedVersions()),
                          ::testing::PrintToStringParamName());
 
@@ -1414,8 +1412,7 @@ TEST_P(QuicSessionTestServer, InvalidGoAway) {
 // Test that server session will send a connectivity probe in response to a
 // connectivity probe on the same path.
 TEST_P(QuicSessionTestServer, ServerReplyToConnectivityProbe) {
-  if (connection_->send_path_response() &&
-      VersionHasIetfQuicFrames(transport_version())) {
+  if (VersionHasIetfQuicFrames(transport_version())) {
     return;
   }
   connection_->SetDefaultEncryptionLevel(ENCRYPTION_FORWARD_SECURE);
@@ -1430,62 +1427,14 @@ TEST_P(QuicSessionTestServer, ServerReplyToConnectivityProbe) {
       QuicConnectionPeer::GetWriter(session_.connection()));
   EXPECT_CALL(*writer, WritePacket(_, _, _, new_peer_address, _))
       .WillOnce(Return(WriteResult(WRITE_STATUS_OK, 0)));
-  if (connection_->send_path_response()) {
-    EXPECT_CALL(*connection_, SendConnectivityProbingPacket(_, _))
-        .WillOnce(
-            Invoke(connection_,
-                   &MockQuicConnection::ReallySendConnectivityProbingPacket));
-  } else {
-    EXPECT_CALL(*connection_, SendConnectivityProbingResponsePacket(_))
-        .WillOnce(Invoke(
-            connection_,
-            &MockQuicConnection::ReallySendConnectivityProbingResponsePacket));
-  }
-  if (VersionHasIetfQuicFrames(transport_version())) {
-    // Need to explicitly do this to emulate the reception of a PathChallenge,
-    // which stores its payload for use in generating the response.
-    connection_->OnPathChallengeFrame(
-        QuicPathChallengeFrame(0, path_frame_buffer1_));
-  }
+
+  EXPECT_CALL(*connection_, SendConnectivityProbingPacket(_, _))
+      .WillOnce(
+          Invoke(connection_,
+                 &MockQuicConnection::ReallySendConnectivityProbingPacket));
   session_.OnPacketReceived(session_.self_address(), new_peer_address,
                             /*is_connectivity_probe=*/true);
   EXPECT_EQ(old_peer_address, session_.peer_address());
-}
-
-// Same as above, but check that if there are two PATH_CHALLENGE frames in the
-// packet, the response has both of them AND we do not do migration.  This for
-// IETF QUIC only.
-TEST_P(QuicSessionTestServer, ServerReplyToConnectivityProbes) {
-  if (connection_->send_path_response() ||
-      !VersionHasIetfQuicFrames(transport_version())) {
-    return;
-  }
-  connection_->SetDefaultEncryptionLevel(ENCRYPTION_FORWARD_SECURE);
-  QuicSocketAddress old_peer_address =
-      QuicSocketAddress(QuicIpAddress::Loopback4(), kTestPort);
-  EXPECT_EQ(old_peer_address, session_.peer_address());
-
-  MockPacketWriter* writer = static_cast<MockPacketWriter*>(
-      QuicConnectionPeer::GetWriter(session_.connection()));
-  // CheckMultiPathResponse validates that the written packet
-  // contains both path responses.
-  EXPECT_CALL(*writer, WritePacket(_, _, _, old_peer_address, _))
-      .WillOnce(Invoke(this, &QuicSessionTestServer::CheckMultiPathResponse));
-
-  EXPECT_CALL(*connection_, SendConnectivityProbingResponsePacket(_))
-      .WillOnce(Invoke(
-          connection_,
-          &MockQuicConnection::ReallySendConnectivityProbingResponsePacket));
-  QuicConnectionPeer::SetLastHeaderFormat(connection_,
-                                          IETF_QUIC_SHORT_HEADER_PACKET);
-  // Need to explicitly do this to emulate the reception of a PathChallenge,
-  // which stores its payload for use in generating the response.
-  connection_->OnPathChallengeFrame(
-      QuicPathChallengeFrame(0, path_frame_buffer1_));
-  connection_->OnPathChallengeFrame(
-      QuicPathChallengeFrame(0, path_frame_buffer2_));
-  session_.OnPacketReceived(session_.self_address(), old_peer_address,
-                            /*is_connectivity_probe=*/true);
 }
 
 TEST_P(QuicSessionTestServer, IncreasedTimeoutAfterCryptoHandshake) {
@@ -2116,8 +2065,7 @@ class QuicSessionTestClient : public QuicSessionTestBase {
                             /*configure_session=*/true) {}
 };
 
-INSTANTIATE_TEST_SUITE_P(Tests,
-                         QuicSessionTestClient,
+INSTANTIATE_TEST_SUITE_P(Tests, QuicSessionTestClient,
                          ::testing::ValuesIn(AllSupportedVersions()),
                          ::testing::PrintToStringParamName());
 
@@ -2292,20 +2240,6 @@ TEST_P(QuicSessionTestClient, MinAckDelaySetOnTheClientQuicConfig) {
   ASSERT_EQ(session_.config()->GetMinAckDelayToSendMs(),
             kDefaultMinAckDelayTimeMs);
   ASSERT_TRUE(session_.connection()->can_receive_ack_frequency_frame());
-}
-
-TEST_P(QuicSessionTestClient, KeyUpdateNotSupportedLocally) {
-  EXPECT_CALL(*session_.GetMutableCryptoStream(), KeyUpdateSupportedLocally())
-      .WillOnce(Return(false));
-  session_.Initialize();
-  EXPECT_FALSE(session_.config()->KeyUpdateSupportedLocally());
-}
-
-TEST_P(QuicSessionTestClient, KeyUpdateSupportedLocally) {
-  EXPECT_CALL(*session_.GetMutableCryptoStream(), KeyUpdateSupportedLocally())
-      .WillOnce(Return(true));
-  session_.Initialize();
-  EXPECT_TRUE(session_.config()->KeyUpdateSupportedLocally());
 }
 
 TEST_P(QuicSessionTestClient, FailedToCreateStreamIfTooCloseToIdleTimeout) {
@@ -2556,7 +2490,7 @@ TEST_P(QuicSessionTestServer, RetransmitFrames) {
   QuicWindowUpdateFrame window_update(1, stream2->id(), 9);
   QuicFrames frames;
   frames.push_back(QuicFrame(frame1));
-  frames.push_back(QuicFrame(&window_update));
+  frames.push_back(QuicFrame(window_update));
   frames.push_back(QuicFrame(frame2));
   frames.push_back(QuicFrame(frame3));
   EXPECT_FALSE(session_.WillingAndAbleToWrite());
@@ -2570,7 +2504,7 @@ TEST_P(QuicSessionTestServer, RetransmitFrames) {
   EXPECT_CALL(*stream6, RetransmitStreamData(_, _, _, _))
       .WillOnce(Return(true));
   EXPECT_CALL(*send_algorithm, OnApplicationLimited(_));
-  session_.RetransmitFrames(frames, TLP_RETRANSMISSION);
+  session_.RetransmitFrames(frames, PTO_RETRANSMISSION);
 }
 
 // Regression test of b/110082001.
@@ -2766,7 +2700,7 @@ TEST_P(QuicSessionTestServer, WritevDataOnReadUnidirectionalStream) {
       .Times(1);
   std::string body(100, '.');
   struct iovec iov = {const_cast<char*>(body.data()), body.length()};
-  QuicMemSliceStorage storage(
+  quiche::QuicheMemSliceStorage storage(
       &iov, 1, session_.connection()->helper()->GetStreamSendBufferAllocator(),
       1024);
   stream4->WriteMemSlices(storage.ToSpan(), false);
@@ -2782,7 +2716,7 @@ TEST_P(QuicSessionTestServer, WriteMemSlicesOnReadUnidirectionalStream) {
                   QUIC_TRY_TO_WRITE_DATA_ON_READ_UNIDIRECTIONAL_STREAM, _, _))
       .Times(1);
   std::string data(1024, 'a');
-  std::vector<QuicMemSlice> buffers;
+  std::vector<quiche::QuicheMemSlice> buffers;
   buffers.push_back(MemSliceFromString(data));
   buffers.push_back(MemSliceFromString(data));
   stream4->WriteMemSlices(absl::MakeSpan(buffers), false);
@@ -3041,7 +2975,11 @@ TEST_P(QuicSessionTestServer, WriteBufferedCryptoFrames) {
 
   EXPECT_CALL(*connection_, SendCryptoData(ENCRYPTION_INITIAL, 350, 1000))
       .WillOnce(Return(350));
-  EXPECT_CALL(*connection_, SendCryptoData(ENCRYPTION_ZERO_RTT, 1350, 0))
+  EXPECT_CALL(
+      *connection_,
+      SendCryptoData(crypto_stream->GetEncryptionLevelToSendCryptoDataOfSpace(
+                         QuicUtils::GetPacketNumberSpace(ENCRYPTION_ZERO_RTT)),
+                     1350, 0))
       .WillOnce(Return(1350));
   session_.OnCanWrite();
   EXPECT_FALSE(session_.HasPendingHandshake());
@@ -3117,6 +3055,79 @@ TEST_P(QuicSessionTestServer, IncomingStreamWithServerInitiatedStreamId) {
   session_.OnStreamFrame(frame);
 }
 
+// Regression test for b/235204908.
+TEST_P(QuicSessionTestServer, BlockedFrameCausesWriteError) {
+  CompleteHandshake();
+  MockPacketWriter* writer = static_cast<MockPacketWriter*>(
+      QuicConnectionPeer::GetWriter(session_.connection()));
+  EXPECT_CALL(*writer, WritePacket(_, _, _, _, _))
+      .WillOnce(Return(WriteResult(WRITE_STATUS_OK, 0)));
+  // Set a small connection level flow control limit.
+  const uint64_t kWindow = 36;
+  QuicFlowControllerPeer::SetSendWindowOffset(session_.flow_controller(),
+                                              kWindow);
+  auto stream =
+      session_.GetOrCreateStream(GetNthClientInitiatedBidirectionalId(0));
+  // Try to send more data than the flow control limit allows.
+  const uint64_t kOverflow = 15;
+  std::string body(kWindow + kOverflow, 'a');
+  EXPECT_CALL(*connection_, SendControlFrame(_))
+      .WillOnce(testing::InvokeWithoutArgs([this]() {
+        connection_->ReallyCloseConnection(
+            QUIC_PACKET_WRITE_ERROR, "write error",
+            ConnectionCloseBehavior::SILENT_CLOSE);
+        return false;
+      }));
+  std::string msg =
+      absl::StrCat("Marking unknown stream ", stream->id(), " blocked.");
+  if (GetQuicReloadableFlag(
+          quic_donot_mark_stream_write_blocked_if_write_side_closed)) {
+    stream->WriteOrBufferData(body, false, nullptr);
+  } else {
+    EXPECT_QUIC_BUG(stream->WriteOrBufferData(body, false, nullptr), msg);
+  }
+}
+
+TEST_P(QuicSessionTestServer, BufferedCryptoFrameCausesWriteError) {
+  if (!VersionHasIetfQuicFrames(transport_version())) {
+    return;
+  }
+  std::string data(1350, 'a');
+  TestCryptoStream* crypto_stream = session_.GetMutableCryptoStream();
+  // Only consumed 1000 bytes.
+  EXPECT_CALL(*connection_, SendCryptoData(ENCRYPTION_FORWARD_SECURE, 1350, 0))
+      .WillOnce(Return(1000));
+  crypto_stream->WriteCryptoData(ENCRYPTION_FORWARD_SECURE, data);
+  EXPECT_TRUE(session_.HasPendingHandshake());
+  EXPECT_TRUE(session_.WillingAndAbleToWrite());
+
+  EXPECT_CALL(*connection_,
+              SendCryptoData(ENCRYPTION_FORWARD_SECURE, 350, 1000))
+      .WillOnce(Return(0));
+  // Buffer the HANDSHAKE_DONE frame.
+  EXPECT_CALL(*connection_, SendControlFrame(_)).WillOnce(Return(false));
+  CryptoHandshakeMessage msg;
+  session_.GetMutableCryptoStream()->OnHandshakeMessage(msg);
+
+  // Flush both frames.
+  EXPECT_CALL(*connection_,
+              SendCryptoData(ENCRYPTION_FORWARD_SECURE, 350, 1000))
+      .WillOnce(testing::InvokeWithoutArgs([this]() {
+        connection_->ReallyCloseConnection(
+            QUIC_PACKET_WRITE_ERROR, "write error",
+            ConnectionCloseBehavior::SILENT_CLOSE);
+        return 350;
+      }));
+  if (!GetQuicReloadableFlag(
+          quic_no_write_control_frame_upon_connection_close)) {
+    EXPECT_CALL(*connection_, SendControlFrame(_)).WillOnce(Return(false));
+    EXPECT_QUIC_BUG(session_.OnCanWrite(),
+                    "Try to write control frames when connection is closed");
+  } else {
+    session_.OnCanWrite();
+  }
+}
+
 // A client test class that can be used when the automatic configuration is not
 // desired.
 class QuicSessionTestClientUnconfigured : public QuicSessionTestBase {
@@ -3126,8 +3137,7 @@ class QuicSessionTestClientUnconfigured : public QuicSessionTestBase {
                             /*configure_session=*/false) {}
 };
 
-INSTANTIATE_TEST_SUITE_P(Tests,
-                         QuicSessionTestClientUnconfigured,
+INSTANTIATE_TEST_SUITE_P(Tests, QuicSessionTestClientUnconfigured,
                          ::testing::ValuesIn(AllSupportedVersions()),
                          ::testing::PrintToStringParamName());
 

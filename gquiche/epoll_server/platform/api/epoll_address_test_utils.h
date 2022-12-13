@@ -5,11 +5,11 @@
 #ifndef QUICHE_EPOLL_SERVER_PLATFORM_API_EPOLL_ADDRESS_TEST_UTILS_H_
 #define QUICHE_EPOLL_SERVER_PLATFORM_API_EPOLL_ADDRESS_TEST_UTILS_H_
 
-#include "platform/epoll_platform_impl/epoll_address_test_utils_impl.h"
+#include "platform/quiche_platform_impl/epoll_address_test_utils_impl.h"
 
 namespace epoll_server {
 
-int AddressFamilyUnderTest() { return AddressFamilyUnderTestImpl(); }
+inline int AddressFamilyUnderTest() { return AddressFamilyUnderTestImpl(); }
 
 }  // namespace epoll_server
 

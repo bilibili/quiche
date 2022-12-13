@@ -8,6 +8,8 @@
 #include <memory>
 #include <string>
 #include <vector>
+
+#include "absl/types/span.h"
 #include "openssl/ssl.h"
 #include "gquiche/quic/core/frames/quic_ack_frequency_frame.h"
 #include "gquiche/quic/core/quic_framer.h"
@@ -47,6 +49,9 @@ class QUIC_NO_EXPORT TlsChloExtractor
   std::string server_name() const { return server_name_; }
   bool resumption_attempted() const { return resumption_attempted_; }
   bool early_data_attempted() const { return early_data_attempted_; }
+  absl::Span<const uint8_t> client_hello_bytes() const {
+    return client_hello_bytes_;
+  }
 
   // Converts |state| to a human-readable string suitable for logging.
   static std::string StateToString(State state);
@@ -59,6 +64,13 @@ class QUIC_NO_EXPORT TlsChloExtractor
   bool HasParsedFullChlo() const {
     return state_ == State::kParsedFullSinglePacketChlo ||
            state_ == State::kParsedFullMultiPacketChlo;
+  }
+
+  // Returns the TLS alert that caused the unrecoverable error, if any.
+  absl::optional<uint8_t> tls_alert() const {
+    QUICHE_DCHECK(!tls_alert_.has_value() ||
+                  state_ == State::kUnrecoverableFailure);
+    return tls_alert_;
   }
 
   // Methods from QuicFramerVisitorInterface.
@@ -206,23 +218,17 @@ class QUIC_NO_EXPORT TlsChloExtractor
   // BoringSSL static TLS callbacks.
   static enum ssl_select_cert_result_t SelectCertCallback(
       const SSL_CLIENT_HELLO* client_hello);
-  static int SetReadSecretCallback(SSL* ssl,
-                                   enum ssl_encryption_level_t level,
+  static int SetReadSecretCallback(SSL* ssl, enum ssl_encryption_level_t level,
                                    const SSL_CIPHER* cipher,
-                                   const uint8_t* secret,
-                                   size_t secret_length);
-  static int SetWriteSecretCallback(SSL* ssl,
-                                    enum ssl_encryption_level_t level,
+                                   const uint8_t* secret, size_t secret_length);
+  static int SetWriteSecretCallback(SSL* ssl, enum ssl_encryption_level_t level,
                                     const SSL_CIPHER* cipher,
                                     const uint8_t* secret,
                                     size_t secret_length);
-  static int WriteMessageCallback(SSL* ssl,
-                                  enum ssl_encryption_level_t level,
-                                  const uint8_t* data,
-                                  size_t len);
+  static int WriteMessageCallback(SSL* ssl, enum ssl_encryption_level_t level,
+                                  const uint8_t* data, size_t len);
   static int FlushFlightCallback(SSL* ssl);
-  static int SendAlertCallback(SSL* ssl,
-                               enum ssl_encryption_level_t level,
+  static int SendAlertCallback(SSL* ssl, enum ssl_encryption_level_t level,
                                uint8_t desc);
 
   // Called by SelectCertCallback.
@@ -254,6 +260,11 @@ class QUIC_NO_EXPORT TlsChloExtractor
   // Whether early data is attempted from the CHLO, indicated by the
   // 'early_data' TLS extension.
   bool early_data_attempted_ = false;
+  // If set, contains the TLS alert that caused an unrecoverable error, which is
+  // an AlertDescription value defined in go/rfc/8446#appendix-B.2.
+  absl::optional<uint8_t> tls_alert_;
+  // Exact TLS message bytes.
+  std::vector<uint8_t> client_hello_bytes_;
 };
 
 // Convenience method to facilitate logging TlsChloExtractor::State.

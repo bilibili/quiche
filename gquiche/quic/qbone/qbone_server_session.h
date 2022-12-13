@@ -35,15 +35,12 @@ class QUIC_EXPORT_PRIVATE QboneServerSession
       public QbonePacketProcessor::StatsInterface {
  public:
   QboneServerSession(const quic::ParsedQuicVersionVector& supported_versions,
-                     QuicConnection* connection,
-                     Visitor* owner,
+                     QuicConnection* connection, Visitor* owner,
                      const QuicConfig& config,
                      const QuicCryptoServerConfig* quic_crypto_server_config,
                      QuicCompressedCertsCache* compressed_certs_cache,
-                     QbonePacketWriter* writer,
-                     QuicIpAddress self_ip,
-                     QuicIpAddress client_ip,
-                     size_t client_ip_subnet_length,
+                     QbonePacketWriter* writer, QuicIpAddress self_ip,
+                     QuicIpAddress client_ip, size_t client_ip_subnet_length,
                      QboneServerControlStream::Handler* handler);
   QboneServerSession(const QboneServerSession&) = delete;
   QboneServerSession& operator=(const QboneServerSession&) = delete;
@@ -76,15 +73,20 @@ class QUIC_EXPORT_PRIVATE QboneServerSession
   // QboneSessionBase interface implementation.
   std::unique_ptr<QuicCryptoStream> CreateCryptoStream() override;
 
-  // Instantiate QboneServerControlStream.
+  // Instantiates QboneServerControlStream.
   void CreateControlStream();
+
+  // Instantiates QboneServerControlStream from the pending stream and returns a
+  // pointer to it.
+  QuicStream* CreateControlStreamFromPendingStream(PendingStream* pending);
 
   // The packet processor.
   QbonePacketProcessor processor_;
 
- private:
   // Config for QUIC crypto server stream, used by the server.
   const QuicCryptoServerConfig* quic_crypto_server_config_;
+
+ private:
   // Used by QUIC crypto server stream to track most recently compressed certs.
   QuicCompressedCertsCache* compressed_certs_cache_;
   // This helper is needed when create QuicCryptoServerStream.

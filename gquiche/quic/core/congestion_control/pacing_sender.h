@@ -50,21 +50,22 @@ class QUIC_EXPORT_PRIVATE PacingSender {
 
   QuicBandwidth max_pacing_rate() const { return max_pacing_rate_; }
 
-  void OnCongestionEvent(bool rtt_updated,
-                         QuicByteCount bytes_in_flight,
+  void OnCongestionEvent(bool rtt_updated, QuicByteCount bytes_in_flight,
                          QuicTime event_time,
                          const AckedPacketVector& acked_packets,
                          const LostPacketVector& lost_packets);
 
-  void OnPacketSent(QuicTime sent_time,
-                    QuicByteCount bytes_in_flight,
-                    QuicPacketNumber packet_number,
-                    QuicByteCount bytes,
+  void OnPacketSent(QuicTime sent_time, QuicByteCount bytes_in_flight,
+                    QuicPacketNumber packet_number, QuicByteCount bytes,
                     HasRetransmittableData has_retransmittable_data);
 
   // Called when application throttles the sending, so that pacing sender stops
   // making up for lost time.
   void OnApplicationLimited();
+
+  void SetStartUpPacingGain(float new_pacing_gain);
+
+  virtual float GetStartUpPacingGain();
 
   // Set burst_tokens_ and initial_burst_size_.
   void SetBurstTokens(uint32_t burst_tokens);
@@ -78,6 +79,8 @@ class QUIC_EXPORT_PRIVATE PacingSender {
     bool allow_burst = (burst_tokens_ > 0 || lumpy_tokens_ > 0);
     return {ideal_next_packet_send_time_, allow_burst};
   }
+
+  uint32_t initial_burst_size() const { return initial_burst_size_; }
 
  protected:
   uint32_t lumpy_tokens() const { return lumpy_tokens_; }

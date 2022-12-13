@@ -11,7 +11,7 @@
 #include "absl/container/flat_hash_set.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/optional.h"
-#include "gquiche/common/platform/default/quiche_platform_impl/quiche_url_utils_impl.h"
+#include "platform/quiche_platform_impl/quiche_url_utils_impl.h"
 
 namespace quiche {
 

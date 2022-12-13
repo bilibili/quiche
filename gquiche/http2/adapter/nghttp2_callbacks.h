@@ -16,11 +16,8 @@ namespace callbacks {
 // Http2VisitorInterface.
 
 // Callback once the library is ready to send serialized frames.
-ssize_t OnReadyToSend(nghttp2_session* session,
-                      const uint8_t* data,
-                      size_t length,
-                      int flags,
-                      void* user_data);
+ssize_t OnReadyToSend(nghttp2_session* session, const uint8_t* data,
+                      size_t length, int flags, void* user_data);
 
 // Callback once a frame header has been received.
 int OnBeginFrame(nghttp2_session* session, const nghttp2_frame_hd* header,
@@ -31,8 +28,7 @@ int OnFrameReceived(nghttp2_session* session, const nghttp2_frame* frame,
                     void* user_data);
 
 // Callback at the start of a frame carrying headers.
-int OnBeginHeaders(nghttp2_session* session,
-                   const nghttp2_frame* frame,
+int OnBeginHeaders(nghttp2_session* session, const nghttp2_frame* frame,
                    void* user_data);
 
 // Callback once a name-value header has been received.
@@ -47,6 +43,10 @@ int OnBeforeFrameSent(nghttp2_session* session, const nghttp2_frame* frame,
 // Invoked immediately after a frame is sent.
 int OnFrameSent(nghttp2_session* session, const nghttp2_frame* frame,
                 void* user_data);
+
+// Invoked when a non-DATA frame is not sent because of an error.
+int OnFrameNotSent(nghttp2_session* session, const nghttp2_frame* frame,
+                   int lib_error_code, void* user_data);
 
 // Invoked when an invalid frame is received.
 int OnInvalidFrameReceived(nghttp2_session* session, const nghttp2_frame* frame,

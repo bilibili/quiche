@@ -106,8 +106,8 @@ TlsConnection::TlsConnection(SSL_CTX* ssl_ctx,
         ssl(), ssl_config_.signing_algorithm_prefs->data(),
         ssl_config_.signing_algorithm_prefs->size());
   }
-  if (ssl_config.disable_ticket_support.has_value()) {
-    if (*ssl_config.disable_ticket_support) {
+  if (ssl_config_.disable_ticket_support.has_value()) {
+    if (*ssl_config_.disable_ticket_support) {
       SSL_set_options(ssl(), SSL_OP_NO_TICKET);
     }
   }
@@ -118,6 +118,11 @@ void TlsConnection::EnableInfoCallback() {
       ssl(), +[](const SSL* ssl, int type, int value) {
         ConnectionFromSsl(ssl)->delegate_->InfoCallback(type, value);
       });
+}
+
+void TlsConnection::DisableTicketSupport() {
+  ssl_config_.disable_ticket_support = true;
+  SSL_set_options(ssl(), SSL_OP_NO_TICKET);
 }
 
 // static
@@ -153,12 +158,9 @@ int TlsConnection::SetReadSecretCallback(SSL* ssl,
                                          const SSL_CIPHER* cipher,
                                          const uint8_t* secret,
                                          size_t secret_length) {
-  // TODO(nharper): replace this vector with a span (which unfortunately doesn't
-  // yet exist in quic/platform/api).
-  std::vector<uint8_t> secret_vec(secret, secret + secret_length);
   TlsConnection::Delegate* delegate = ConnectionFromSsl(ssl)->delegate_;
   if (!delegate->SetReadSecret(QuicEncryptionLevel(level), cipher,
-                               secret_vec)) {
+                               absl::MakeSpan(secret, secret_length))) {
     return 0;
   }
   return 1;
@@ -170,19 +172,16 @@ int TlsConnection::SetWriteSecretCallback(SSL* ssl,
                                           const SSL_CIPHER* cipher,
                                           const uint8_t* secret,
                                           size_t secret_length) {
-  // TODO(nharper): replace this vector with a span (which unfortunately doesn't
-  // yet exist in quic/platform/api).
-  std::vector<uint8_t> secret_vec(secret, secret + secret_length);
   TlsConnection::Delegate* delegate = ConnectionFromSsl(ssl)->delegate_;
-  delegate->SetWriteSecret(QuicEncryptionLevel(level), cipher, secret_vec);
+  delegate->SetWriteSecret(QuicEncryptionLevel(level), cipher,
+                           absl::MakeSpan(secret, secret_length));
   return 1;
 }
 
 // static
 int TlsConnection::WriteMessageCallback(SSL* ssl,
                                         enum ssl_encryption_level_t level,
-                                        const uint8_t* data,
-                                        size_t len) {
+                                        const uint8_t* data, size_t len) {
   ConnectionFromSsl(ssl)->delegate_->WriteMessage(
       QuicEncryptionLevel(level),
       absl::string_view(reinterpret_cast<const char*>(data), len));

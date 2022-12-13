@@ -22,10 +22,8 @@
 namespace quic {
 
 TlsClientHandshaker::TlsClientHandshaker(
-    const QuicServerId& server_id,
-    QuicCryptoStream* stream,
-    QuicSession* session,
-    std::unique_ptr<ProofVerifyContext> verify_context,
+    const QuicServerId& server_id, QuicCryptoStream* stream,
+    QuicSession* session, std::unique_ptr<ProofVerifyContext> verify_context,
     QuicCryptoClientConfig* crypto_config,
     QuicCryptoClientStream::ProofHandler* proof_handler,
     bool has_application_state)
@@ -40,15 +38,7 @@ TlsClientHandshaker::TlsClientHandshaker(
       pre_shared_key_(crypto_config->pre_shared_key()),
       crypto_negotiated_params_(new QuicCryptoNegotiatedParameters),
       has_application_state_(has_application_state),
-      crypto_config_(crypto_config),
       tls_connection_(crypto_config->ssl_ctx(), this, session->GetSSLConfig()) {
-  if (!GetQuicReloadableFlag(quic_tls_use_token_in_session_cache)) {
-    std::string token =
-        crypto_config->LookupOrCreate(server_id)->source_address_token();
-    if (!token.empty()) {
-      session->SetSourceAddressTokenToSend(token);
-    }
-  }
   if (crypto_config->tls_signature_algorithms().has_value()) {
     SSL_set1_sigalgs_list(ssl(),
                           crypto_config->tls_signature_algorithms()->c_str());
@@ -85,13 +75,9 @@ bool TlsClientHandshaker::CryptoConnect() {
 
   // TODO(b/193650832) Add SetFromConfig to QUIC handshakers and remove reliance
   // on session pointer.
-  const bool permutes_tls_extensions = session()->permutes_tls_extensions();
-  if (!permutes_tls_extensions) {
-    QUIC_DLOG(INFO) << "Disabling TLS extension permutation";
-  }
 #if BORINGSSL_API_VERSION >= 16
   // Ask BoringSSL to randomize the order of TLS extensions.
-  SSL_set_permute_extensions(ssl(), permutes_tls_extensions);
+  SSL_set_permute_extensions(ssl(), true);
 #endif  // BORINGSSL_API_VERSION
 
   // Set the SNI to send, if any.
@@ -127,8 +113,7 @@ bool TlsClientHandshaker::CryptoConnect() {
   }
   if (cached_state_) {
     SSL_set_session(ssl(), cached_state_->tls_session.get());
-    if (GetQuicReloadableFlag(quic_tls_use_token_in_session_cache) &&
-        !cached_state_->token.empty()) {
+    if (!cached_state_->token.empty()) {
       session()->SetSourceAddressTokenToSend(cached_state_->token);
     }
   }
@@ -209,15 +194,17 @@ bool TlsClientHandshaker::SetAlpn() {
 
   // Enable ALPS only for versions that use HTTP/3 frames.
   for (const std::string& alpn_string : alpns) {
-    ParsedQuicVersion version = ParseQuicVersionString(alpn_string);
-    if (!version.IsKnown() || !version.UsesHttp3()) {
-      continue;
-    }
-    if (SSL_add_application_settings(
-            ssl(), reinterpret_cast<const uint8_t*>(alpn_string.data()),
-            alpn_string.size(), nullptr, /* settings_len = */ 0) != 1) {
-      QUIC_BUG(quic_bug_10576_7) << "Failed to enable ALPS.";
-      return false;
+    for (const ParsedQuicVersion& version : session()->supported_versions()) {
+      if (!version.UsesHttp3() || AlpnForVersion(version) != alpn_string) {
+        continue;
+      }
+      if (SSL_add_application_settings(
+              ssl(), reinterpret_cast<const uint8_t*>(alpn_string.data()),
+              alpn_string.size(), nullptr, /* settings_len = */ 0) != 1) {
+        QUIC_BUG(quic_bug_10576_7) << "Failed to enable ALPS.";
+        return false;
+      }
+      break;
     }
   }
 
@@ -240,16 +227,12 @@ bool TlsClientHandshaker::SetTransportParameters() {
   if (!handshaker_delegate()->FillTransportParameters(&params)) {
     return false;
   }
-  if (!user_agent_id_.empty()) {
-    params.user_agent_id = user_agent_id_;
-  }
 
   // Notify QuicConnectionDebugVisitor.
   session()->connection()->OnTransportParametersSent(params);
 
   std::vector<uint8_t> param_bytes;
-  return SerializeTransportParameters(session()->connection()->version(),
-                                      params, &param_bytes) &&
+  return SerializeTransportParameters(params, &param_bytes) &&
          SSL_set_quic_transport_params(ssl(), param_bytes.data(),
                                        param_bytes.size()) == 1;
 }
@@ -329,9 +312,7 @@ bool TlsClientHandshaker::ProcessTransportParameters(
   return true;
 }
 
-int TlsClientHandshaker::num_sent_client_hellos() const {
-  return 0;
-}
+int TlsClientHandshaker::num_sent_client_hellos() const { return 0; }
 
 bool TlsClientHandshaker::IsResumption() const {
   QUIC_BUG_IF(quic_bug_12736_1, !one_rtt_keys_available());
@@ -358,9 +339,7 @@ int TlsClientHandshaker::num_scup_messages_received() const {
   return 0;
 }
 
-std::string TlsClientHandshaker::chlo_hash() const {
-  return "";
-}
+std::string TlsClientHandshaker::chlo_hash() const { return ""; }
 
 bool TlsClientHandshaker::ExportKeyingMaterial(absl::string_view label,
                                                absl::string_view context,
@@ -371,6 +350,24 @@ bool TlsClientHandshaker::ExportKeyingMaterial(absl::string_view label,
 
 bool TlsClientHandshaker::encryption_established() const {
   return encryption_established_;
+}
+
+bool TlsClientHandshaker::IsCryptoFrameExpectedForEncryptionLevel(
+    EncryptionLevel level) const {
+  return level != ENCRYPTION_ZERO_RTT;
+}
+
+EncryptionLevel TlsClientHandshaker::GetEncryptionLevelToSendCryptoDataOfSpace(
+    PacketNumberSpace space) const {
+  switch (space) {
+    case INITIAL_DATA:
+      return ENCRYPTION_INITIAL;
+    case HANDSHAKE_DATA:
+      return ENCRYPTION_HANDSHAKE;
+    default:
+      QUICHE_DCHECK(false);
+      return NUM_ENCRYPTION_LEVELS;
+  }
 }
 
 bool TlsClientHandshaker::one_rtt_keys_available() const {
@@ -386,17 +383,11 @@ CryptoMessageParser* TlsClientHandshaker::crypto_message_parser() {
   return TlsHandshaker::crypto_message_parser();
 }
 
-HandshakeState TlsClientHandshaker::GetHandshakeState() const {
-  return state_;
-}
+HandshakeState TlsClientHandshaker::GetHandshakeState() const { return state_; }
 
 size_t TlsClientHandshaker::BufferSizeLimitForLevel(
     EncryptionLevel level) const {
   return TlsHandshaker::BufferSizeLimitForLevel(level);
-}
-
-bool TlsClientHandshaker::KeyUpdateSupportedLocally() const {
-  return true;
 }
 
 std::unique_ptr<QuicDecrypter>
@@ -440,21 +431,14 @@ void TlsClientHandshaker::OnNewTokenReceived(absl::string_view token) {
   if (token.empty()) {
     return;
   }
-  if (GetQuicReloadableFlag(quic_tls_use_token_in_session_cache)) {
-    if (session_cache_ != nullptr) {
-      session_cache_->OnNewTokenReceived(server_id_, token);
-    }
-  } else {
-    QuicCryptoClientConfig::CachedState* cached =
-        crypto_config_->LookupOrCreate(server_id_);
-    cached->set_source_address_token(token);
+  if (session_cache_ != nullptr) {
+    session_cache_->OnNewTokenReceived(server_id_, token);
   }
 }
 
 void TlsClientHandshaker::SetWriteSecret(
-    EncryptionLevel level,
-    const SSL_CIPHER* cipher,
-    const std::vector<uint8_t>& write_secret) {
+    EncryptionLevel level, const SSL_CIPHER* cipher,
+    absl::Span<const uint8_t> write_secret) {
   if (is_connection_closed()) {
     return;
   }
@@ -478,10 +462,8 @@ void TlsClientHandshaker::OnHandshakeConfirmed() {
 }
 
 QuicAsyncStatus TlsClientHandshaker::VerifyCertChain(
-    const std::vector<std::string>& certs,
-    std::string* error_details,
-    std::unique_ptr<ProofVerifyDetails>* details,
-    uint8_t* out_alert,
+    const std::vector<std::string>& certs, std::string* error_details,
+    std::unique_ptr<ProofVerifyDetails>* details, uint8_t* out_alert,
     std::unique_ptr<ProofVerifierCallback> callback) {
   const uint8_t* ocsp_response_raw;
   size_t ocsp_response_len;

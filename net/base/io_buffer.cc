@@ -4,7 +4,7 @@
 
 #include "gquiche/common/platform/api/quiche_logging.h"
 
-using namespace quic;
+using namespace quiche;
 
 namespace net {
 
@@ -41,12 +41,12 @@ IOBufferWithSize::~IOBufferWithSize() = default;
 
 
 DrainableIOBuffer::DrainableIOBuffer(
-    QuicReferenceCountedPointer<IOBuffer> base, int size)
+    QuicheReferenceCountedPointer<IOBuffer> base, int size)
     : IOBuffer(base->data()), base_(std::move(base)), size_(size), used_(0) {
 }
 
 DrainableIOBuffer::DrainableIOBuffer(
-    QuicReferenceCountedPointer<IOBuffer> base, size_t size)
+    QuicheReferenceCountedPointer<IOBuffer> base, size_t size)
     : IOBuffer(base->data()), base_(std::move(base)), size_(size), used_(0) {
 }
 

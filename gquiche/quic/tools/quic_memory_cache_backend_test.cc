@@ -11,6 +11,7 @@
 #include "gquiche/quic/platform/api/quic_test.h"
 #include "gquiche/quic/tools/quic_backend_response.h"
 #include "gquiche/common/platform/api/quiche_file_utils.h"
+#include "gquiche/common/platform/api/quiche_test.h"
 
 namespace quic {
 namespace test {
@@ -30,7 +31,9 @@ class QuicMemoryCacheBackendTest : public QuicTest {
     (*headers)[":scheme"] = "https";
   }
 
-  std::string CacheDirectory() { return QuicGetTestMemoryCachePath(); }
+  std::string CacheDirectory() {
+    return quiche::test::QuicheGetTestMemoryCachePath();
+  }
 
   QuicMemoryCacheBackend cache_;
 };
@@ -93,36 +96,6 @@ TEST_F(QuicMemoryCacheBackendTest, MAYBE_ReadsCacheDir) {
   // Connection headers are not valid in HTTP/2.
   EXPECT_FALSE(response->headers().contains("connection"));
   EXPECT_LT(0U, response->body().length());
-}
-
-// TODO(crbug.com/1249712) This test is failing on iOS.
-#if defined(OS_IOS)
-#define MAYBE_ReadsCacheDirWithServerPushResource \
-  DISABLED_ReadsCacheDirWithServerPushResource
-#else
-#define MAYBE_ReadsCacheDirWithServerPushResource \
-  ReadsCacheDirWithServerPushResource
-#endif
-TEST_F(QuicMemoryCacheBackendTest, MAYBE_ReadsCacheDirWithServerPushResource) {
-  cache_.InitializeBackend(CacheDirectory() + "_with_push");
-  std::list<ServerPushInfo> resources =
-      cache_.GetServerPushResources("test.example.com/");
-  ASSERT_EQ(1UL, resources.size());
-}
-
-// TODO(crbug.com/1249712) This test is failing on iOS.
-#if defined(OS_IOS)
-#define MAYBE_ReadsCacheDirWithServerPushResources \
-  DISABLED_ReadsCacheDirWithServerPushResources
-#else
-#define MAYBE_ReadsCacheDirWithServerPushResources \
-  ReadsCacheDirWithServerPushResources
-#endif
-TEST_F(QuicMemoryCacheBackendTest, MAYBE_ReadsCacheDirWithServerPushResources) {
-  cache_.InitializeBackend(CacheDirectory() + "_with_push");
-  std::list<ServerPushInfo> resources =
-      cache_.GetServerPushResources("test.example.com/index2.html");
-  ASSERT_EQ(2UL, resources.size());
 }
 
 // TODO(crbug.com/1249712) This test is failing on iOS.

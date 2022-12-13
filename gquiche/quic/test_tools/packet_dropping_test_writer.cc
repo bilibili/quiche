@@ -4,7 +4,6 @@
 
 #include "gquiche/quic/test_tools/packet_dropping_test_writer.h"
 
-#include "gquiche/quic/core/quic_epoll_connection_helper.h"
 #include "gquiche/quic/platform/api/quic_logging.h"
 
 namespace quic {
@@ -78,8 +77,7 @@ PacketDroppingTestWriter::~PacketDroppingTestWriter() {
 }
 
 void PacketDroppingTestWriter::Initialize(
-    QuicConnectionHelperInterface* helper,
-    QuicAlarmFactory* alarm_factory,
+    QuicConnectionHelperInterface* helper, QuicAlarmFactory* alarm_factory,
     std::unique_ptr<Delegate> on_can_write) {
   clock_ = helper->GetClock();
   write_unblocked_alarm_.reset(
@@ -89,11 +87,8 @@ void PacketDroppingTestWriter::Initialize(
 }
 
 WriteResult PacketDroppingTestWriter::WritePacket(
-    const char* buffer,
-    size_t buf_len,
-    const QuicIpAddress& self_address,
-    const QuicSocketAddress& peer_address,
-    PerPacketOptions* options) {
+    const char* buffer, size_t buf_len, const QuicIpAddress& self_address,
+    const QuicSocketAddress& peer_address, PerPacketOptions* options) {
   ++num_calls_to_write_;
   ReleaseOldPackets();
 
@@ -239,17 +234,12 @@ void PacketDroppingTestWriter::SetDelayAlarm(QuicTime new_deadline) {
   delay_alarm_->Set(new_deadline);
 }
 
-void PacketDroppingTestWriter::OnCanWrite() {
-  on_can_write_->OnCanWrite();
-}
+void PacketDroppingTestWriter::OnCanWrite() { on_can_write_->OnCanWrite(); }
 
 PacketDroppingTestWriter::DelayedWrite::DelayedWrite(
-    const char* buffer,
-    size_t buf_len,
-    const QuicIpAddress& self_address,
+    const char* buffer, size_t buf_len, const QuicIpAddress& self_address,
     const QuicSocketAddress& peer_address,
-    std::unique_ptr<PerPacketOptions> options,
-    QuicTime send_time)
+    std::unique_ptr<PerPacketOptions> options, QuicTime send_time)
     : buffer(buffer, buf_len),
       self_address(self_address),
       peer_address(peer_address),

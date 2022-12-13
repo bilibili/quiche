@@ -15,8 +15,8 @@
 #include "gquiche/quic/core/crypto/quic_crypto_proof.h"
 #include "gquiche/quic/core/quic_versions.h"
 #include "gquiche/quic/platform/api/quic_export.h"
-#include "gquiche/quic/platform/api/quic_reference_counted.h"
 #include "gquiche/quic/platform/api/quic_socket_address.h"
+#include "gquiche/common/platform/api/quiche_reference_counted.h"
 
 namespace quic {
 
@@ -41,7 +41,7 @@ class QUIC_EXPORT_PRIVATE ProofSource {
  public:
   // Chain is a reference-counted wrapper for a vector of stringified
   // certificates.
-  struct QUIC_EXPORT_PRIVATE Chain : public QuicReferenceCounted {
+  struct QUIC_EXPORT_PRIVATE Chain : public quiche::QuicheReferenceCounted {
     explicit Chain(const std::vector<std::string>& certs);
     Chain(const Chain&) = delete;
     Chain& operator=(const Chain&) = delete;
@@ -83,7 +83,7 @@ class QUIC_EXPORT_PRIVATE ProofSource {
     // any, gathered during the operation of GetProof.  If no stats are
     // available, this will be nullptr.
     virtual void Run(bool ok,
-                     const QuicReferenceCountedPointer<Chain>& chain,
+                     const quiche::QuicheReferenceCountedPointer<Chain>& chain,
                      const QuicCryptoProof& proof,
                      std::unique_ptr<Details> details) = 0;
 
@@ -108,8 +108,7 @@ class QUIC_EXPORT_PRIVATE ProofSource {
     // |details| holds a pointer to an object representing the statistics, if
     // any, gathered during the operation of ComputeTlsSignature.  If no stats
     // are available, this will be nullptr.
-    virtual void Run(bool ok,
-                     std::string signature,
+    virtual void Run(bool ok, std::string signature,
                      std::unique_ptr<Details> details) = 0;
 
    private:
@@ -149,7 +148,7 @@ class QUIC_EXPORT_PRIVATE ProofSource {
   //
   // Sets *cert_matched_sni to true if the certificate matched the given
   // hostname, false if a default cert not matching the hostname was used.
-  virtual QuicReferenceCountedPointer<Chain> GetCertChain(
+  virtual quiche::QuicheReferenceCountedPointer<Chain> GetCertChain(
       const QuicSocketAddress& server_address,
       const QuicSocketAddress& client_address, const std::string& hostname,
       bool* cert_matched_sni) = 0;
@@ -164,10 +163,8 @@ class QUIC_EXPORT_PRIVATE ProofSource {
   // Callers should expect that |callback| might be invoked synchronously.
   virtual void ComputeTlsSignature(
       const QuicSocketAddress& server_address,
-      const QuicSocketAddress& client_address,
-      const std::string& hostname,
-      uint16_t signature_algorithm,
-      absl::string_view in,
+      const QuicSocketAddress& client_address, const std::string& hostname,
+      uint16_t signature_algorithm, absl::string_view in,
       std::unique_ptr<SignatureCallback> callback) = 0;
 
   // Return the list of TLS signature algorithms that is acceptable by the
@@ -176,7 +173,7 @@ class QUIC_EXPORT_PRIVATE ProofSource {
   //
   // If returns a non-empty list, ComputeTlsSignature will only be called with a
   // algorithm in the list.
-  virtual absl::InlinedVector<uint16_t, 8> SupportedTlsSignatureAlgorithms()
+  virtual QuicSignatureAlgorithmVector SupportedTlsSignatureAlgorithms()
       const = 0;
 
   class QUIC_EXPORT_PRIVATE DecryptCallback {
@@ -222,7 +219,7 @@ class QUIC_EXPORT_PRIVATE ProofSource {
     // |in|. If decryption fails, the callback is invoked with an empty
     // vector.
     virtual void Decrypt(absl::string_view in,
-                         std::unique_ptr<DecryptCallback> callback) = 0;
+                         std::shared_ptr<DecryptCallback> callback) = 0;
   };
 
   // Returns the TicketCrypter used for encrypting and decrypting TLS
@@ -265,9 +262,7 @@ class QUIC_EXPORT_PRIVATE ProofSourceHandleCallback {
 
   // Called when a ProofSourceHandle::ComputeSignature operation completes.
   virtual void OnComputeSignatureDone(
-      bool ok,
-      bool is_sync,
-      std::string signature,
+      bool ok, bool is_sync, std::string signature,
       std::unique_ptr<ProofSource::Details> details) = 0;
 
   // Return true iff ProofSourceHandle::ComputeSignature won't be called later.
@@ -315,10 +310,8 @@ class QUIC_EXPORT_PRIVATE ProofSourceHandle {
   virtual QuicAsyncStatus SelectCertificate(
       const QuicSocketAddress& server_address,
       const QuicSocketAddress& client_address,
-      absl::string_view ssl_capabilities,
-      const std::string& hostname,
-      absl::string_view client_hello,
-      const std::string& alpn,
+      absl::string_view ssl_capabilities, const std::string& hostname,
+      absl::string_view client_hello, const std::string& alpn,
       absl::optional<std::string> alps,
       const std::vector<uint8_t>& quic_transport_params,
       const absl::optional<std::vector<uint8_t>>& early_data_context,
@@ -330,10 +323,8 @@ class QUIC_EXPORT_PRIVATE ProofSourceHandle {
   // See the comments of SelectCertificate for sync vs. async operations.
   virtual QuicAsyncStatus ComputeSignature(
       const QuicSocketAddress& server_address,
-      const QuicSocketAddress& client_address,
-      const std::string& hostname,
-      uint16_t signature_algorithm,
-      absl::string_view in,
+      const QuicSocketAddress& client_address, const std::string& hostname,
+      uint16_t signature_algorithm, absl::string_view in,
       size_t max_signature_size) = 0;
 
  protected:
@@ -347,7 +338,7 @@ class QUIC_EXPORT_PRIVATE ProofSourceHandle {
 // Returns true if |chain| contains a parsable DER-encoded X.509 leaf cert and
 // it matches with |key|.
 QUIC_EXPORT_PRIVATE bool ValidateCertAndKey(
-    const QuicReferenceCountedPointer<ProofSource::Chain>& chain,
+    const quiche::QuicheReferenceCountedPointer<ProofSource::Chain>& chain,
     const CertificatePrivateKey& key);
 
 }  // namespace quic

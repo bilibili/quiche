@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "gquiche/common/platform/default/quiche_platform_impl/quiche_platform_impl/quiche_url_utils_impl.h"
+#include "platform/quiche_platform_impl/quiche_url_utils_impl.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -62,6 +62,7 @@ absl::optional<std::string> AsciiUrlDecodeImpl(absl::string_view input) {
   std::string input_encoded = std::string(input);
   url::RawCanonOutputW<1024> canon_output;
   url::DecodeURLEscapeSequences(input_encoded.c_str(), input_encoded.length(),
+                                url::DecodeURLMode::kUTF8,
                                 &canon_output);
   std::string output;
   output.reserve(canon_output.length());

@@ -28,7 +28,7 @@ class QLogFrame {
  public:
   QLogFrame() = default;
   virtual ~QLogFrame() = default;
-  virtual Document toJson() const = 0;
+  virtual Document ToJson() const = 0;
   virtual Document toShortJson() const;
 };
 
@@ -36,373 +36,373 @@ class PaddingFrameLog : public QLogFrame {
  public:
   PaddingFrameLog() = default;
   ~PaddingFrameLog() override = default;
-  Document toJson() const override;
+  Document ToJson() const override;
   Document toShortJson() const override;
 };
 
 class RstStreamFrameLog : public QLogFrame {
  public:
-  QuicStreamId streamId;
-  QuicRstStreamErrorCode errorCode;
-  uint64_t offset;
+  QuicStreamId stream_id_;
+  QuicRstStreamErrorCode error_code_;
+  uint64_t offset_;
 
   RstStreamFrameLog(
-      QuicStreamId streamIdIn,
-      QuicRstStreamErrorCode errorCodeIn,
-      QuicStreamOffset offsetIn)
-      : streamId{streamIdIn}, errorCode{errorCodeIn}, offset{offsetIn} {}
+      QuicStreamId stream_id_in,
+      QuicRstStreamErrorCode error_code_in,
+      QuicStreamOffset offset_in)
+      : stream_id_{stream_id_in}, error_code_{error_code_in}, offset_{offset_in} {}
 
   ~RstStreamFrameLog() override = default;
-  Document toJson() const override;
+  Document ToJson() const override;
 };
 
 class ConnectionCloseFrameLog : public QLogFrame {
  public:
-  QuicConnectionCloseType closeType;
-  uint64_t wireErrorCode;
-  QuicErrorCode quicErrorCode;
-  std::string errorDetails;
-  uint64_t transportCloseFrameType;
+  QuicConnectionCloseType close_type_;
+  uint64_t wire_error_code_;
+  QuicErrorCode quic_error_code_;
+  std::string error_details_;
+  uint64_t transport_close_frame_type_;
 
   ConnectionCloseFrameLog(
-      QuicConnectionCloseType closeTypeIn,
-      uint64_t wireErrorCodeIn,
-      QuicErrorCode quicErrorCodeIn,
-      std::string errorDetailsIn,
-      uint64_t transportCloseFrameTypeIn)
-      : closeType{closeTypeIn},
-        wireErrorCode{wireErrorCodeIn},
-	      quicErrorCode{quicErrorCodeIn},
-        errorDetails(errorDetailsIn),
-        transportCloseFrameType{transportCloseFrameTypeIn} {}
+      QuicConnectionCloseType close_type_in,
+      uint64_t wire_error_code_in,
+      QuicErrorCode quic_error_code_in,
+      std::string error_details_in,
+      uint64_t transport_close_frame_type_in)
+      : close_type_{close_type_in},
+        wire_error_code_{wire_error_code_in},
+	      quic_error_code_{quic_error_code_in},
+        error_details_(error_details_in),
+        transport_close_frame_type_{transport_close_frame_type_in} {}
 
   ~ConnectionCloseFrameLog() override = default;
-  Document toJson() const override;
+  Document ToJson() const override;
 };
 
 class GoAwayFrameLog : public QLogFrame {
  public:
-  QuicErrorCode errorCode;
-  QuicStreamId lastGoodStreamId;
-  std::string  reasonPhrase;
+  QuicErrorCode error_code_;
+  QuicStreamId last_good_streamId_;
+  std::string  reason_phrase_;
 
   GoAwayFrameLog(
-      QuicErrorCode errorCodeIn,
-      QuicStreamId lastGoodStreamIdIn,
-      std::string reasonPhraseIn)
-      : errorCode{errorCodeIn},
-        lastGoodStreamId{lastGoodStreamIdIn},
-        reasonPhrase{reasonPhraseIn} {}
+      QuicErrorCode error_code_in,
+      QuicStreamId last_good_stream_id_in,
+      std::string reason_phrase_in)
+      : error_code_{error_code_in},
+        last_good_streamId_{last_good_stream_id_in},
+        reason_phrase_{reason_phrase_in} {}
 
   ~GoAwayFrameLog() override = default;
-  Document toJson() const override;
+  Document ToJson() const override;
 };
 
 class WindowUpdateFrameLog : public QLogFrame {
  public:
-  QuicStreamId streamId;
-  uint64_t maxData;
+  QuicStreamId stream_id_;
+  uint64_t max_data_;
 
   WindowUpdateFrameLog(
-      QuicStreamId streamIdIn,
+      QuicStreamId stream_id_in,
       uint64_t maxDataIn)
-      : streamId{streamIdIn},
-	maxData{maxDataIn} {}
+      : stream_id_{stream_id_in},
+	max_data_{maxDataIn} {}
 
   ~WindowUpdateFrameLog() override = default;
-  Document toJson() const override;
+  Document ToJson() const override;
 };
 
 class BlockedFrameLog : public QLogFrame {
  public:
-  QuicStreamId streamId;
+  QuicStreamId stream_id_;
 
-  BlockedFrameLog(QuicStreamId streamIdIn)
-  : streamId{streamIdIn} {}
+  BlockedFrameLog(QuicStreamId stream_id_in)
+  : stream_id_{stream_id_in} {}
 
   ~BlockedFrameLog() override = default;
-  Document toJson() const override;
+  Document ToJson() const override;
 };
 
 class StopWaitingFrameLog : public QLogFrame {
  public:
   StopWaitingFrameLog() = default;
   ~StopWaitingFrameLog() override = default;
-  Document toJson() const override;
+  Document ToJson() const override;
 };
 
 class PingFrameLog : public QLogFrame {
  public:
   PingFrameLog() = default;
   ~PingFrameLog() override = default;
-  Document toJson() const override;
+  Document ToJson() const override;
 };
 
 class AckFrameLog : public QLogFrame {
  public:
-  PacketNumberQueue packetNumberQueue;
-  std::chrono::microseconds ackDelay;
+  PacketNumberQueue packet_number_queue_;
+  std::chrono::microseconds ack_delay_;
 
   AckFrameLog(
-      const PacketNumberQueue packetNumberQueueIn,
-      uint64_t ackDelayIn)
-      : packetNumberQueue{packetNumberQueueIn}, ackDelay{ackDelayIn} {}
+      const PacketNumberQueue packet_number_queue_in,
+      uint64_t ack_delay_in)
+      : packet_number_queue_{packet_number_queue_in}, ack_delay_{ack_delay_in} {}
   ~AckFrameLog() override = default;
-  Document toJson() const override;
+  Document ToJson() const override;
   Document toShortJson() const override;
 };
 
 class StreamFrameLog : public QLogFrame {
  public:
-  QuicStreamId streamId;
-  uint64_t offset;
-  uint64_t len;
-  bool fin;
+  QuicStreamId stream_id_;
+  uint64_t offset_;
+  uint64_t len_;
+  bool fin_;
 
   StreamFrameLog(
-      QuicStreamId streamIdIn,
-      uint64_t offsetIn,
-      uint64_t lenIn,
-      bool finIn)
-      : streamId{streamIdIn}, offset{offsetIn}, len{lenIn}, fin{finIn} {}
+      QuicStreamId stream_id_in,
+      uint64_t offset_in,
+      uint64_t len_in,
+      bool fin_in)
+      : stream_id_{stream_id_in}, offset_{offset_in}, len_{len_in}, fin_{fin_in} {}
   ~StreamFrameLog() override = default;
 
-  Document toJson() const override;
+  Document ToJson() const override;
   Document toShortJson() const;
 };
 
 class CryptoFrameLog : public QLogFrame {
  public:
-  EncryptionLevel level;
-  uint64_t offset;
-  uint64_t dataLength;
+  EncryptionLevel level_;
+  uint64_t offset_;
+  uint64_t data_length_;
 
   CryptoFrameLog(
-      EncryptionLevel levelIn,
-      uint64_t offsetIn,
-      uint64_t dataLengthIn)
-      : level{levelIn}, offset{offsetIn}, dataLength{dataLengthIn} {}
+      EncryptionLevel level_in,
+      uint64_t offset_in,
+      uint64_t dataLength_in)
+      : level_{level_in}, offset_{offset_in}, data_length_{dataLength_in} {}
   ~CryptoFrameLog() override = default;
-  Document toJson() const override;
+  Document ToJson() const override;
 };
 
 class HandshakeDoneFrameLog : public QLogFrame {
  public:
   HandshakeDoneFrameLog() = default;
   ~HandshakeDoneFrameLog() override = default;
-  Document toJson() const override;
+  Document ToJson() const override;
 };
 
 class MTUDiscoveryFrameLog : public QLogFrame {
  public:
   MTUDiscoveryFrameLog() = default;
   ~MTUDiscoveryFrameLog() override = default;
-  Document toJson() const override;
+  Document ToJson() const override;
 };
 
 class NewConnectionIdFrameLog : public QLogFrame {
  public:
-  std::string newConnectionId;
-  uint64_t sequenceNumber;
+  std::string new_connection_id_;
+  uint64_t sequence_number_;
 
   NewConnectionIdFrameLog(
-      std::string newConnectionIdIn,
-      uint64_t sequenceNumberIn)
-      : newConnectionId{newConnectionIdIn}, sequenceNumber{sequenceNumberIn} {}
+      std::string new_connection_id_in,
+      uint64_t sequence_number_in)
+      : new_connection_id_{new_connection_id_in}, sequence_number_{sequence_number_in} {}
 
   ~NewConnectionIdFrameLog() override = default;
-  Document toJson() const override;
+  Document ToJson() const override;
 };
 
 class MaxStreamsFrameLog : public QLogFrame {
  public:
-  uint64_t streamCount;
-  bool unidirectional;
+  uint64_t stream_count_;
+  bool unidirectional_;
 
   MaxStreamsFrameLog(
-      uint64_t streamCountIn,
-      bool unidirectionalIn)
-      : streamCount{streamCountIn}, unidirectional{unidirectionalIn} {}
+      uint64_t stream_count_in,
+      bool unidirectional_in)
+      : stream_count_{stream_count_in}, unidirectional_{unidirectional_in} {}
 
   ~MaxStreamsFrameLog() override = default;
-  Document toJson() const override;
+  Document ToJson() const override;
 };
 
 class StreamsBlockedFrameLog : public QLogFrame {
  public:
-  uint64_t streamCount;
-  bool unidirectional;
+  uint64_t stream_count_;
+  bool unidirectional_;
 
   StreamsBlockedFrameLog(
-      uint64_t streamCountIn,
-      bool unidirectionalIn)
-      : streamCount{streamCountIn}, unidirectional{unidirectionalIn} {}
+      uint64_t stream_count_in,
+      bool unidirectional_in)
+      : stream_count_{stream_count_in}, unidirectional_{unidirectional_in} {}
 
   ~StreamsBlockedFrameLog() override = default;
-  Document toJson() const override;
+  Document ToJson() const override;
 };
 
 class PathResponseFrameLog : public QLogFrame {
  public:
-  std::string pathData;
+  std::string path_data_;
 
-  explicit PathResponseFrameLog(std::string pathDataIn) : pathData{pathDataIn} {}
+  explicit PathResponseFrameLog(std::string path_data_in) : path_data_{path_data_in} {}
   ~PathResponseFrameLog() override = default;
-  Document toJson() const override;
+  Document ToJson() const override;
 };
 
 class PathChallengeFrameLog : public QLogFrame {
  public:
-  std::string pathData;
+  std::string path_data_;
 
-  explicit PathChallengeFrameLog(std::string pathDataIn) : pathData{pathDataIn} {}
+  explicit PathChallengeFrameLog(std::string path_data_in) : path_data_{path_data_in} {}
   ~PathChallengeFrameLog() override = default;
-  Document toJson() const override;
+  Document ToJson() const override;
 };
 
 class StopSendingFrameLog : public QLogFrame {
  public:
-  QuicStreamId streamId;
-  QuicRstStreamErrorCode errorCode;
+  QuicStreamId stream_id_;
+  QuicRstStreamErrorCode error_code_;
 
-  StopSendingFrameLog(QuicStreamId streamIdIn, QuicRstStreamErrorCode errorCodeIn)
-      : streamId{streamIdIn}, errorCode{errorCodeIn} {}
+  StopSendingFrameLog(QuicStreamId stream_id_in, QuicRstStreamErrorCode error_code_in)
+      : stream_id_{stream_id_in}, error_code_{error_code_in} {}
   ~StopSendingFrameLog() override = default;
-  Document toJson() const override;
+  Document ToJson() const override;
 };
 
 class MessageFrameLog : public QLogFrame {
  public:
-  uint32_t messageId;
-  uint64_t length;
+  uint32_t message_id_;
+  uint64_t length_;
 
-  MessageFrameLog(uint32_t messageIdIn, uint64_t lengthIn)
-      : messageId{messageIdIn}, length{lengthIn} {}
+  MessageFrameLog(uint32_t message_id_in, uint64_t length_in)
+      : message_id_{message_id_in}, length_{length_in} {}
   ~MessageFrameLog() override = default;
-  Document toJson() const override;
+  Document ToJson() const override;
 };
 
 class NewTokenFrameLog : public QLogFrame {
  public:
   NewTokenFrameLog() = default;
   ~NewTokenFrameLog() override = default;
-  Document toJson() const override;
+  Document ToJson() const override;
 };
 
 class RetireConnectionIdFrameLog : public QLogFrame {
  public:
-  uint64_t sequenceNumber;
+  uint64_t sequence_number_;
 
-  RetireConnectionIdFrameLog(uint64_t sequenceNumberIn)
-  : sequenceNumber(sequenceNumberIn) {}
+  RetireConnectionIdFrameLog(uint64_t sequence_number_in)
+  : sequence_number_(sequence_number_in) {}
 
   ~RetireConnectionIdFrameLog() override = default;
-  Document toJson() const override;
+  Document ToJson() const override;
 };
 
 class AckFrequencyFrameLog : public QLogFrame {
  public:
-  uint64_t sequenceNumber;
-  uint64_t packetTolerance;
-  uint64_t updateMaxAckDelay;
-  bool ignoreOrder;
+  uint64_t sequence_number_;
+  uint64_t packet_tolerance_;
+  uint64_t update_max_ack_delay_;
+  bool ignore_order_;
 
   explicit AckFrequencyFrameLog(
-      uint64_t sequenceNumberIn,
-      uint64_t packetToleranceIn,
-      uint64_t updateMaxAckDelayIn,
-      bool ignoreOrderIn)
-      : sequenceNumber(sequenceNumberIn),
-        packetTolerance(packetToleranceIn),
-        updateMaxAckDelay(updateMaxAckDelayIn),
-        ignoreOrder(ignoreOrderIn) {}
+      uint64_t sequence_number_in,
+      uint64_t packet_tolerance_in,
+      uint64_t update_max_ack_delay_in,
+      bool ignore_order_in)
+      : sequence_number_(sequence_number_in),
+        packet_tolerance_(packet_tolerance_in),
+        update_max_ack_delay_(update_max_ack_delay_in),
+        ignore_order_(ignore_order_in) {}
   ~AckFrequencyFrameLog() override = default;
-  Document toJson() const override;
+  Document ToJson() const override;
 };
 
 class VersionNegotiationLog {
  public:
-  std::vector<ParsedQuicVersion> versions;
+  std::vector<ParsedQuicVersion> versions_;
 
-  explicit VersionNegotiationLog(const std::vector<ParsedQuicVersion>& versionsIn)
-      : versions{versionsIn} {}
+  explicit VersionNegotiationLog(const std::vector<ParsedQuicVersion>& versions_in)
+      : versions_{versions_in} {}
   ~VersionNegotiationLog() = default;
-  Document toJson() const;
+  Document ToJson() const;
 };
 
 enum class QLogEventType : uint32_t {
-  PacketReceived,
-  PacketSent,
-  ConnectionClose,
-  TransportSummary,
-  CongestionMetricUpdate,
-  PacingMetricUpdate,
-  AppIdleUpdate,
-  PacketDrop,
-  DatagramReceived,
-  LossAlarm,
-  PacketLost,
-  TransportStateUpdate,
-  PacketBuffered,
-  PacketAck,
-  MetricUpdate,
-  StreamStateUpdate,
-  PacingObservation,
-  AppLimitedUpdate,
-  BandwidthEstUpdate,
-  ConnectionMigration,
-  PathValidation,
-  PriorityUpdate,
-  FramesProcessed,
-  RequestOverStream
+  PACKET_RECEIVED,
+  PACKET_SENT,
+  CONNECTION_CLOSE,
+  TRANSPORT_SUMMARY,
+  CONGESTION_METRIC_UPDATE,
+  PACING_METRIC_UPDATE,
+  APPIDLE_UPDATE,
+  PACKET_DROP,
+  DATAGRAM_RECEIVED,
+  LOSS_ALARM,
+  PACKET_LOST,
+  TRANSPORT_STATE_UPDATE,
+  Packet_Buffered,
+  PACKET_ACK,
+  METRIC_UPDATE,
+  STREAM_STATE_UPDATE,
+  PACING_OBSERVATION,
+  APP_LIMITED_UPDATE,
+  BANDWIDTH_ESTUPDATE,
+  CONNECTION_MIGRATION,
+  PATH_VALIDATION,
+  PRIORITY_UPDATE,
+  FRAMES_PROCESSED,
+  REQUEST_OVER_STREAM
 };
 
-quiche::QuicheStringPiece toString(QLogEventType type);
+quiche::QuicheStringPiece ToString(QLogEventType type_);
 
 class QLogEvent {
  public:
   QLogEvent() = default;
   virtual ~QLogEvent() = default;
-  virtual Document toJson() const = 0;
-  std::chrono::microseconds refTime;
-  QLogEventType eventType;
+  virtual Document ToJson() const = 0;
+  std::chrono::microseconds ref_time_;
+  QLogEventType event_type_;
 };
 
 class QLogFramesProcessed : public QLogEvent {
-  public:
+ public:
   QLogFramesProcessed() = default;
   ~QLogFramesProcessed() override = default;
-  quiche::QuicheStringPiece weaver;
-  QuicFrameType framesType;
-  std::vector<std::unique_ptr<QLogFrame>> frames;
-  std::vector<uint64_t>  packetSizes;
-  std::vector<uint64_t> packetNums;
-  std::vector<std::chrono::microseconds> timeDrifts;
-  std::string packetType;
-  Document toJson() const override;
+  quiche::QuicheStringPiece weaver_;
+  QuicFrameType frames_type_;
+  std::vector<std::unique_ptr<QLogFrame>> frames_;
+  std::vector<uint64_t>  packet_sizes_;
+  std::vector<uint64_t> packet_nums_;
+  std::vector<std::chrono::microseconds> time_drifts_;
+  std::string packet_type_;
+  Document ToJson() const override;
 };
 
 class QLogPacketEvent : public QLogEvent {
  public:
   QLogPacketEvent() = default;
   ~QLogPacketEvent() override = default;
-  std::vector<std::unique_ptr<QLogFrame>> frames;
-  std::string packetType;
-  std::string transmissionType;
-  uint64_t packetNum{0};
-  uint64_t packetSize{0};
-  Document toJson() const override;
+  std::vector<std::unique_ptr<QLogFrame>> frames_;
+  std::string packet_type_;
+  std::string transmission_type_;
+  uint64_t packet_num_{0};
+  uint64_t packet_size_{0};
+  Document ToJson() const override;
 };
 
 class QLogVersionNegotiationEvent : public QLogEvent {
  public:
   QLogVersionNegotiationEvent() = default;
   ~QLogVersionNegotiationEvent() override = default;
-  std::unique_ptr<VersionNegotiationLog> versionLog;
-  std::string packetType;
-  uint64_t packetSize{0};
+  std::unique_ptr<VersionNegotiationLog> version_log_;
+  std::string packet_type_;
+  uint64_t packet_size_{0};
 
-  Document toJson() const override;
+  Document ToJson() const override;
 };
 
 class QLogRetryEvent : public QLogEvent {
@@ -410,200 +410,200 @@ class QLogRetryEvent : public QLogEvent {
   QLogRetryEvent() = default;
   ~QLogRetryEvent() override = default;
 
-  std::string packetType;
-  uint64_t packetSize{0};
-  uint64_t tokenSize{0};
+  std::string packet_type_;
+  uint64_t packet_size_{0};
+  uint64_t token_size_{0};
 
-  Document toJson() const override;
+  Document ToJson() const override;
 };
 
 class QLogConnectionCloseEvent : public QLogEvent {
  public:
   QLogConnectionCloseEvent(
-      QuicErrorCode errorIn,
-      std::string reasonIn,
-      ConnectionCloseSource sourceIn,
-      std::chrono::microseconds refTimeIn);
+      QuicErrorCode error_in,
+      std::string reason_in,
+      ConnectionCloseSource source_in,
+      std::chrono::microseconds ref_time_in);
   ~QLogConnectionCloseEvent() override = default;
-  QuicErrorCode error;
-  std::string reason;
-  ConnectionCloseSource source;
+  QuicErrorCode error_;
+  std::string reason_;
+  ConnectionCloseSource source_;
 
-  Document toJson() const override;
+  Document ToJson() const override;
 };
 
 struct TransportSummaryArgs {
-  uint64_t totalBytesSent{};
-  uint64_t totalBytesRecvd{};
-  uint64_t sumCurWriteOffset{};
-  uint64_t sumMaxObservedOffset{};
-  uint64_t sumCurStreamBufferLen{};
-  uint64_t totalPacketsLost{};
-  uint64_t totalStartupDuration{};
-  uint64_t totalDrainDuration{};
-  uint64_t totalProbeBWDuration{};
-  uint64_t totalProbeRttDuration{};
-  uint64_t totalNotRecoveryDuration{};
-  uint64_t totalGrowthDuration{};
-  uint64_t totalConservationDuration{};
-  uint64_t totalStreamBytesCloned{};
-  uint64_t totalBytesCloned{};
-  uint64_t totalCryptoDataWritten{};
-  uint64_t totalCryptoDataRecvd{};
-  uint64_t currentWritableBytes{};
-  uint64_t currentConnFlowControl{};
-  bool usedZeroRtt{};
-  double smoothedMinRtt{};
-  double smoothedMaxBandwidth{};
-  float startupDurationRatio{};
-  float drainDurationRatio{};
-  float probebwDurationRatio{};
-  float proberttDurationRatio{};
-  float NotRecoveryDurationRatio{};
-  float GrowthDurationRatio{};
-  float ConservationDurationRatio{};
-  float AverageDifference{};
+  uint64_t total_bytes_sent{};
+  uint64_t total_bytes_recvd{};
+  uint64_t sum_cur_write_offset{};
+  uint64_t sum_max_observed_offset{};
+  uint64_t sum_cur_stream_buffer_len{};
+  uint64_t total_packets_lost{};
+  uint64_t total_startup_duration{};
+  uint64_t total_drain_duration{};
+  uint64_t total_probebw_Duration{};
+  uint64_t total_probertt_duration{};
+  uint64_t total_not_recovery_duration{};
+  uint64_t total_growth_duration{};
+  uint64_t total_conservation_duration{};
+  uint64_t total_stream_bytes_cloned{};
+  uint64_t total_bytes_cloned{};
+  uint64_t total_crypto_data_written{};
+  uint64_t total_crypto_data_recvd{};
+  uint64_t current_writable_bytes{};
+  uint64_t current_conn_flow_control{};
+  bool used_zero_rtt{};
+  double smoothed_min_rtt{};
+  double smoothed_max_bandwidth{};
+  float startup_suration_ratio{};
+  float drain_duration_ratio{};
+  float probebw_duration_ratio{};
+  float probertt_duration_ratio{};
+  float not_recovery_duration_ratio{};
+  float growth_duration_ratio{};
+  float conservation_duration_ratio{};
+  float average_difference{};
 };
 
 class QLogTransportSummaryEvent : public QLogEvent {
  public:
   QLogTransportSummaryEvent(
-      uint64_t totalBytesSent,
-      uint64_t totalPacketsSent,
-      uint64_t totalBytesRecvd,
-      uint64_t totalPacketsRecvd,
-      uint64_t sumCurWriteOffset,
-      uint64_t sumMaxObservedOffset,
-      uint64_t sumCurStreamBufferLen,
-      uint64_t totalPacketsLost,
-      uint64_t totalStartupDuration,
-      uint64_t totalDrainDuration,
-      uint64_t totalProbeBWDuration,
-      uint64_t totalProbeRttDuration,
-      uint64_t totalNotRecoveryDuration,
-      uint64_t totalGrowthDuration,
-      uint64_t totalConservationDuration,
-      uint64_t totalStreamBytesCloned,
-      uint64_t totalBytesCloned,
-      uint64_t totalCryptoDataWritten,
-      uint64_t totalCryptoDataRecvd,
-      uint64_t currentWritableBytes,
-      uint64_t currentConnFlowControl,
-      bool usedZeroRtt,
+      uint64_t total_bytes_sent,
+      uint64_t total_packets_sent,
+      uint64_t total_bytes_recvd,
+      uint64_t total_packets_recvd,
+      uint64_t sum_cur_write_offset,
+      uint64_t sum_max_observed_offset,
+      uint64_t sum_cur_stream_buffer_len,
+      uint64_t total_packets_lost,
+      uint64_t total_startup_duration,
+      uint64_t total_drain_duration,
+      uint64_t total_probebw_Duration,
+      uint64_t total_probertt_duration,
+      uint64_t total_not_recovery_duration,
+      uint64_t total_growth_duration,
+      uint64_t total_conservation_duration,
+      uint64_t total_stream_bytes_cloned,
+      uint64_t total_bytes_cloned,
+      uint64_t total_crypto_data_written,
+      uint64_t total_crypto_data_recvd,
+      uint64_t current_writable_bytes,
+      uint64_t current_conn_flow_control,
+      bool used_zero_rtt,
       QuicTransportVersion version,
-      CongestionControlType congestionType,
-      double smoothedMinRtt,
-      double smoothedMaxBandwidth,
-      float startupDurationRatio,
-      float drainDurationRatio,
-      float probebwDurationRatio,
-      float proberttDurationRatio,
-      float NotRecoveryDurationRatio,
-      float GrowthDurationRatio,
-      float ConservationDurationRatio,
-      float AverageDifference,
-      std::chrono::microseconds refTime);
+      CongestionControlType congestion_type,
+      double smoothed_min_rtt,
+      double smoothed_max_bandwidth,
+      float startup_suration_ratio,
+      float drain_duration_ratio,
+      float probebw_duration_ratio,
+      float probertt_duration_ratio,
+      float not_recovery_duration_ratio,
+      float growth_duration_ratio,
+      float conservation_duration_ratio,
+      float average_difference,
+      std::chrono::microseconds ref_time);
   ~QLogTransportSummaryEvent() override = default;
-  uint64_t totalBytesSent;
-  uint64_t totalPacketsSent;
-  uint64_t totalBytesRecvd;
-  uint64_t totalPacketsRecvd;
-  uint64_t sumCurWriteOffset;
-  uint64_t sumMaxObservedOffset;
-  uint64_t sumCurStreamBufferLen;
-  uint64_t totalPacketsLost;
-  uint64_t totalStartupDuration;
-  uint64_t totalDrainDuration;
-  uint64_t totalProbeBWDuration;
-  uint64_t totalProbeRttDuration;
-  uint64_t totalNotRecoveryDuration;
-  uint64_t totalGrowthDuration;
-  uint64_t totalConservationDuration;
-  uint64_t totalStreamBytesCloned;
-  uint64_t totalBytesCloned;
-  uint64_t totalCryptoDataWritten;
-  uint64_t totalCryptoDataRecvd;
-  uint64_t currentWritableBytes;
-  uint64_t currentConnFlowControl;
-  bool usedZeroRtt;
-  QuicTransportVersion quicVersion;
-  CongestionControlType congestionType;
-  double smoothedMinRtt;
-  double smoothedMaxBandwidth;
-  float startupDurationRatio;
-  float drainDurationRatio;
-  float probebwDurationRatio;
-  float proberttDurationRatio;
-  float NotRecoveryDurationRatio;
-  float GrowthDurationRatio;
-  float ConservationDurationRatio;
-  float AverageDifference;
-  Document toJson() const override;
+  uint64_t total_bytes_sent;
+  uint64_t total_packets_sent;
+  uint64_t total_bytes_recvd;
+  uint64_t total_packets_recvd;
+  uint64_t sum_cur_write_offset;
+  uint64_t sum_max_observed_offset;
+  uint64_t sum_cur_stream_buffer_len;
+  uint64_t total_packets_lost;
+  uint64_t total_startup_duration;
+  uint64_t total_drain_duration;
+  uint64_t total_probebw_Duration;
+  uint64_t total_probertt_duration;
+  uint64_t total_not_recovery_duration;
+  uint64_t total_growth_duration;
+  uint64_t total_conservation_duration;
+  uint64_t total_stream_bytes_cloned;
+  uint64_t total_bytes_cloned;
+  uint64_t total_crypto_data_written;
+  uint64_t total_crypto_data_recvd;
+  uint64_t current_writable_bytes;
+  uint64_t current_conn_flow_control;
+  bool used_zero_rtt;
+  QuicTransportVersion quic_version;
+  CongestionControlType congestion_type;
+  double smoothed_min_rtt;
+  double smoothed_max_bandwidth;
+  float startup_suration_ratio;
+  float drain_duration_ratio;
+  float probebw_duration_ratio;
+  float probertt_duration_ratio;
+  float not_recovery_duration_ratio;
+  float growth_duration_ratio;
+  float conservation_duration_ratio;
+  float average_difference;
+  Document ToJson() const override;
 };
 
 class QLogBBRCongestionMetricUpdateEvent : public QLogEvent {
  public:
   QLogBBRCongestionMetricUpdateEvent(
-      uint64_t bytesInFlightIn,
-      uint64_t currentCwndIn,
-      std::string congestionEventIn,
-      quic::CongestionControlType typeIn,
-      void* stateIn,
-      std::chrono::microseconds refTimeIn);
+      uint64_t bytes_in_flight_in,
+      uint64_t current_cwnd_in,
+      std::string congestion_event_in,
+      quic::CongestionControlType type_in,
+      void* state_in,
+      std::chrono::microseconds ref_time_in);
   ~QLogBBRCongestionMetricUpdateEvent() override = default;
-  uint64_t bytesInFlight;
-  uint64_t currentCwnd;
-  std::string congestionEvent;
-  quic::CongestionControlType type;
+  uint64_t bytes_inflight_;
+  uint64_t current_cwnd_;
+  std::string congestion_event_;
+  quic::CongestionControlType type_;
   void* state;
 
-  Document toJson() const override;
+  Document ToJson() const override;
 };
 
 class QLogCubicCongestionMetricUpdateEvent : public QLogEvent {
  public:
   QLogCubicCongestionMetricUpdateEvent(
-      uint64_t bytesInFlightIn,
-      uint64_t currentCwndIn,
-      std::string congestionEventIn,
-      quic::CongestionControlType typeIn,
-      void* stateIn,
-      std::chrono::microseconds refTimeIn);
+      uint64_t bytes_in_flight_in,
+      uint64_t current_cwnd_in,
+      std::string congestion_event_in,
+      quic::CongestionControlType type_in,
+      void* state_in,
+      std::chrono::microseconds ref_time_in);
   ~QLogCubicCongestionMetricUpdateEvent() override = default;
-  uint64_t bytesInFlight;
-  uint64_t currentCwnd;
-  std::string congestionEvent;
-  quic::CongestionControlType type;
+  uint64_t bytes_inflight_;
+  uint64_t current_cwnd_;
+  std::string congestion_event_;
+  quic::CongestionControlType type_;
   void* state;
-  Document toJson() const override;
+  Document ToJson() const override;
 };
 
 class QLogBBR2CongestionMetricUpdateEvent : public QLogEvent {
  public:
   QLogBBR2CongestionMetricUpdateEvent(
-      uint64_t bytesInFlightIn,
-      uint64_t currentCwndIn,
-      std::string congestionEventIn,
-      quic::CongestionControlType typeIn,
-      void* stateIn,
-      std::chrono::microseconds refTimeIn);
+      uint64_t bytes_in_flight_in,
+      uint64_t current_cwnd_in,
+      std::string congestion_event_in,
+      quic::CongestionControlType type_in,
+      void* state_in,
+      std::chrono::microseconds ref_time_in);
   ~QLogBBR2CongestionMetricUpdateEvent() override = default;
-  uint64_t bytesInFlight;
-  uint64_t currentCwnd;
-  std::string congestionEvent;
-  quic::CongestionControlType type;
+  uint64_t bytes_inflight_;
+  uint64_t current_cwnd_;
+  std::string congestion_event_;
+  quic::CongestionControlType type_;
   void* state;
-  Document toJson() const override;
+  Document ToJson() const override;
 };
 
 class QLogAppLimitedUpdateEvent : public QLogEvent {
  public:
   explicit QLogAppLimitedUpdateEvent(
-      bool limitedIn,
-      std::chrono::microseconds refTimeIn);
+      bool limited_in,
+      std::chrono::microseconds ref_time_in);
   ~QLogAppLimitedUpdateEvent() override = default;
 
-  Document toJson() const override;
+  Document ToJson() const override;
 
   bool limited;
 };
@@ -613,160 +613,160 @@ class QLogBandwidthEstUpdateEvent : public QLogEvent {
   explicit QLogBandwidthEstUpdateEvent(
       uint64_t bytes,
       std::chrono::microseconds interval,
-      std::chrono::microseconds refTimeIn);
+      std::chrono::microseconds ref_time_in);
   ~QLogBandwidthEstUpdateEvent() override = default;
 
-  Document toJson() const override;
+  Document ToJson() const override;
 
-  uint64_t bytes;
-  std::chrono::microseconds interval;
+  uint64_t bytes_;
+  std::chrono::microseconds interval_;
 };
 
 class QLogPacingMetricUpdateEvent : public QLogEvent {
  public:
   QLogPacingMetricUpdateEvent(
-      uint64_t pacingBurstSize,
-      std::chrono::microseconds pacingInterval,
-      std::chrono::microseconds refTime);
+      uint64_t pacing_burst_size,
+      std::chrono::microseconds pacing_interval,
+      std::chrono::microseconds ref_time);
   ~QLogPacingMetricUpdateEvent() override = default;
-  uint64_t pacingBurstSize;
-  std::chrono::microseconds pacingInterval;
+  uint64_t pacing_burst_size_;
+  std::chrono::microseconds pacing_interval_;
 
-  Document toJson() const override;
+  Document ToJson() const override;
 };
 
 class QLogPacingObservationEvent : public QLogEvent {
  public:
   QLogPacingObservationEvent(
-      std::string& actualIn,
-      std::string& expectIn,
-      std::string& conclusionIn,
-      std::chrono::microseconds refTimeIn);
-  std::string actual;
-  std::string expect;
-  std::string conclusion;
+      std::string& actual_in,
+      std::string& expect_in,
+      std::string& conclusion_in,
+      std::chrono::microseconds ref_time_in);
+  std::string actual_;
+  std::string expect_;
+  std::string conclusion_;
 
   ~QLogPacingObservationEvent() override = default;
-  Document toJson() const override;
+  Document ToJson() const override;
 };
 
 class QLogAppIdleUpdateEvent : public QLogEvent {
  public:
   QLogAppIdleUpdateEvent(
-      std::string& idleEvent,
+      std::string& idle_event,
       bool idle,
-      std::chrono::microseconds refTime);
+      std::chrono::microseconds ref_time);
   ~QLogAppIdleUpdateEvent() override = default;
-  std::string idleEvent;
-  bool idle;
+  std::string idle_event_;
+  bool idle_;
 
-  Document toJson() const override;
+  Document ToJson() const override;
 };
 
 class QLogPacketDropEvent : public QLogEvent {
  public:
   QLogPacketDropEvent(
-      size_t packetSize,
-      std::string& dropReason,
-      std::chrono::microseconds refTime);
+      size_t packet_size,
+      std::string& drop_reason,
+      std::chrono::microseconds ref_time);
   ~QLogPacketDropEvent() override = default;
-  size_t packetSize;
-  std::string dropReason;
+  size_t packet_size_;
+  std::string drop_reason_;
 
-  Document toJson() const override;
+  Document ToJson() const override;
 };
 
 class QLogDatagramReceivedEvent : public QLogEvent {
  public:
   QLogDatagramReceivedEvent(
-      uint64_t dataLen,
-      std::chrono::microseconds refTime);
+      uint64_t data_len,
+      std::chrono::microseconds ref_time);
   ~QLogDatagramReceivedEvent() override = default;
-  uint64_t dataLen;
+  uint64_t data_len_;
 
-  Document toJson() const override;
+  Document ToJson() const override;
 };
 
 class QLogLossAlarmEvent : public QLogEvent {
  public:
   QLogLossAlarmEvent(
-      uint64_t largestSent,
-      uint64_t alarmCount,
-      uint64_t outstandingPackets,
+      uint64_t largest_sent,
+      uint64_t alarm_count,
+      uint64_t outstanding_packets,
       std::string& type,
-      std::chrono::microseconds refTime);
+      std::chrono::microseconds ref_time);
   ~QLogLossAlarmEvent() override = default;
-  uint64_t largestSent;
-  uint64_t alarmCount;
-  uint64_t outstandingPackets;
-  std::string type;
-  Document toJson() const override;
+  uint64_t largest_sent_;
+  uint64_t alarm_count_;
+  uint64_t outstanding_packets_;
+  std::string type_;
+  Document ToJson() const override;
 };
 
 class QLogPacketLostEvent : public QLogEvent {
  public:
   QLogPacketLostEvent(
-      uint64_t LostPacketNum,
+      uint64_t lost_packet_num,
       EncryptionLevel level,
       TransmissionType type,
-      std::chrono::microseconds refTime);
+      std::chrono::microseconds ref_time);
   ~QLogPacketLostEvent() override = default;
-  uint64_t lostPacketNum;
-  EncryptionLevel encryptionLevel;
-  TransmissionType transmissionType;
-  Document toJson() const override;
+  uint64_t lost_packet_num_;
+  EncryptionLevel encryption_level_;
+  TransmissionType transmission_type_;
+  Document ToJson() const override;
 };
 
 class QLogTransportStateUpdateEvent : public QLogEvent {
  public:
   QLogTransportStateUpdateEvent(
       std::string& update,
-      std::chrono::microseconds refTime);
+      std::chrono::microseconds ref_time);
   ~QLogTransportStateUpdateEvent() override = default;
-  std::string update;
-  Document toJson() const override;
+  std::string update_;
+  Document ToJson() const override;
 };
 
 class QLogPacketBufferedEvent : public QLogEvent {
  public:
   QLogPacketBufferedEvent(
-      uint64_t packetNum,
-      EncryptionLevel encryptionLevel,
-      uint64_t packetSize,
-      std::chrono::microseconds refTime);
+      uint64_t packet_num,
+      EncryptionLevel encryption_level,
+      uint64_t packet_size,
+      std::chrono::microseconds ref_time);
   ~QLogPacketBufferedEvent() override = default;
-  uint64_t packetNum;
-  EncryptionLevel encryptionLevel;
-  uint64_t packetSize;
-  Document toJson() const override;
+  uint64_t packet_num_;
+  EncryptionLevel encryption_level_;
+  uint64_t packet_size_;
+  Document ToJson() const override;
 };
 
 class QLogPacketAckEvent : public QLogEvent {
  public:
   QLogPacketAckEvent(
-      PacketNumberSpace packetNumSpace,
-      uint64_t packetNum,
-      std::chrono::microseconds refTime);
+      PacketNumberSpace packet_num_space,
+      uint64_t packet_num,
+      std::chrono::microseconds ref_time);
   ~QLogPacketAckEvent() override = default;
-  PacketNumberSpace packetNumSpace;
-  uint64_t packetNum;
-  Document toJson() const override;
+  PacketNumberSpace packet_num_space_;
+  uint64_t packet_num_;
+  Document ToJson() const override;
 };
 
 class QLogMetricUpdateEvent : public QLogEvent {
  public:
   QLogMetricUpdateEvent(
-      std::chrono::microseconds latestRtt,
+      std::chrono::microseconds latest_rtt,
       std::chrono::microseconds mrtt,
       std::chrono::microseconds srtt,
-      std::chrono::microseconds ackDelay,
-      std::chrono::microseconds refTime);
+      std::chrono::microseconds ack_delay,
+      std::chrono::microseconds ref_time);
   ~QLogMetricUpdateEvent() override = default;
-  std::chrono::microseconds latestRtt;
-  std::chrono::microseconds mrtt;
-  std::chrono::microseconds srtt;
-  std::chrono::microseconds ackDelay;
-  Document toJson() const override;
+  std::chrono::microseconds latest_rtt_;
+  std::chrono::microseconds mrtt_;
+  std::chrono::microseconds srtt_;
+  std::chrono::microseconds ack_delay_;
+  Document ToJson() const override;
 };
 
 class QLogStreamStateUpdateEvent : public QLogEvent {
@@ -774,14 +774,14 @@ class QLogStreamStateUpdateEvent : public QLogEvent {
   QLogStreamStateUpdateEvent(
       QuicStreamId id,
       std::string& update,
-      quiche::QuicheOptionalImpl<std::chrono::milliseconds> timeSinceStreamCreation,
-      VantagePoint vantagePoint,
-      std::chrono::microseconds refTime);
+      quiche::QuicheOptionalImpl<std::chrono::milliseconds> time_since_stream_creation,
+      VantagePoint vantage_point,
+      std::chrono::microseconds ref_time);
   ~QLogStreamStateUpdateEvent() override = default;
-  QuicStreamId id;
-  std::string update;
-  quiche::QuicheOptionalImpl<std::chrono::milliseconds> timeSinceStreamCreation;
-  Document toJson() const override;
+  QuicStreamId id_;
+  std::string update_;
+  quiche::QuicheOptionalImpl<std::chrono::milliseconds> time_since_stream_creation_;
+  Document ToJson() const override;
 
  private:
   VantagePoint vantagePoint_;
@@ -790,15 +790,15 @@ class QLogStreamStateUpdateEvent : public QLogEvent {
 class QLogConnectionMigrationEvent : public QLogEvent {
  public:
   QLogConnectionMigrationEvent(
-      bool intentionalMigration,
-      VantagePoint vantagePoint,
-      std::chrono::microseconds refTime);
+      bool intentional_migration,
+      VantagePoint vantage_point,
+      std::chrono::microseconds ref_time);
 
   ~QLogConnectionMigrationEvent() override = default;
 
-  Document toJson() const override;
+  Document ToJson() const override;
 
-  bool intentionalMigration_;
+  bool intentional_Migration_;
   VantagePoint vantagePoint_;
 };
 
@@ -808,12 +808,12 @@ class QLogPathValidationEvent : public QLogEvent {
   // Path Challenge).
   QLogPathValidationEvent(
       bool success,
-      VantagePoint vantagePoint,
-      std::chrono::microseconds refTime);
+      VantagePoint vantage_point,
+      std::chrono::microseconds ref_time);
 
   ~QLogPathValidationEvent() override = default;
 
-  Document toJson() const override;
+  Document ToJson() const override;
   bool success_;
   VantagePoint vantagePoint_;
 };
@@ -824,10 +824,10 @@ class QLogPriorityUpdateEvent : public QLogEvent {
       QuicStreamId id,
       uint8_t urgency,
       bool incremental,
-      std::chrono::microseconds refTimeIn);
+      std::chrono::microseconds ref_time_in);
   ~QLogPriorityUpdateEvent() override = default;
 
-  Document toJson() const override;
+  Document ToJson() const override;
 
  private:
   QuicStreamId streamId_;
@@ -838,19 +838,19 @@ class QLogPriorityUpdateEvent : public QLogEvent {
 class QLogRequestOverStreamEvent : public QLogEvent {
  public:
   QLogRequestOverStreamEvent(
-    std::string methodIn,
-    QuicStreamId streamIdIn,
-    std::string uriIn,
-    std::string rangeIn,
-    std::chrono::microseconds refTimeIn);
+    std::string method_in,
+    QuicStreamId stream_id_in,
+    std::string uri_in,
+    std::string range_in,
+    std::chrono::microseconds ref_time_in);
   ~QLogRequestOverStreamEvent() override = default;
 
-  QuicStreamId streamId;
-  std::string method;
-  std::string uri;
-  std::string range;
+  QuicStreamId stream_id_;
+  std::string method_;
+  std::string uri_;
+  std::string range_;
 
-  Document toJson() const override;
+  Document ToJson() const override;
 };
 
 } // namespace quic

@@ -6,6 +6,7 @@
 #define QUICHE_QUIC_TEST_TOOLS_SIMPLE_SESSION_CACHE_H_
 
 #include <memory>
+
 #include "gquiche/quic/core/crypto/quic_crypto_client_config.h"
 #include "gquiche/quic/core/crypto/transport_parameters.h"
 

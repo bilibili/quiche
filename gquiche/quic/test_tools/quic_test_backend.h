@@ -7,6 +7,7 @@
 
 #include "gquiche/quic/tools/quic_memory_cache_backend.h"
 #include "gquiche/common/platform/api/quiche_logging.h"
+#include "gquiche/spdy/core/http2_header_block.h"
 
 namespace quic {
 namespace test {
@@ -26,12 +27,6 @@ class QuicTestBackend : public QuicMemoryCacheBackend {
     enable_webtransport_ = enable_webtransport;
   }
 
-  bool UsesDatagramContexts() override { return use_datagram_contexts_; }
-
-  void set_use_datagram_contexts(bool use_datagram_contexts) {
-    use_datagram_contexts_ = use_datagram_contexts;
-  }
-
   bool SupportsExtendedConnect() override { return enable_extended_connect_; }
 
   void set_enable_extended_connect(bool enable_extended_connect) {
@@ -40,7 +35,6 @@ class QuicTestBackend : public QuicMemoryCacheBackend {
 
  private:
   bool enable_webtransport_ = false;
-  bool use_datagram_contexts_ = false;
   bool enable_extended_connect_ = true;
 };
 

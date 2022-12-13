@@ -11,16 +11,14 @@
 
 #include "absl/strings/string_view.h"
 #include "gquiche/http2/decoder/decode_buffer.h"
-#include "gquiche/http2/hpack/decoder/hpack_block_collector.h"
 #include "gquiche/http2/hpack/http2_hpack_constants.h"
-#include "gquiche/http2/hpack/tools/hpack_block_builder.h"
-#include "gquiche/http2/hpack/tools/hpack_example.h"
-#include "gquiche/http2/platform/api/http2_test_helpers.h"
+#include "gquiche/http2/test_tools/hpack_block_builder.h"
+#include "gquiche/http2/test_tools/hpack_block_collector.h"
+#include "gquiche/http2/test_tools/hpack_example.h"
 #include "gquiche/http2/test_tools/http2_random.h"
-#include "gquiche/http2/tools/random_decoder_test.h"
+#include "gquiche/http2/test_tools/random_decoder_test_base.h"
+#include "gquiche/common/platform/api/quiche_expect_bug.h"
 #include "gquiche/common/platform/api/quiche_test.h"
-
-using ::testing::AssertionSuccess;
 
 namespace http2 {
 namespace test {
@@ -66,8 +64,7 @@ class HpackBlockDecoderTest : public RandomDecoderTest {
   }
 
   AssertionResult DecodeHpackExampleAndValidateSeveralWays(
-      absl::string_view hpack_example,
-      Validator validator) {
+      absl::string_view hpack_example, Validator validator) {
     std::string input = HpackExampleToStringOrDie(hpack_example);
     DecodeBuffer db(input);
     return DecodeAndValidateSeveralWays(&db, validator);
@@ -85,9 +82,9 @@ class HpackBlockDecoderTest : public RandomDecoderTest {
 // http://httpwg.org/specs/rfc7541.html#rfc.section.C.2.1
 TEST_F(HpackBlockDecoderTest, SpecExample_C_2_1) {
   auto do_check = [this]() {
-    VERIFY_AND_RETURN_SUCCESS(collector_.ValidateSoleLiteralNameValueHeader(
+    return collector_.ValidateSoleLiteralNameValueHeader(
         HpackEntryType::kIndexedLiteralHeader, false, "custom-key", false,
-        "custom-header"));
+        "custom-header");
   };
   const char hpack_example[] = R"(
       40                                      | == Literal indexed ==
@@ -106,8 +103,8 @@ TEST_F(HpackBlockDecoderTest, SpecExample_C_2_1) {
 // http://httpwg.org/specs/rfc7541.html#rfc.section.C.2.2
 TEST_F(HpackBlockDecoderTest, SpecExample_C_2_2) {
   auto do_check = [this]() {
-    VERIFY_AND_RETURN_SUCCESS(collector_.ValidateSoleLiteralValueHeader(
-        HpackEntryType::kUnindexedLiteralHeader, 4, false, "/sample/path"));
+    return collector_.ValidateSoleLiteralValueHeader(
+        HpackEntryType::kUnindexedLiteralHeader, 4, false, "/sample/path");
   };
   const char hpack_example[] = R"(
       04                                      | == Literal not indexed ==
@@ -125,9 +122,9 @@ TEST_F(HpackBlockDecoderTest, SpecExample_C_2_2) {
 // http://httpwg.org/specs/rfc7541.html#rfc.section.C.2.3
 TEST_F(HpackBlockDecoderTest, SpecExample_C_2_3) {
   auto do_check = [this]() {
-    VERIFY_AND_RETURN_SUCCESS(collector_.ValidateSoleLiteralNameValueHeader(
+    return collector_.ValidateSoleLiteralNameValueHeader(
         HpackEntryType::kNeverIndexedLiteralHeader, false, "password", false,
-        "secret"));
+        "secret");
   };
   const char hpack_example[] = R"(
       10                                      | == Literal never indexed ==
@@ -144,9 +141,7 @@ TEST_F(HpackBlockDecoderTest, SpecExample_C_2_3) {
 
 // http://httpwg.org/specs/rfc7541.html#rfc.section.C.2.4
 TEST_F(HpackBlockDecoderTest, SpecExample_C_2_4) {
-  auto do_check = [this]() {
-    VERIFY_AND_RETURN_SUCCESS(collector_.ValidateSoleIndexedHeader(2));
-  };
+  auto do_check = [this]() { return collector_.ValidateSoleIndexedHeader(2); };
   const char hpack_example[] = R"(
       82                                      | == Indexed - Add ==
                                               |   idx = 2
@@ -183,7 +178,7 @@ TEST_F(HpackBlockDecoderTest, SpecExample_C_3_1) {
   expected.ExpectNameIndexAndLiteralValue(HpackEntryType::kIndexedLiteralHeader,
                                           1, false, "www.example.com");
   NoArgValidator do_check = [expected, this]() {
-    VERIFY_AND_RETURN_SUCCESS(collector_.VerifyEq(expected));
+    return collector_.VerifyEq(expected);
   };
   EXPECT_TRUE(DecodeHpackExampleAndValidateSeveralWays(
       example, ValidateDoneAndEmpty(do_check)));
@@ -233,7 +228,7 @@ TEST_F(HpackBlockDecoderTest, SpecExample_C_5_1) {
   expected.ExpectNameIndexAndLiteralValue(HpackEntryType::kIndexedLiteralHeader,
                                           46, false, "https://www.example.com");
   NoArgValidator do_check = [expected, this]() {
-    VERIFY_AND_RETURN_SUCCESS(collector_.VerifyEq(expected));
+    return collector_.VerifyEq(expected);
   };
   EXPECT_TRUE(DecodeHpackExampleAndValidateSeveralWays(
       example, ValidateDoneAndEmpty(do_check)));
@@ -283,7 +278,7 @@ TEST_F(HpackBlockDecoderTest, Computed) {
   expected.AppendToHpackBlockBuilder(&hbb);
 
   NoArgValidator do_check = [expected, this]() {
-    VERIFY_AND_RETURN_SUCCESS(collector_.VerifyEq(expected));
+    return collector_.VerifyEq(expected);
   };
   EXPECT_TRUE(
       DecodeAndValidateSeveralWays(hbb, ValidateDoneAndEmpty(do_check)));

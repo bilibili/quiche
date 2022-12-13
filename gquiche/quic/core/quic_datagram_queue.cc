@@ -12,7 +12,6 @@
 
 namespace quic {
 
-
 constexpr float kExpiryInMinRtts = 1.25;
 constexpr float kMinPacingWindows = 4;
 
@@ -25,7 +24,8 @@ QuicDatagramQueue::QuicDatagramQueue(QuicSession* session,
       clock_(session->connection()->clock()),
       observer_(std::move(observer)) {}
 
-MessageStatus QuicDatagramQueue::SendOrQueueDatagram(QuicMemSlice datagram) {
+MessageStatus QuicDatagramQueue::SendOrQueueDatagram(
+    quiche::QuicheMemSlice datagram) {
   // If the queue is non-empty, always queue the daragram.  This ensures that
   // the datagrams are sent in the same order that they were sent by the
   // application.

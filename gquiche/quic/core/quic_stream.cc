@@ -20,8 +20,8 @@
 #include "gquiche/quic/platform/api/quic_flag_utils.h"
 #include "gquiche/quic/platform/api/quic_flags.h"
 #include "gquiche/quic/platform/api/quic_logging.h"
-#include "gquiche/quic/platform/api/quic_mem_slice.h"
 #include "gquiche/common/platform/api/quiche_logging.h"
+#include "gquiche/common/platform/api/quiche_mem_slice.h"
 
 using spdy::SpdyPriority;
 
@@ -150,7 +150,7 @@ void PendingStream::AddBytesConsumed(QuicByteCount bytes) {
 void PendingStream::ResetWithError(QuicResetStreamError /*error*/) {
   // Currently PendingStream is only read-unidirectional. It shouldn't send
   // Reset.
-  QUIC_NOTREACHED();
+  QUICHE_NOTREACHED();
 }
 
 void PendingStream::OnUnrecoverableError(QuicErrorCode error,
@@ -506,13 +506,7 @@ bool QuicStream::OnStopSending(QuicResetStreamError error) {
   }
 
   stream_error_ = error;
-  if (GetQuicReloadableFlag(quic_match_ietf_reset_code)) {
-    QUIC_RELOADABLE_FLAG_COUNT(quic_match_ietf_reset_code);
-    MaybeSendRstStream(error);
-  } else {
-    MaybeSendRstStream(
-        QuicResetStreamError::FromInternal(error.internal_code()));
-  }
+  MaybeSendRstStream(error);
   return true;
 }
 
@@ -655,7 +649,8 @@ void QuicStream::SetPriority(const spdy::SpdyStreamPrecedence& precedence) {
 
 void QuicStream::WriteOrBufferData(
     absl::string_view data, bool fin,
-    QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener) {
+    quiche::QuicheReferenceCountedPointer<QuicAckListenerInterface>
+        ack_listener) {
   QUIC_BUG_IF(quic_bug_12570_4,
               QuicUtils::IsCryptoStreamId(transport_version(), id_))
       << ENDPOINT
@@ -668,7 +663,8 @@ void QuicStream::WriteOrBufferData(
 
 void QuicStream::WriteOrBufferDataAtLevel(
     absl::string_view data, bool fin, EncryptionLevel level,
-    QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener) {
+    quiche::QuicheReferenceCountedPointer<QuicAckListenerInterface>
+        ack_listener) {
   if (data.empty() && !fin) {
     QUIC_BUG(quic_bug_10586_2) << "data.empty() && !fin";
     return;
@@ -694,7 +690,6 @@ void QuicStream::WriteOrBufferDataAtLevel(
   // Do not respect buffered data upper limit as WriteOrBufferData guarantees
   // all data to be consumed.
   if (data.length() > 0) {
-    struct iovec iov(QuicUtils::MakeIovec(data));
     QuicStreamOffset offset = send_buffer_.stream_offset();
     if (kMaxStreamLength - offset < data.length()) {
       QUIC_BUG(quic_bug_10586_4) << "Write too many data via stream " << id_;
@@ -703,7 +698,7 @@ void QuicStream::WriteOrBufferDataAtLevel(
           absl::StrCat("Write too many data via stream ", id_));
       return;
     }
-    send_buffer_.SaveStreamData(&iov, 1, 0, data.length());
+    send_buffer_.SaveStreamData(data);
     OnDataBuffered(offset, data.length(), ack_listener);
   }
   if (!had_buffered_data && (HasBufferedData() || fin_buffered_)) {
@@ -746,31 +741,37 @@ void QuicStream::MaybeSendBlocked() {
         << ENDPOINT << "MaybeSendBlocked called on stream without flow control";
     return;
   }
-  if (flow_controller_->ShouldSendBlocked()) {
-    session_->SendBlocked(id_);
-  }
+  flow_controller_->MaybeSendBlocked();
   if (!stream_contributes_to_connection_flow_control_) {
     return;
   }
-  if (connection_flow_controller_->ShouldSendBlocked()) {
-    session_->SendBlocked(QuicUtils::GetInvalidStreamId(transport_version()));
+  connection_flow_controller_->MaybeSendBlocked();
+  if (GetQuicReloadableFlag(
+          quic_donot_mark_stream_write_blocked_if_write_side_closed)) {
+    QUIC_RELOADABLE_FLAG_COUNT(
+        quic_donot_mark_stream_write_blocked_if_write_side_closed);
   }
+
   // If the stream is blocked by connection-level flow control but not by
   // stream-level flow control, add the stream to the write blocked list so that
   // the stream will be given a chance to write when a connection-level
   // WINDOW_UPDATE arrives.
-  if (connection_flow_controller_->IsBlocked() &&
+  if ((!GetQuicReloadableFlag(
+           quic_donot_mark_stream_write_blocked_if_write_side_closed) ||
+       !write_side_closed_) &&
+      connection_flow_controller_->IsBlocked() &&
       !flow_controller_->IsBlocked()) {
     session_->MarkConnectionLevelWriteBlocked(id());
   }
 }
 
-QuicConsumedData QuicStream::WriteMemSlice(QuicMemSlice span, bool fin) {
+QuicConsumedData QuicStream::WriteMemSlice(quiche::QuicheMemSlice span,
+                                           bool fin) {
   return WriteMemSlices(absl::MakeSpan(&span, 1), fin);
 }
 
-QuicConsumedData QuicStream::WriteMemSlices(absl::Span<QuicMemSlice> span,
-                                            bool fin) {
+QuicConsumedData QuicStream::WriteMemSlices(
+    absl::Span<quiche::QuicheMemSlice> span, bool fin) {
   QuicConsumedData consumed_data(0, false);
   if (span.empty() && !fin) {
     QUIC_BUG(quic_bug_10586_6) << "span.empty() && !fin";
@@ -1143,8 +1144,7 @@ void QuicStream::OnStreamFrameLost(QuicStreamOffset offset,
 bool QuicStream::RetransmitStreamData(QuicStreamOffset offset,
                                       QuicByteCount data_length, bool fin,
                                       TransmissionType type) {
-  QUICHE_DCHECK(type == PTO_RETRANSMISSION || type == RTO_RETRANSMISSION ||
-                type == TLP_RETRANSMISSION || type == PROBING_RETRANSMISSION);
+  QUICHE_DCHECK(type == PTO_RETRANSMISSION);
   if (HasDeadlinePassed()) {
     OnDeadlinePassed();
     return true;
@@ -1300,7 +1300,11 @@ void QuicStream::WriteBufferedData(EncryptionLevel level) {
         was_draining_ = true;
       }
       CloseWriteSide();
-    } else if (fin && !consumed_data.fin_consumed) {
+    } else if (
+        fin && !consumed_data.fin_consumed &&
+        (!GetQuicReloadableFlag(
+             quic_donot_mark_stream_write_blocked_if_write_side_closed) ||
+         !write_side_closed_)) {
       session_->MarkConnectionLevelWriteBlocked(id());
     }
   } else {

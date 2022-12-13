@@ -159,7 +159,7 @@ void HttpRequestHeaders::AddHeaderFromString(
   } else if (value_index == header_line.size()) {
     SetHeader(header_key, "");
   } else {
-    QUIC_NOTREACHED();
+    QUICHE_NOTREACHED();
   }
 }
 

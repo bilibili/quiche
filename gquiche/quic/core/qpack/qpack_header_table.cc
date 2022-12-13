@@ -7,6 +7,7 @@
 #include "absl/strings/string_view.h"
 #include "gquiche/quic/core/qpack/qpack_static_table.h"
 #include "gquiche/quic/platform/api/quic_logging.h"
+#include "gquiche/common/platform/api/quiche_logging.h"
 
 namespace quic {
 
@@ -20,8 +21,8 @@ uint64_t QpackEncoderHeaderTable::InsertEntry(absl::string_view name,
       QpackHeaderTableBase<QpackEncoderDynamicTable>::InsertEntry(name, value);
 
   // Make name and value point to the new entry.
-  name = dynamic_entries().back().name();
-  value = dynamic_entries().back().value();
+  name = dynamic_entries().back()->name();
+  value = dynamic_entries().back()->value();
 
   auto index_result = dynamic_index_.insert(
       std::make_pair(QpackLookupEntry{name, value}, index));
@@ -51,9 +52,7 @@ uint64_t QpackEncoderHeaderTable::InsertEntry(absl::string_view name,
 }
 
 QpackEncoderHeaderTable::MatchType QpackEncoderHeaderTable::FindHeaderField(
-    absl::string_view name,
-    absl::string_view value,
-    bool* is_static,
+    absl::string_view name, absl::string_view value, bool* is_static,
     uint64_t* index) const {
   QpackLookupEntry query{name, value};
 
@@ -110,7 +109,7 @@ uint64_t QpackEncoderHeaderTable::MaxInsertSizeWithoutEvictingGivenEntry(
       break;
     }
     ++entry_index;
-    max_insert_size += entry.Size();
+    max_insert_size += entry->Size();
   }
 
   return max_insert_size;
@@ -133,7 +132,7 @@ uint64_t QpackEncoderHeaderTable::draining_index(
   auto it = dynamic_entries().begin();
   uint64_t entry_index = dropped_entry_count();
   while (space_above_draining_index < required_space) {
-    space_above_draining_index += it->Size();
+    space_above_draining_index += (*it)->Size();
     ++it;
     ++entry_index;
     if (it == dynamic_entries().end()) {
@@ -145,7 +144,7 @@ uint64_t QpackEncoderHeaderTable::draining_index(
 }
 
 void QpackEncoderHeaderTable::RemoveEntryFromEnd() {
-  const QpackEntry* const entry = &dynamic_entries().front();
+  const QpackEntry* const entry = dynamic_entries().front().get();
   const uint64_t index = dropped_entry_count();
 
   auto index_it = dynamic_index_.find({entry->name(), entry->value()});
@@ -234,7 +233,7 @@ void QpackDecoderHeaderTable::UnregisterObserver(uint64_t required_insert_count,
   }
 
   // |observer| must have been registered.
-  QUIC_NOTREACHED();
+  QUICHE_NOTREACHED();
 }
 
 }  // namespace quic

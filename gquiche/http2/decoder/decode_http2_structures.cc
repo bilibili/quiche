@@ -9,7 +9,7 @@
 
 #include "gquiche/http2/decoder/decode_buffer.h"
 #include "gquiche/http2/http2_constants.h"
-#include "gquiche/http2/platform/api/http2_logging.h"
+#include "gquiche/common/platform/api/quiche_logging.h"
 
 namespace http2 {
 

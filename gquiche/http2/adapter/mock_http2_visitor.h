@@ -1,5 +1,5 @@
-#ifndef QUICHE_HTTP2_ADAPTER_MOCK_HTTP2_VISITOR_INTERFACE_H_
-#define QUICHE_HTTP2_ADAPTER_MOCK_HTTP2_VISITOR_INTERFACE_H_
+#ifndef QUICHE_HTTP2_ADAPTER_MOCK_HTTP2_VISITOR_H_
+#define QUICHE_HTTP2_ADAPTER_MOCK_HTTP2_VISITOR_H_
 
 #include <cstdint>
 
@@ -20,8 +20,10 @@ class QUICHE_NO_EXPORT MockHttp2Visitor : public Http2VisitorInterface {
         .WillByDefault(testing::Return(true));
     ON_CALL(*this, OnHeaderForStream).WillByDefault(testing::Return(HEADER_OK));
     ON_CALL(*this, OnEndHeadersForStream).WillByDefault(testing::Return(true));
+    ON_CALL(*this, OnDataPaddingLength).WillByDefault(testing::Return(true));
     ON_CALL(*this, OnBeginDataForStream).WillByDefault(testing::Return(true));
     ON_CALL(*this, OnDataForStream).WillByDefault(testing::Return(true));
+    ON_CALL(*this, OnCloseStream).WillByDefault(testing::Return(true));
     ON_CALL(*this, OnGoAway).WillByDefault(testing::Return(true));
     ON_CALL(*this, OnInvalidFrame).WillByDefault(testing::Return(true));
     ON_CALL(*this, OnMetadataForStream).WillByDefault(testing::Return(true));
@@ -50,6 +52,9 @@ class QUICHE_NO_EXPORT MockHttp2Visitor : public Http2VisitorInterface {
   MOCK_METHOD(bool, OnEndHeadersForStream, (Http2StreamId stream_id),
               (override));
 
+  MOCK_METHOD(bool, OnDataPaddingLength,
+              (Http2StreamId strema_id, size_t padding_length), (override));
+
   MOCK_METHOD(bool, OnBeginDataForStream,
               (Http2StreamId stream_id, size_t payload_length), (override));
 
@@ -58,28 +63,20 @@ class QUICHE_NO_EXPORT MockHttp2Visitor : public Http2VisitorInterface {
 
   MOCK_METHOD(void, OnEndStream, (Http2StreamId stream_id), (override));
 
-  MOCK_METHOD(void,
-              OnRstStream,
-              (Http2StreamId stream_id, Http2ErrorCode error_code),
-              (override));
+  MOCK_METHOD(void, OnRstStream,
+              (Http2StreamId stream_id, Http2ErrorCode error_code), (override));
 
-  MOCK_METHOD(void,
-              OnCloseStream,
-              (Http2StreamId stream_id, Http2ErrorCode error_code),
-              (override));
+  MOCK_METHOD(bool, OnCloseStream,
+              (Http2StreamId stream_id, Http2ErrorCode error_code), (override));
 
-  MOCK_METHOD(void,
-              OnPriorityForStream,
-              (Http2StreamId stream_id,
-               Http2StreamId parent_stream_id,
-               int weight,
-               bool exclusive),
+  MOCK_METHOD(void, OnPriorityForStream,
+              (Http2StreamId stream_id, Http2StreamId parent_stream_id,
+               int weight, bool exclusive),
               (override));
 
   MOCK_METHOD(void, OnPing, (Http2PingId ping_id, bool is_ack), (override));
 
-  MOCK_METHOD(void,
-              OnPushPromiseForStream,
+  MOCK_METHOD(void, OnPushPromiseForStream,
               (Http2StreamId stream_id, Http2StreamId promised_stream_id),
               (override));
 
@@ -88,10 +85,8 @@ class QUICHE_NO_EXPORT MockHttp2Visitor : public Http2VisitorInterface {
                absl::string_view opaque_data),
               (override));
 
-  MOCK_METHOD(void,
-              OnWindowUpdate,
-              (Http2StreamId stream_id, int window_increment),
-              (override));
+  MOCK_METHOD(void, OnWindowUpdate,
+              (Http2StreamId stream_id, int window_increment), (override));
 
   MOCK_METHOD(int, OnBeforeFrameSent,
               (uint8_t frame_type, Http2StreamId stream_id, size_t length,
@@ -106,10 +101,8 @@ class QUICHE_NO_EXPORT MockHttp2Visitor : public Http2VisitorInterface {
   MOCK_METHOD(bool, OnInvalidFrame,
               (Http2StreamId stream_id, InvalidFrameError error), (override));
 
-  MOCK_METHOD(void,
-              OnBeginMetadataForStream,
-              (Http2StreamId stream_id, size_t payload_length),
-              (override));
+  MOCK_METHOD(void, OnBeginMetadataForStream,
+              (Http2StreamId stream_id, size_t payload_length), (override));
 
   MOCK_METHOD(bool, OnMetadataForStream,
               (Http2StreamId stream_id, absl::string_view metadata),
@@ -125,4 +118,4 @@ class QUICHE_NO_EXPORT MockHttp2Visitor : public Http2VisitorInterface {
 }  // namespace adapter
 }  // namespace http2
 
-#endif  // QUICHE_HTTP2_ADAPTER_MOCK_HTTP2_VISITOR_INTERFACE_H_
+#endif  // QUICHE_HTTP2_ADAPTER_MOCK_HTTP2_VISITOR_H_

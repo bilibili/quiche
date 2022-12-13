@@ -26,14 +26,12 @@ namespace quic {
 
 class QUIC_EXPORT_PRIVATE Bbr2Sender final : public SendAlgorithmInterface {
  public:
-  Bbr2Sender(QuicTime now,
-             const RttStats* rtt_stats,
+  Bbr2Sender(QuicTime now, const RttStats* rtt_stats,
              const QuicUnackedPacketMap* unacked_packets,
              QuicPacketCount initial_cwnd_in_packets,
-             QuicPacketCount max_cwnd_in_packets,
-             QuicRandom* random,
-             QuicConnectionStats* stats,
-             BbrSender* old_sender);
+             QuicPacketCount max_cwnd_in_packets, QuicRandom* random,
+             QuicConnectionStats* stats, BbrSender* old_sender,
+             float extra_loss_threshold);
 
   ~Bbr2Sender() override = default;
 
@@ -45,8 +43,6 @@ class QUIC_EXPORT_PRIVATE Bbr2Sender final : public SendAlgorithmInterface {
     return false;
   }
 
-  bool ShouldSendProbingPacket() const override;
-
   void SetFromConfig(const QuicConfig& config,
                      Perspective perspective) override;
 
@@ -57,16 +53,35 @@ class QUIC_EXPORT_PRIVATE Bbr2Sender final : public SendAlgorithmInterface {
   void SetInitialCongestionWindowInPackets(
       QuicPacketCount congestion_window) override;
 
-  void OnCongestionEvent(bool rtt_updated,
-                         QuicByteCount prior_in_flight,
+  void SetExtraLossThreshold(float extra_loss_threshold) override;
+  
+  void SetBandwidthListSize(uint64_t bandwidth_list_size) override;
+  
+  void SetBandwidthListIndex(float bandwidth_list_size) override;
+
+  void SetUpdateRangeTime(QuicTime::Delta update_range_time) override;
+
+  void SetIsUpdatePacketLostFlag(bool is_update_min_packet_lost) override;
+
+  void SetIsUpdatePacketLostOldFlag(bool is_update_min_packet_lost_old) override;
+
+  void SetMinPacketLostListIndex(float min_packet_lost_list_index) override;
+
+  void SetMinPacketLostListSize(uint64_t min_packet_lost_list_size) override;
+
+  void SetUseBandwidthListFlag(bool is_use_bandwidth_list) override;
+
+  void SetUseDecreasePacingRateFlag(bool is_use_decrease_pacing_rate_by_rtt) override;
+
+  void SetUseRttDetermineCongested(bool is_use_rtt_determine_congested_by_random) override;
+  
+  void OnCongestionEvent(bool rtt_updated, QuicByteCount prior_in_flight,
                          QuicTime event_time,
                          const AckedPacketVector& acked_packets,
                          const LostPacketVector& lost_packets) override;
 
-  void OnPacketSent(QuicTime sent_time,
-                    QuicByteCount bytes_in_flight,
-                    QuicPacketNumber packet_number,
-                    QuicByteCount bytes,
+  void OnPacketSent(QuicTime sent_time, QuicByteCount bytes_in_flight,
+                    QuicPacketNumber packet_number, QuicByteCount bytes,
                     HasRetransmittableData is_retransmittable) override;
 
   void OnPacketNeutered(QuicPacketNumber packet_number) override;
@@ -80,7 +95,11 @@ class QUIC_EXPORT_PRIVATE Bbr2Sender final : public SendAlgorithmInterface {
   QuicBandwidth PacingRate(QuicByteCount bytes_in_flight) const override;
 
   QuicBandwidth BandwidthEstimate() const override {
-    return model_.BandwidthEstimate();
+    return model_.BandwidthEstimate(mode_);
+  }
+
+  bool HasGoodBandwidthEstimateForResumption() const override {
+    return has_non_app_limited_sample_;
   }
 
   QuicByteCount GetCongestionWindow() const override;
@@ -96,6 +115,11 @@ class QUIC_EXPORT_PRIVATE Bbr2Sender final : public SendAlgorithmInterface {
   void OnApplicationLimited(QuicByteCount bytes_in_flight) override;
 
   void PopulateConnectionStats(QuicConnectionStats* stats) const override;
+
+  void SetStartUpPacingGain(float new_pacing_gain) override;
+
+  float GetStartUpPacingGain() override;
+
   // End implementation of SendAlgorithmInterface.
 
   const Bbr2Params& Params() const { return params_; }
@@ -122,10 +146,11 @@ class QUIC_EXPORT_PRIVATE Bbr2Sender final : public SendAlgorithmInterface {
     QuicByteCount inflight_hi;
     QuicByteCount inflight_lo;
     QuicByteCount max_ack_height;
+
     QuicTime::Delta min_rtt = QuicTime::Delta::Zero();
     QuicTime::Delta latest_rtt = QuicTime::Delta::Zero();
-    QuicTime::Delta smoothed_rtt = QuicTime::Delta::Zero();
     QuicTime::Delta mean_deviation = QuicTime::Delta::Zero();
+    QuicTime::Delta smoothed_rtt = QuicTime::Delta::Zero();
 
     QuicTime min_rtt_timestamp = QuicTime::Zero();
     QuicByteCount congestion_window;
@@ -141,6 +166,14 @@ class QUIC_EXPORT_PRIVATE Bbr2Sender final : public SendAlgorithmInterface {
   };
 
   DebugState ExportDebugState() const;
+  
+  float extra_loss_threshold_;
+  float bandwidth_list_index_;
+  uint64_t bandwidth_list_size_;
+  QuicTime::Delta update_range_time_;
+  bool is_update_min_packet_lost_;
+  bool is_use_bandwidth_list_;
+  bool is_use_decrease_pacing_rate_by_rtt_;
 
  private:
   void UpdatePacingRate(QuicByteCount bytes_acked);
@@ -202,6 +235,8 @@ class QUIC_EXPORT_PRIVATE Bbr2Sender final : public SendAlgorithmInterface {
   Bbr2ProbeBwMode probe_bw_;
   Bbr2ProbeRttMode probe_rtt_;
 
+  bool has_non_app_limited_sample_ = false;
+
   // Debug only.
   bool last_sample_is_app_limited_;
 
@@ -212,8 +247,7 @@ class QUIC_EXPORT_PRIVATE Bbr2Sender final : public SendAlgorithmInterface {
 };
 
 QUIC_EXPORT_PRIVATE std::ostream& operator<<(
-    std::ostream& os,
-    const Bbr2Sender::DebugState& state);
+    std::ostream& os, const Bbr2Sender::DebugState& state);
 
 }  // namespace quic
 

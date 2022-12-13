@@ -24,6 +24,7 @@ namespace spdlog {
 namespace sinks {
 
 using namespace rapidjson;
+using details::os::path_exists;
 //
 // sequence file sink based on size
 //
@@ -41,7 +42,14 @@ public:
 		     std::shared_ptr<quic::QuicMutex> lock,
                      std::size_t free_file_number = 1 );
   static filename_t calc_filename(const filename_t &filename, std::size_t index);
-  ~sequence_file_sink() = default;
+
+  ~sequence_file_sink() {
+    filename_t target = calc_filename(final_filename_, free_file_number_);
+    if (!path_exists(target)) {
+      spdlog::details::os::create_dir(spdlog::details::os::dir_name(target));
+    }
+    std::rename(base_filename_.c_str(), target.c_str());
+  }
 
 protected:
   void sink_it_(const details::log_msg &msg) override;

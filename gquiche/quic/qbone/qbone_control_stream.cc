@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <limits>
+
 #include "absl/strings/string_view.h"
 #include "gquiche/quic/core/quic_session.h"
 #include "gquiche/quic/platform/api/quic_bug_tracker.h"
@@ -21,9 +22,16 @@ QboneControlStreamBase::QboneControlStreamBase(QuicSession* session)
     : QuicStream(
           QboneConstants::GetControlStreamId(session->transport_version()),
           session,
-          /*is_static=*/true,
-          BIDIRECTIONAL),
+          /*is_static=*/true, BIDIRECTIONAL),
       pending_message_size_(0) {}
+
+QboneControlStreamBase::QboneControlStreamBase(quic::PendingStream* pending,
+                                               QuicSession* session)
+    : QuicStream(pending, session, /*is_static=*/true),
+      pending_message_size_(0) {
+  QUICHE_DCHECK_EQ(pending->id(), QboneConstants::GetControlStreamId(
+                                      session->transport_version()));
+}
 
 void QboneControlStreamBase::OnDataAvailable() {
   sequencer()->Read(&buffer_);

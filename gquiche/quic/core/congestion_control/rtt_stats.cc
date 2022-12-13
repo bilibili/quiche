@@ -39,15 +39,14 @@ void RttStats::ExpireSmoothedMetrics() {
 }
 
 // Updates the RTT based on a new sample.
-void RttStats::UpdateRtt(QuicTime::Delta send_delta,
-                         QuicTime::Delta ack_delay,
+bool RttStats::UpdateRtt(QuicTime::Delta send_delta, QuicTime::Delta ack_delay,
                          QuicTime now) {
   if (send_delta.IsInfinite() || send_delta <= QuicTime::Delta::Zero()) {
     QUIC_LOG_FIRST_N(WARNING, 3)
         << "Ignoring measured send_delta, because it's is "
         << "either infinite, zero, or negative.  send_delta = "
         << send_delta.ToMicroseconds();
-    return;
+    return false;
   }
 
   last_update_time_ = now;
@@ -93,6 +92,7 @@ void RttStats::UpdateRtt(QuicTime::Delta send_delta,
     QUIC_DVLOG(1) << " smoothed_rtt(us):" << smoothed_rtt_.ToMicroseconds()
                   << " mean_deviation(us):" << mean_deviation_.ToMicroseconds();
   }
+  return true;
 }
 
 void RttStats::OnConnectionMigration() {
@@ -112,8 +112,7 @@ QuicTime::Delta RttStats::GetStandardOrMeanDeviation() const {
 }
 
 void RttStats::StandardDeviationCaculator::OnNewRttSample(
-    QuicTime::Delta rtt_sample,
-    QuicTime::Delta smoothed_rtt) {
+    QuicTime::Delta rtt_sample, QuicTime::Delta smoothed_rtt) {
   double new_value = rtt_sample.ToMicroseconds();
   if (smoothed_rtt.IsZero()) {
     return;

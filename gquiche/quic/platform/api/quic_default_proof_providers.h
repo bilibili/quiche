@@ -6,10 +6,11 @@
 #define QUICHE_QUIC_PLATFORM_API_QUIC_DEFAULT_PROOF_PROVIDERS_H_
 
 #include <memory>
+#include <string>
 
 #include "gquiche/quic/core/crypto/proof_source.h"
 #include "gquiche/quic/core/crypto/proof_verifier.h"
-#include "platform/quic_platform_impl/quic_default_proof_providers_impl.h"
+#include "gquiche/common/platform/api/quiche_default_proof_providers.h"
 
 namespace quic {
 
@@ -18,13 +19,13 @@ namespace quic {
 // against a reasonable root store, and not just always return success.
 inline std::unique_ptr<ProofVerifier> CreateDefaultProofVerifier(
     const std::string& host) {
-  return CreateDefaultProofVerifierImpl(host);
+  return quiche::CreateDefaultProofVerifier(host);
 }
 
 // Provides a default proof source for CLI-based tools.  The actual certificates
 // used in the proof source should be confifgurable via command-line flags.
 inline std::unique_ptr<ProofSource> CreateDefaultProofSource() {
-  return CreateDefaultProofSourceImpl();
+  return quiche::CreateDefaultProofSource();
 }
 
 }  // namespace quic

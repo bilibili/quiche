@@ -3,14 +3,15 @@
 // found in the LICENSE file.
 #include "platform/quic_platform_impl/quic_mem_slice_span_impl.h"
 
+using namespace quiche;
 namespace quic {
 QuicMemSliceSpanImpl::QuicMemSliceSpanImpl(
-    const QuicReferenceCountedPointer<net::IOBuffer>* buffers,
-    const size_t* lengths,
+    const QuicheMemSliceImpl* buffers,
     size_t num_buffers)
-    : buffers_(buffers), lengths_(lengths), num_buffers_(num_buffers) {}
-QuicMemSliceSpanImpl::QuicMemSliceSpanImpl(QuicMemSliceImpl* slice)
-    : QuicMemSliceSpanImpl(slice->impl(), slice->impl_length(), 1) {}
+    : buffers_(buffers), num_buffers_(num_buffers) {}
+
+QuicMemSliceSpanImpl::QuicMemSliceSpanImpl(QuicheMemSliceImpl* slice)
+    : QuicMemSliceSpanImpl(slice, 1) {}
 QuicMemSliceSpanImpl::QuicMemSliceSpanImpl(const QuicMemSliceSpanImpl& other) =
     default;
 QuicMemSliceSpanImpl& QuicMemSliceSpanImpl::operator=(
@@ -23,7 +24,7 @@ QuicMemSliceSpanImpl::~QuicMemSliceSpanImpl() = default;
 QuicByteCount QuicMemSliceSpanImpl::total_length() {
   QuicByteCount length = 0;
   for (size_t i = 0; i < num_buffers_; ++i) {
-    length += lengths_[i];
+    length += buffers_[i].length();
   }
   return length;
 }

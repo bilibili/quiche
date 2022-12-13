@@ -13,7 +13,6 @@
 #include "gquiche/quic/core/quic_packets.h"
 #include "gquiche/quic/core/quic_session.h"
 #include "gquiche/quic/core/quic_write_blocked_list.h"
-#include "gquiche/quic/platform/api/quic_containers.h"
 
 namespace quic {
 

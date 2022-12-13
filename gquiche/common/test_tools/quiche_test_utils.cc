@@ -4,16 +4,14 @@
 
 #include "gquiche/common/test_tools/quiche_test_utils.h"
 
+#include <string>
+
 #include "gquiche/common/platform/api/quiche_logging.h"
 #include "gquiche/common/platform/api/quiche_test.h"
 
-#include <string>
-
 namespace {
 
-std::string HexDumpWithMarks(const char* data,
-                             int length,
-                             const bool* marks,
+std::string HexDumpWithMarks(const char* data, int length, const bool* marks,
                              int mark_length) {
   static const char kHexChars[] = "0123456789abcdef";
   static const int kColumns = 4;
@@ -57,8 +55,7 @@ namespace quiche {
 namespace test {
 
 void CompareCharArraysWithHexError(const std::string& description,
-                                   const char* actual,
-                                   const int actual_len,
+                                   const char* actual, const int actual_len,
                                    const char* expected,
                                    const int expected_len) {
   EXPECT_EQ(actual_len, expected_len);
@@ -77,14 +74,17 @@ void CompareCharArraysWithHexError(const std::string& description,
   for (int i = min_len; i < max_len; ++i) {
     marks[i] = true;
   }
-  if (identical)
-    return;
+  if (identical) return;
   ADD_FAILURE() << "Description:\n"
                 << description << "\n\nExpected:\n"
                 << HexDumpWithMarks(expected, expected_len, marks.get(),
                                     max_len)
                 << "\nActual:\n"
                 << HexDumpWithMarks(actual, actual_len, marks.get(), max_len);
+}
+
+iovec MakeIOVector(absl::string_view str) {
+  return iovec{const_cast<char*>(str.data()), static_cast<size_t>(str.size())};
 }
 
 }  // namespace test

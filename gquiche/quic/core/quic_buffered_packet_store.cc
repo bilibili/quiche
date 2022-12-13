@@ -6,6 +6,10 @@
 
 #include <string>
 
+#include "absl/strings/string_view.h"
+#include "gquiche/quic/core/quic_connection_id.h"
+#include "gquiche/quic/core/quic_types.h"
+#include "gquiche/quic/core/quic_versions.h"
 #include "gquiche/quic/platform/api/quic_bug_tracker.h"
 #include "gquiche/quic/platform/api/quic_flags.h"
 
@@ -66,8 +70,7 @@ BufferedPacketList& BufferedPacketList::operator=(BufferedPacketList&& other) =
 BufferedPacketList::~BufferedPacketList() {}
 
 QuicBufferedPacketStore::QuicBufferedPacketStore(
-    VisitorInterface* visitor,
-    const QuicClock* clock,
+    VisitorInterface* visitor, const QuicClock* clock,
     QuicAlarmFactory* alarm_factory)
     : connection_life_span_(
           QuicTime::Delta::FromSeconds(kInitialIdleTimeoutSecs)),
@@ -177,6 +180,36 @@ BufferedPacketList QuicBufferedPacketStore::DeliverPackets(
   if (it != undecryptable_packets_.end()) {
     packets_to_deliver = std::move(it->second);
     undecryptable_packets_.erase(connection_id);
+    std::list<BufferedPacket> initial_packets;
+    std::list<BufferedPacket> other_packets;
+    for (auto& packet : packets_to_deliver.buffered_packets) {
+      QuicLongHeaderType long_packet_type = INVALID_PACKET_TYPE;
+      PacketHeaderFormat unused_format;
+      bool unused_version_flag;
+      bool unused_use_length_prefix;
+      QuicVersionLabel unused_version_label;
+      ParsedQuicVersion unused_parsed_version = UnsupportedQuicVersion();
+      QuicConnectionId unused_destination_connection_id;
+      QuicConnectionId unused_source_connection_id;
+      absl::optional<absl::string_view> unused_retry_token;
+      std::string unused_detailed_error;
+
+      QuicErrorCode error_code = QuicFramer::ParsePublicHeaderDispatcher(
+          *packet.packet, kQuicDefaultConnectionIdLength, &unused_format,
+          &long_packet_type, &unused_version_flag, &unused_use_length_prefix,
+          &unused_version_label, &unused_parsed_version,
+          &unused_destination_connection_id, &unused_source_connection_id,
+          &unused_retry_token, &unused_detailed_error);
+
+      if (error_code == QUIC_NO_ERROR && long_packet_type == INITIAL) {
+        initial_packets.push_back(std::move(packet));
+      } else {
+        other_packets.push_back(std::move(packet));
+      }
+    }
+
+      initial_packets.splice(initial_packets.end(), other_packets);
+      packets_to_deliver.buffered_packets = std::move(initial_packets);
   }
   return packets_to_deliver;
 }
@@ -258,9 +291,10 @@ bool QuicBufferedPacketStore::IngestPacketForTlsChloExtraction(
     const QuicConnectionId& connection_id, const ParsedQuicVersion& version,
     const QuicReceivedPacket& packet, std::vector<std::string>* out_alpns,
     std::string* out_sni, bool* out_resumption_attempted,
-    bool* out_early_data_attempted) {
+    bool* out_early_data_attempted, absl::optional<uint8_t>* tls_alert) {
   QUICHE_DCHECK_NE(out_alpns, nullptr);
   QUICHE_DCHECK_NE(out_sni, nullptr);
+  QUICHE_DCHECK_NE(tls_alert, nullptr);
   QUICHE_DCHECK_EQ(version.handshake_protocol, PROTOCOL_TLS1_3);
   auto it = undecryptable_packets_.find(connection_id);
   if (it == undecryptable_packets_.end()) {
@@ -270,6 +304,7 @@ bool QuicBufferedPacketStore::IngestPacketForTlsChloExtraction(
   }
   it->second.tls_chlo_extractor.IngestPacket(version, packet);
   if (!it->second.tls_chlo_extractor.HasParsedFullChlo()) {
+    *tls_alert = it->second.tls_chlo_extractor.tls_alert();
     return false;
   }
   const TlsChloExtractor& tls_chlo_extractor = it->second.tls_chlo_extractor;

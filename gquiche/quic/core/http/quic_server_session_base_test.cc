@@ -45,7 +45,6 @@ using testing::_;
 using testing::StrictMock;
 
 using testing::AtLeast;
-using testing::Return;
 
 namespace quic {
 namespace test {
@@ -59,28 +58,21 @@ const char* const kStreamData = "\1z";
 
 class TestServerSession : public QuicServerSessionBase {
  public:
-  TestServerSession(const QuicConfig& config,
-                    QuicConnection* connection,
+  TestServerSession(const QuicConfig& config, QuicConnection* connection,
                     QuicSession::Visitor* visitor,
                     QuicCryptoServerStreamBase::Helper* helper,
                     const QuicCryptoServerConfig* crypto_config,
                     QuicCompressedCertsCache* compressed_certs_cache,
                     QuicSimpleServerBackend* quic_simple_server_backend)
-      : QuicServerSessionBase(config,
-                              CurrentSupportedVersions(),
-                              connection,
-                              visitor,
-                              helper,
-                              crypto_config,
+      : QuicServerSessionBase(config, CurrentSupportedVersions(), connection,
+                              visitor, helper, crypto_config,
                               compressed_certs_cache),
         quic_simple_server_backend_(quic_simple_server_backend) {}
 
   ~TestServerSession() override { DeleteConnection(); }
 
-  MOCK_METHOD(bool,
-              WriteControlFrame,
-              (const QuicFrame& frame, TransmissionType type),
-              (override));
+  MOCK_METHOD(bool, WriteControlFrame,
+              (const QuicFrame& frame, TransmissionType type), (override));
 
  protected:
   QuicSpdyStream* CreateIncomingStream(QuicStreamId id) override {
@@ -138,8 +130,7 @@ class QuicServerSessionBaseTest : public QuicTestWithParam<ParsedQuicVersion> {
 
   explicit QuicServerSessionBaseTest(std::unique_ptr<ProofSource> proof_source)
       : crypto_config_(QuicCryptoServerConfig::TESTING,
-                       QuicRandom::GetInstance(),
-                       std::move(proof_source),
+                       QuicRandom::GetInstance(), std::move(proof_source),
                        KeyExchangeSource::Default()),
         compressed_certs_cache_(
             QuicCompressedCertsCache::kQuicCompressedCertsCacheSize) {
@@ -243,8 +234,7 @@ MATCHER_P(EqualsProto, network_params, "") {
               reference.previous_connection_state());
 }
 
-INSTANTIATE_TEST_SUITE_P(Tests,
-                         QuicServerSessionBaseTest,
+INSTANTIATE_TEST_SUITE_P(Tests, QuicServerSessionBaseTest,
                          ::testing::ValuesIn(AllSupportedVersions()),
                          ::testing::PrintToStringParamName());
 
@@ -479,18 +469,14 @@ class MockQuicCryptoServerStream : public QuicCryptoServerStream {
       QuicCompressedCertsCache* compressed_certs_cache,
       QuicServerSessionBase* session,
       QuicCryptoServerStreamBase::Helper* helper)
-      : QuicCryptoServerStream(crypto_config,
-                               compressed_certs_cache,
-                               session,
+      : QuicCryptoServerStream(crypto_config, compressed_certs_cache, session,
                                helper) {}
   MockQuicCryptoServerStream(const MockQuicCryptoServerStream&) = delete;
   MockQuicCryptoServerStream& operator=(const MockQuicCryptoServerStream&) =
       delete;
   ~MockQuicCryptoServerStream() override {}
 
-  MOCK_METHOD(void,
-              SendServerConfigUpdate,
-              (const CachedNetworkParameters*),
+  MOCK_METHOD(void, SendServerConfigUpdate, (const CachedNetworkParameters*),
               (override));
 };
 
@@ -524,6 +510,7 @@ TEST_P(QuicServerSessionBaseTest, BandwidthEstimates) {
   // Client has sent kBWRE connection option to trigger bandwidth resumption.
   QuicTagVector copt;
   copt.push_back(kBWRE);
+  copt.push_back(kBWID);
   QuicConfigPeer::SetReceivedConnectionOptions(session_->config(), copt);
   connection_->SetDefaultEncryptionLevel(ENCRYPTION_FORWARD_SECURE);
   session_->OnConfigNegotiated();
@@ -620,40 +607,40 @@ TEST_P(QuicServerSessionBaseTest, BandwidthEstimates) {
   sent_packet_manager->OnPacketSent(&packet, now, NOT_RETRANSMISSION,
                                     HAS_RETRANSMITTABLE_DATA, true);
 
-  // Verify that the proto has exactly the values we expect.
-  CachedNetworkParameters expected_network_params;
-  expected_network_params.set_bandwidth_estimate_bytes_per_second(
-      bandwidth_recorder.BandwidthEstimate().ToBytesPerSecond());
-  expected_network_params.set_max_bandwidth_estimate_bytes_per_second(
-      bandwidth_recorder.MaxBandwidthEstimate().ToBytesPerSecond());
-  expected_network_params.set_max_bandwidth_timestamp_seconds(
-      bandwidth_recorder.MaxBandwidthTimestamp());
-  expected_network_params.set_min_rtt_ms(session_->connection()
-                                             ->sent_packet_manager()
-                                             .GetRttStats()
-                                             ->min_rtt()
-                                             .ToMilliseconds());
-  expected_network_params.set_previous_connection_state(
-      CachedNetworkParameters::CONGESTION_AVOIDANCE);
-  expected_network_params.set_timestamp(
-      session_->connection()->clock()->WallNow().ToUNIXSeconds());
-  expected_network_params.set_serving_region(serving_region);
-
-  if (quic_crypto_stream) {
-    EXPECT_CALL(*quic_crypto_stream,
-                SendServerConfigUpdate(EqualsProto(expected_network_params)))
-        .Times(1);
-  } else if (!GetQuicReloadableFlag(
-                 quic_add_cached_network_parameters_to_address_token2)) {
-    EXPECT_CALL(*tls_server_stream,
-                SendServerConfigUpdate(EqualsProto(expected_network_params)))
-        .Times(1);
+  if (GetQuicRestartFlag(
+          quic_enable_sending_bandwidth_estimate_when_network_idle_v2)) {
+    EXPECT_CALL(*connection_, OnSendConnectionState(_)).Times(0);
   } else {
-    EXPECT_CALL(*tls_server_stream,
-                GetAddressToken(EqualsProto(expected_network_params)))
-        .WillOnce(testing::Return("Test address token"));
+    // Verify that the proto has exactly the values we expect.
+    CachedNetworkParameters expected_network_params;
+    expected_network_params.set_bandwidth_estimate_bytes_per_second(
+        bandwidth_recorder.BandwidthEstimate().ToBytesPerSecond());
+    expected_network_params.set_max_bandwidth_estimate_bytes_per_second(
+        bandwidth_recorder.MaxBandwidthEstimate().ToBytesPerSecond());
+    expected_network_params.set_max_bandwidth_timestamp_seconds(
+        bandwidth_recorder.MaxBandwidthTimestamp());
+    expected_network_params.set_min_rtt_ms(session_->connection()
+                                               ->sent_packet_manager()
+                                               .GetRttStats()
+                                               ->min_rtt()
+                                               .ToMilliseconds());
+    expected_network_params.set_previous_connection_state(
+        CachedNetworkParameters::CONGESTION_AVOIDANCE);
+    expected_network_params.set_timestamp(
+        session_->connection()->clock()->WallNow().ToUNIXSeconds());
+    expected_network_params.set_serving_region(serving_region);
+
+    if (quic_crypto_stream) {
+      EXPECT_CALL(*quic_crypto_stream,
+                  SendServerConfigUpdate(EqualsProto(expected_network_params)))
+          .Times(1);
+    } else {
+      EXPECT_CALL(*tls_server_stream,
+                  GetAddressToken(EqualsProto(expected_network_params)))
+          .WillOnce(testing::Return("Test address token"));
+    }
+    EXPECT_CALL(*connection_, OnSendConnectionState(_)).Times(1);
   }
-  EXPECT_CALL(*connection_, OnSendConnectionState(_)).Times(1);
   session_->OnCongestionWindowChange(now);
 }
 
@@ -757,8 +744,7 @@ class StreamMemberLifetimeTest : public QuicServerSessionBaseTest {
   QuicCryptoServerConfigPeer crypto_config_peer_;
 };
 
-INSTANTIATE_TEST_SUITE_P(StreamMemberLifetimeTests,
-                         StreamMemberLifetimeTest,
+INSTANTIATE_TEST_SUITE_P(StreamMemberLifetimeTests, StreamMemberLifetimeTest,
                          ::testing::ValuesIn(AllSupportedVersions()),
                          ::testing::PrintToStringParamName());
 

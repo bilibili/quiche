@@ -6,13 +6,13 @@
 
 #include <stddef.h>
 
+#include "absl/base/macros.h"
 #include "gquiche/http2/decoder/decode_buffer.h"
 #include "gquiche/http2/decoder/http2_frame_decoder_listener.h"
 #include "gquiche/http2/http2_constants.h"
 #include "gquiche/http2/http2_structures.h"
-#include "gquiche/http2/platform/api/http2_bug_tracker.h"
-#include "gquiche/http2/platform/api/http2_logging.h"
-#include "gquiche/http2/platform/api/http2_macros.h"
+#include "gquiche/common/platform/api/quiche_bug_tracker.h"
+#include "gquiche/common/platform/api/quiche_logging.h"
 
 namespace http2 {
 
@@ -29,7 +29,7 @@ std::ostream& operator<<(std::ostream& out,
   // Since the value doesn't come over the wire, only a programming bug should
   // result in reaching this point.
   int unknown = static_cast<int>(v);
-  HTTP2_BUG(http2_bug_174_1)
+  QUICHE_BUG(http2_bug_174_1)
       << "Invalid DataPayloadDecoder::PayloadState: " << unknown;
   return out << "DataPayloadDecoder::PayloadState(" << unknown << ")";
 }
@@ -39,8 +39,8 @@ DecodeStatus DataPayloadDecoder::StartDecodingPayload(FrameDecoderState* state,
   const Http2FrameHeader& frame_header = state->frame_header();
   const uint32_t total_length = frame_header.payload_length;
 
-  HTTP2_DVLOG(2) << "DataPayloadDecoder::StartDecodingPayload: "
-                 << frame_header;
+  QUICHE_DVLOG(2) << "DataPayloadDecoder::StartDecodingPayload: "
+                  << frame_header;
   QUICHE_DCHECK_EQ(Http2FrameType::DATA, frame_header.type);
   QUICHE_DCHECK_LE(db->Remaining(), total_length);
   QUICHE_DCHECK_EQ(0, frame_header.flags & ~(Http2FrameFlag::END_STREAM |
@@ -50,11 +50,11 @@ DecodeStatus DataPayloadDecoder::StartDecodingPayload(FrameDecoderState* state,
   // the decode buffer. TO BE SEEN if that is true. It certainly requires that
   // the transport buffers be large (e.g. >> 16KB typically).
   // TODO(jamessynge) Add counters.
-  HTTP2_DVLOG(2) << "StartDecodingPayload total_length=" << total_length;
+  QUICHE_DVLOG(2) << "StartDecodingPayload total_length=" << total_length;
   if (!frame_header.IsPadded()) {
-    HTTP2_DVLOG(2) << "StartDecodingPayload !IsPadded";
+    QUICHE_DVLOG(2) << "StartDecodingPayload !IsPadded";
     if (db->Remaining() == total_length) {
-      HTTP2_DVLOG(2) << "StartDecodingPayload all present";
+      QUICHE_DVLOG(2) << "StartDecodingPayload all present";
       // Note that we don't cache the listener field so that the callee can
       // replace it if the frame is bad.
       // If this case is common enough, consider combining the 3 callbacks
@@ -78,8 +78,8 @@ DecodeStatus DataPayloadDecoder::StartDecodingPayload(FrameDecoderState* state,
 
 DecodeStatus DataPayloadDecoder::ResumeDecodingPayload(FrameDecoderState* state,
                                                        DecodeBuffer* db) {
-  HTTP2_DVLOG(2) << "DataPayloadDecoder::ResumeDecodingPayload payload_state_="
-                 << payload_state_;
+  QUICHE_DVLOG(2) << "DataPayloadDecoder::ResumeDecodingPayload payload_state_="
+                  << payload_state_;
   const Http2FrameHeader& frame_header = state->frame_header();
   QUICHE_DCHECK_EQ(Http2FrameType::DATA, frame_header.type);
   QUICHE_DCHECK_LE(state->remaining_payload_and_padding(),
@@ -97,7 +97,7 @@ DecodeStatus DataPayloadDecoder::ResumeDecodingPayload(FrameDecoderState* state,
       if (status != DecodeStatus::kDecodeDone) {
         return status;
       }
-      HTTP2_FALLTHROUGH;
+      ABSL_FALLTHROUGH_INTENDED;
 
     case PayloadState::kReadPayload:
       avail = state->AvailablePayload(db);
@@ -110,7 +110,7 @@ DecodeStatus DataPayloadDecoder::ResumeDecodingPayload(FrameDecoderState* state,
         payload_state_ = PayloadState::kReadPayload;
         return DecodeStatus::kDecodeInProgress;
       }
-      HTTP2_FALLTHROUGH;
+      ABSL_FALLTHROUGH_INTENDED;
 
     case PayloadState::kSkipPadding:
       // SkipPadding handles the OnPadding callback.
@@ -121,7 +121,7 @@ DecodeStatus DataPayloadDecoder::ResumeDecodingPayload(FrameDecoderState* state,
       payload_state_ = PayloadState::kSkipPadding;
       return DecodeStatus::kDecodeInProgress;
   }
-  HTTP2_BUG(http2_bug_174_2) << "PayloadState: " << payload_state_;
+  QUICHE_BUG(http2_bug_174_2) << "PayloadState: " << payload_state_;
   return DecodeStatus::kDecodeError;
 }
 

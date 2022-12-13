@@ -49,14 +49,6 @@ constexpr uint8_t kX509Version[] = {0x02, 0x01, 0x02};
 // 2.5.29.17
 constexpr uint8_t kSubjectAltNameOid[] = {0x55, 0x1d, 0x11};
 
-enum class PublicKeyType {
-  kRsa,
-  kP256,
-  kP384,
-  kEd25519,
-  kUnknown,
-};
-
 PublicKeyType PublicKeyTypeFromKey(EVP_PKEY* public_key) {
   switch (EVP_PKEY_id(public_key)) {
     case EVP_PKEY_RSA:
@@ -87,8 +79,12 @@ PublicKeyType PublicKeyTypeFromKey(EVP_PKEY* public_key) {
   }
 }
 
+}  // namespace
+
 PublicKeyType PublicKeyTypeFromSignatureAlgorithm(
     uint16_t signature_algorithm) {
+  // This should be kept in sync with the list in
+  // SupportedSignatureAlgorithmsForQuic().
   switch (signature_algorithm) {
     case SSL_SIGN_RSA_PSS_RSAE_SHA256:
       return PublicKeyType::kRsa;
@@ -102,6 +98,17 @@ PublicKeyType PublicKeyTypeFromSignatureAlgorithm(
       return PublicKeyType::kUnknown;
   }
 }
+
+QUIC_EXPORT_PRIVATE QuicSignatureAlgorithmVector
+SupportedSignatureAlgorithmsForQuic() {
+  // This should be kept in sync with the list in
+  // PublicKeyTypeFromSignatureAlgorithm().
+  return QuicSignatureAlgorithmVector{
+      SSL_SIGN_ED25519, SSL_SIGN_ECDSA_SECP256R1_SHA256,
+      SSL_SIGN_ECDSA_SECP384R1_SHA384, SSL_SIGN_RSA_PSS_RSAE_SHA256};
+}
+
+namespace {
 
 std::string AttributeNameToString(const CBS& oid_cbs) {
   absl::string_view oid = CbsToStringPiece(oid_cbs);
@@ -145,8 +152,7 @@ absl::optional<std::string> X509NameAttributeToString(CBS input) {
 
 namespace {
 
-template <unsigned inner_tag,
-          char separator,
+template <unsigned inner_tag, char separator,
           absl::optional<std::string> (*parser)(CBS)>
 absl::optional<std::string> ParseAndJoin(CBS input) {
   std::vector<std::string> pieces;
@@ -175,6 +181,22 @@ absl::optional<std::string> DistinguishedNameToString(CBS input) {
 }
 
 }  // namespace
+
+std::string PublicKeyTypeToString(PublicKeyType type) {
+  switch (type) {
+    case PublicKeyType::kRsa:
+      return "RSA";
+    case PublicKeyType::kP256:
+      return "ECDSA P-256";
+    case PublicKeyType::kP384:
+      return "ECDSA P-384";
+    case PublicKeyType::kEd25519:
+      return "Ed25519";
+    case PublicKeyType::kUnknown:
+      return "unknown";
+  }
+  return "";
+}
 
 absl::optional<quic::QuicWallTime> ParseDerTime(unsigned tag,
                                                 absl::string_view payload) {
@@ -469,11 +491,13 @@ std::vector<std::string> CertificateView::LoadPemFromStream(
   }
 }
 
+PublicKeyType CertificateView::public_key_type() const {
+  return PublicKeyTypeFromKey(public_key_.get());
+}
+
 bool CertificateView::ValidatePublicKeyParameters() {
-  // The profile here affects what certificates can be used:
-  // (1) when QUIC is used as a server library without any custom certificate
-  //     provider logic,
-  // (2) when QuicTransport is handling self-signed certificates.
+  // The profile here affects what certificates can be used when QUIC is used as
+  // a server library without any custom certificate provider logic.
   // The goal is to allow at minimum any certificate that would be allowed on a
   // regular Web session over TLS 1.3 while ensuring we do not expose any
   // algorithms we don't want to support long-term.

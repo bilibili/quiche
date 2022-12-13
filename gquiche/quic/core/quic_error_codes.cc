@@ -112,6 +112,7 @@ const char* QuicErrorCodeToString(QuicErrorCode error) {
     RETURN_STRING_LITERAL(QUIC_TOO_MANY_OPEN_STREAMS);
     RETURN_STRING_LITERAL(QUIC_PUBLIC_RESET);
     RETURN_STRING_LITERAL(QUIC_INVALID_VERSION);
+    RETURN_STRING_LITERAL(QUIC_PACKET_WRONG_VERSION);
     RETURN_STRING_LITERAL(QUIC_INVALID_0RTT_PACKET_NUMBER_OUT_OF_ORDER);
     RETURN_STRING_LITERAL(QUIC_INVALID_HEADER_ID);
     RETURN_STRING_LITERAL(QUIC_INVALID_NEGOTIATED_VALUE);
@@ -279,6 +280,8 @@ const char* QuicErrorCodeToString(QuicErrorCode error) {
     RETURN_STRING_LITERAL(QUIC_TLS_UNEXPECTED_KEYING_MATERIAL_EXPORT_LABEL);
     RETURN_STRING_LITERAL(QUIC_TLS_KEYING_MATERIAL_EXPORTS_MISMATCH);
     RETURN_STRING_LITERAL(QUIC_TLS_KEYING_MATERIAL_EXPORT_NOT_AVAILABLE);
+    RETURN_STRING_LITERAL(QUIC_UNEXPECTED_DATA_BEFORE_ENCRYPTION_ESTABLISHED);
+    RETURN_STRING_LITERAL(QUIC_SERVER_UNHEALTHY);
 
     RETURN_STRING_LITERAL(QUIC_LAST_ERROR);
     // Intentionally have no default case, so we'll break the build
@@ -403,6 +406,8 @@ QuicErrorCodeToIetfMapping QuicErrorCodeToTransportErrorCode(
     case QUIC_PUBLIC_RESET:
       return {true, static_cast<uint64_t>(INTERNAL_ERROR)};
     case QUIC_INVALID_VERSION:
+      return {true, static_cast<uint64_t>(PROTOCOL_VIOLATION)};
+    case QUIC_PACKET_WRONG_VERSION:
       return {true, static_cast<uint64_t>(PROTOCOL_VIOLATION)};
     case QUIC_INVALID_0RTT_PACKET_NUMBER_OUT_OF_ORDER:
       return {true, static_cast<uint64_t>(PROTOCOL_VIOLATION)};
@@ -784,6 +789,10 @@ QuicErrorCodeToIetfMapping QuicErrorCodeToTransportErrorCode(
       return {true, static_cast<uint64_t>(PROTOCOL_VIOLATION)};
     case QUIC_TLS_KEYING_MATERIAL_EXPORT_NOT_AVAILABLE:
       return {true, static_cast<uint64_t>(PROTOCOL_VIOLATION)};
+    case QUIC_UNEXPECTED_DATA_BEFORE_ENCRYPTION_ESTABLISHED:
+      return {true, static_cast<uint64_t>(PROTOCOL_VIOLATION)};
+    case QUIC_SERVER_UNHEALTHY:
+      return {true, static_cast<uint64_t>(INTERNAL_ERROR)};
     case QUIC_LAST_ERROR:
       return {false, static_cast<uint64_t>(QUIC_LAST_ERROR)};
   }
@@ -962,6 +971,17 @@ QuicResetStreamError QuicResetStreamError::FromInternal(
 QuicResetStreamError QuicResetStreamError::FromIetf(uint64_t code) {
   return QuicResetStreamError(
       IetfResetStreamErrorCodeToRstStreamErrorCode(code), code);
+}
+
+// static
+QuicResetStreamError QuicResetStreamError::FromIetf(QuicHttp3ErrorCode code) {
+  return FromIetf(static_cast<uint64_t>(code));
+}
+
+// static
+QuicResetStreamError QuicResetStreamError::FromIetf(
+    QuicHttpQpackErrorCode code) {
+  return FromIetf(static_cast<uint64_t>(code));
 }
 
 #undef RETURN_STRING_LITERAL  // undef for jumbo builds

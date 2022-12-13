@@ -7,9 +7,11 @@
 
 #include <cstdint>
 
+#include "gquiche/common/platform/api/quiche_export.h"
+
 namespace spdy {
 
-class ZeroCopyOutputBuffer {
+class QUICHE_EXPORT_PRIVATE ZeroCopyOutputBuffer {
  public:
   virtual ~ZeroCopyOutputBuffer() {}
 

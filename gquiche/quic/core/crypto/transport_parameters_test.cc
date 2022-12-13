@@ -37,7 +37,6 @@ const uint64_t kFakeInitialRoundTripTime = 53;
 const uint8_t kFakePreferredStatelessResetTokenData[16] = {
     0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87,
     0x88, 0x89, 0x8A, 0x8B, 0x8C, 0x8D, 0x8E, 0x8F};
-const bool kFakeKeyUpdateNotYetSupported = true;
 
 const auto kCustomParameter1 =
     static_cast<TransportParameters::TransportParameterId>(0xffcd);
@@ -128,10 +127,6 @@ QuicTagVector CreateFakeGoogleConnectionOptions() {
           MakeQuicTag('H', 'I', 'J', 0xff)};
 }
 
-std::string CreateFakeUserAgentId() {
-  return "FakeUAID";
-}
-
 void RemoveGreaseParameters(TransportParameters* params) {
   std::vector<TransportParameters::TransportParameterId> grease_params;
   for (const auto& kv : params->custom_parameters) {
@@ -166,8 +161,7 @@ class TransportParametersTest : public QuicTestWithParam<ParsedQuicVersion> {
   ParsedQuicVersion version_;
 };
 
-INSTANTIATE_TEST_SUITE_P(TransportParametersTests,
-                         TransportParametersTest,
+INSTANTIATE_TEST_SUITE_P(TransportParametersTests, TransportParametersTest,
                          ::testing::ValuesIn(AllSupportedVersionsWithTls()),
                          ::testing::PrintToStringParamName());
 
@@ -291,8 +285,6 @@ TEST_P(TransportParametersTest, CopyConstructor) {
   orig_params.retry_source_connection_id = CreateFakeRetrySourceConnectionId();
   orig_params.initial_round_trip_time_us.set_value(kFakeInitialRoundTripTime);
   orig_params.google_connection_options = CreateFakeGoogleConnectionOptions();
-  orig_params.user_agent_id = CreateFakeUserAgentId();
-  orig_params.key_update_not_yet_supported = kFakeKeyUpdateNotYetSupported;
   orig_params.custom_parameters[kCustomParameter1] = kCustomParameter1Value;
   orig_params.custom_parameters[kCustomParameter2] = kCustomParameter2Value;
 
@@ -305,9 +297,7 @@ TEST_P(TransportParametersTest, RoundTripClient) {
   orig_params.perspective = Perspective::IS_CLIENT;
   orig_params.legacy_version_information =
       CreateFakeLegacyVersionInformationClient();
-  if (GetQuicReloadableFlag(quic_version_information)) {
-    orig_params.version_information = CreateFakeVersionInformation();
-  }
+  orig_params.version_information = CreateFakeVersionInformation();
   orig_params.max_idle_timeout_ms.set_value(kFakeIdleTimeoutMilliseconds);
   orig_params.max_udp_payload_size.set_value(kMaxPacketSizeForTest);
   orig_params.initial_max_data.set_value(kFakeInitialMaxData);
@@ -329,17 +319,11 @@ TEST_P(TransportParametersTest, RoundTripClient) {
       CreateFakeInitialSourceConnectionId();
   orig_params.initial_round_trip_time_us.set_value(kFakeInitialRoundTripTime);
   orig_params.google_connection_options = CreateFakeGoogleConnectionOptions();
-  if (!GetQuicReloadableFlag(quic_ignore_user_agent_transport_parameter)) {
-    orig_params.user_agent_id = CreateFakeUserAgentId();
-  }
-  if (!GetQuicReloadableFlag(quic_ignore_key_update_not_yet_supported)) {
-    orig_params.key_update_not_yet_supported = kFakeKeyUpdateNotYetSupported;
-  }
   orig_params.custom_parameters[kCustomParameter1] = kCustomParameter1Value;
   orig_params.custom_parameters[kCustomParameter2] = kCustomParameter2Value;
 
   std::vector<uint8_t> serialized;
-  ASSERT_TRUE(SerializeTransportParameters(version_, orig_params, &serialized));
+  ASSERT_TRUE(SerializeTransportParameters(orig_params, &serialized));
 
   TransportParameters new_params;
   std::string error_details;
@@ -357,9 +341,7 @@ TEST_P(TransportParametersTest, RoundTripServer) {
   orig_params.perspective = Perspective::IS_SERVER;
   orig_params.legacy_version_information =
       CreateFakeLegacyVersionInformationServer();
-  if (GetQuicReloadableFlag(quic_version_information)) {
-    orig_params.version_information = CreateFakeVersionInformation();
-  }
+  orig_params.version_information = CreateFakeVersionInformation();
   orig_params.original_destination_connection_id =
       CreateFakeOriginalDestinationConnectionId();
   orig_params.max_idle_timeout_ms.set_value(kFakeIdleTimeoutMilliseconds);
@@ -387,7 +369,7 @@ TEST_P(TransportParametersTest, RoundTripServer) {
   orig_params.google_connection_options = CreateFakeGoogleConnectionOptions();
 
   std::vector<uint8_t> serialized;
-  ASSERT_TRUE(SerializeTransportParameters(version_, orig_params, &serialized));
+  ASSERT_TRUE(SerializeTransportParameters(orig_params, &serialized));
 
   TransportParameters new_params;
   std::string error_details;
@@ -502,12 +484,10 @@ TEST_P(TransportParametersTest, NoClientParamsWithStatelessResetToken) {
   orig_params.max_udp_payload_size.set_value(kMaxPacketSizeForTest);
 
   std::vector<uint8_t> out;
-  bool ok = true;
   EXPECT_QUIC_BUG(
-      ok = SerializeTransportParameters(version_, orig_params, &out),
+      EXPECT_FALSE(SerializeTransportParameters(orig_params, &out)),
       "Not serializing invalid transport parameters: Client cannot send "
       "stateless reset token");
-  EXPECT_FALSE(ok);
 }
 
 TEST_P(TransportParametersTest, ParseClientParams) {
@@ -578,13 +558,6 @@ TEST_P(TransportParametersTest, ParseClientParams) {
       'A', 'L', 'P', 'N',  // value
       'E', 'F', 'G', 0x00,
       'H', 'I', 'J', 0xff,
-      // user_agent_id
-      0x71, 0x29,  // parameter id
-      0x08,  // length
-      'F', 'a', 'k', 'e', 'U', 'A', 'I', 'D',  // value
-      // key_update_not_yet_supported
-      0x71, 0x2B,  // parameter id
-      0x00,  // length
       // Google version extension
       0x80, 0x00, 0x47, 0x52,  // parameter id
       0x04,  // length
@@ -613,11 +586,9 @@ TEST_P(TransportParametersTest, ParseClientParams) {
             new_params.legacy_version_information.value().version);
   EXPECT_TRUE(
       new_params.legacy_version_information.value().supported_versions.empty());
-  if (GetQuicReloadableFlag(quic_version_information)) {
-    ASSERT_TRUE(new_params.version_information.has_value());
-    EXPECT_EQ(new_params.version_information.value(),
-              CreateFakeVersionInformation());
-  }
+  ASSERT_TRUE(new_params.version_information.has_value());
+  EXPECT_EQ(new_params.version_information.value(),
+            CreateFakeVersionInformation());
   EXPECT_FALSE(new_params.original_destination_connection_id.has_value());
   EXPECT_EQ(kFakeIdleTimeoutMilliseconds,
             new_params.max_idle_timeout_ms.value());
@@ -649,15 +620,6 @@ TEST_P(TransportParametersTest, ParseClientParams) {
   ASSERT_TRUE(new_params.google_connection_options.has_value());
   EXPECT_EQ(CreateFakeGoogleConnectionOptions(),
             new_params.google_connection_options.value());
-  if (!GetQuicReloadableFlag(quic_ignore_user_agent_transport_parameter)) {
-    ASSERT_TRUE(new_params.user_agent_id.has_value());
-    EXPECT_EQ(CreateFakeUserAgentId(), new_params.user_agent_id.value());
-  } else {
-    EXPECT_FALSE(new_params.user_agent_id.has_value());
-  }
-  if (!GetQuicReloadableFlag(quic_ignore_key_update_not_yet_supported)) {
-    EXPECT_TRUE(new_params.key_update_not_yet_supported);
-  }
 }
 
 TEST_P(TransportParametersTest,
@@ -844,9 +806,6 @@ TEST_P(TransportParametersTest, ParseServerParams) {
       'A', 'L', 'P', 'N',  // value
       'E', 'F', 'G', 0x00,
       'H', 'I', 'J', 0xff,
-      // key_update_not_yet_supported
-      0x71, 0x2B,  // parameter id
-      0x00,  // length
       // Google version extension
       0x80, 0x00, 0x47, 0x52,  // parameter id
       0x0d,  // length
@@ -885,11 +844,9 @@ TEST_P(TransportParametersTest, ParseServerParams) {
   EXPECT_EQ(
       kFakeVersionLabel2,
       new_params.legacy_version_information.value().supported_versions[1]);
-  if (GetQuicReloadableFlag(quic_version_information)) {
-    ASSERT_TRUE(new_params.version_information.has_value());
-    EXPECT_EQ(new_params.version_information.value(),
-              CreateFakeVersionInformation());
-  }
+  ASSERT_TRUE(new_params.version_information.has_value());
+  EXPECT_EQ(new_params.version_information.value(),
+            CreateFakeVersionInformation());
   ASSERT_TRUE(new_params.original_destination_connection_id.has_value());
   EXPECT_EQ(CreateFakeOriginalDestinationConnectionId(),
             new_params.original_destination_connection_id.value());
@@ -933,10 +890,6 @@ TEST_P(TransportParametersTest, ParseServerParams) {
   ASSERT_TRUE(new_params.google_connection_options.has_value());
   EXPECT_EQ(CreateFakeGoogleConnectionOptions(),
             new_params.google_connection_options.value());
-  EXPECT_FALSE(new_params.user_agent_id.has_value());
-  if (!GetQuicReloadableFlag(quic_ignore_key_update_not_yet_supported)) {
-    EXPECT_TRUE(new_params.key_update_not_yet_supported);
-  }
 }
 
 TEST_P(TransportParametersTest, ParseServerParametersRepeated) {
@@ -1015,7 +968,7 @@ TEST_P(TransportParametersTest, VeryLongCustomParameter) {
   orig_params.custom_parameters[kCustomParameter1] = custom_value;
 
   std::vector<uint8_t> serialized;
-  ASSERT_TRUE(SerializeTransportParameters(version_, orig_params, &serialized));
+  ASSERT_TRUE(SerializeTransportParameters(orig_params, &serialized));
 
   TransportParameters new_params;
   std::string error_details;
@@ -1054,21 +1007,17 @@ TEST_P(TransportParametersTest, SerializationOrderIsRandom) {
       CreateFakeInitialSourceConnectionId();
   orig_params.initial_round_trip_time_us.set_value(kFakeInitialRoundTripTime);
   orig_params.google_connection_options = CreateFakeGoogleConnectionOptions();
-  orig_params.user_agent_id = CreateFakeUserAgentId();
-  orig_params.key_update_not_yet_supported = kFakeKeyUpdateNotYetSupported;
   orig_params.custom_parameters[kCustomParameter1] = kCustomParameter1Value;
   orig_params.custom_parameters[kCustomParameter2] = kCustomParameter2Value;
 
   std::vector<uint8_t> first_serialized;
-  ASSERT_TRUE(
-      SerializeTransportParameters(version_, orig_params, &first_serialized));
+  ASSERT_TRUE(SerializeTransportParameters(orig_params, &first_serialized));
   // Test that a subsequent serialization is different from the first.
   // Run in a loop to avoid a failure in the unlikely event that randomization
   // produces the same result multiple times.
   for (int i = 0; i < 1000; i++) {
     std::vector<uint8_t> serialized;
-    ASSERT_TRUE(
-        SerializeTransportParameters(version_, orig_params, &serialized));
+    ASSERT_TRUE(SerializeTransportParameters(orig_params, &serialized));
     if (serialized != first_serialized) {
       return;
     }

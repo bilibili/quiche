@@ -71,11 +71,11 @@ TEST_F(QuicCryptoServerConfigTest, CompressCerts) {
   QuicCryptoServerConfigPeer peer(&server);
 
   std::vector<std::string> certs = {"testcert"};
-  QuicReferenceCountedPointer<ProofSource::Chain> chain(
+  quiche::QuicheReferenceCountedPointer<ProofSource::Chain> chain(
       new ProofSource::Chain(certs));
 
   std::string compressed = QuicCryptoServerConfigPeer::CompressChain(
-      &compressed_certs_cache, chain, "", "", nullptr);
+      &compressed_certs_cache, chain, "");
 
   EXPECT_EQ(compressed_certs_cache.Size(), 1u);
 }
@@ -92,18 +92,17 @@ TEST_F(QuicCryptoServerConfigTest, CompressSameCertsTwice) {
 
   // Compress the certs for the first time.
   std::vector<std::string> certs = {"testcert"};
-  QuicReferenceCountedPointer<ProofSource::Chain> chain(
+  quiche::QuicheReferenceCountedPointer<ProofSource::Chain> chain(
       new ProofSource::Chain(certs));
-  std::string common_certs = "";
   std::string cached_certs = "";
 
   std::string compressed = QuicCryptoServerConfigPeer::CompressChain(
-      &compressed_certs_cache, chain, common_certs, cached_certs, nullptr);
+      &compressed_certs_cache, chain, cached_certs);
   EXPECT_EQ(compressed_certs_cache.Size(), 1u);
 
   // Compress the same certs, should use cache if available.
   std::string compressed2 = QuicCryptoServerConfigPeer::CompressChain(
-      &compressed_certs_cache, chain, common_certs, cached_certs, nullptr);
+      &compressed_certs_cache, chain, cached_certs);
   EXPECT_EQ(compressed, compressed2);
   EXPECT_EQ(compressed_certs_cache.Size(), 1u);
 }
@@ -121,33 +120,21 @@ TEST_F(QuicCryptoServerConfigTest, CompressDifferentCerts) {
   QuicCryptoServerConfigPeer peer(&server);
 
   std::vector<std::string> certs = {"testcert"};
-  QuicReferenceCountedPointer<ProofSource::Chain> chain(
+  quiche::QuicheReferenceCountedPointer<ProofSource::Chain> chain(
       new ProofSource::Chain(certs));
-  std::string common_certs = "";
   std::string cached_certs = "";
 
   std::string compressed = QuicCryptoServerConfigPeer::CompressChain(
-      &compressed_certs_cache, chain, common_certs, cached_certs, nullptr);
+      &compressed_certs_cache, chain, cached_certs);
   EXPECT_EQ(compressed_certs_cache.Size(), 1u);
 
   // Compress a similar certs which only differs in the chain.
-  QuicReferenceCountedPointer<ProofSource::Chain> chain2(
+  quiche::QuicheReferenceCountedPointer<ProofSource::Chain> chain2(
       new ProofSource::Chain(certs));
 
   std::string compressed2 = QuicCryptoServerConfigPeer::CompressChain(
-      &compressed_certs_cache, chain2, common_certs, cached_certs, nullptr);
+      &compressed_certs_cache, chain2, cached_certs);
   EXPECT_EQ(compressed_certs_cache.Size(), 2u);
-
-  // Compress a similar certs which only differs in common certs field.
-  static const uint64_t set_hash = 42;
-  std::unique_ptr<CommonCertSets> common_sets(
-      crypto_test_utils::MockCommonCertSets(certs[0], set_hash, 1));
-  absl::string_view different_common_certs(
-      reinterpret_cast<const char*>(&set_hash), sizeof(set_hash));
-  std::string compressed3 = QuicCryptoServerConfigPeer::CompressChain(
-      &compressed_certs_cache, chain, std::string(different_common_certs),
-      cached_certs, common_sets.get());
-  EXPECT_EQ(compressed_certs_cache.Size(), 3u);
 }
 
 class SourceAddressTokenTest : public QuicTest {
@@ -158,8 +145,7 @@ class SourceAddressTokenTest : public QuicTest {
         ip6_(QuicIpAddress::Loopback6()),
         original_time_(QuicWallTime::Zero()),
         rand_(QuicRandom::GetInstance()),
-        server_(QuicCryptoServerConfig::TESTING,
-                rand_,
+        server_(QuicCryptoServerConfig::TESTING, rand_,
                 crypto_test_utils::ProofSourceForTesting(),
                 KeyExchangeSource::Default()),
         peer_(&server_) {
@@ -177,16 +163,14 @@ class SourceAddressTokenTest : public QuicTest {
   }
 
   std::string NewSourceAddressToken(
-      std::string config_id,
-      const QuicIpAddress& ip,
+      std::string config_id, const QuicIpAddress& ip,
       const SourceAddressTokens& previous_tokens) {
     return peer_.NewSourceAddressToken(config_id, previous_tokens, ip, rand_,
                                        clock_.WallNow(), nullptr);
   }
 
   std::string NewSourceAddressToken(
-      std::string config_id,
-      const QuicIpAddress& ip,
+      std::string config_id, const QuicIpAddress& ip,
       CachedNetworkParameters* cached_network_params) {
     SourceAddressTokens previous_tokens;
     return peer_.NewSourceAddressToken(config_id, previous_tokens, ip, rand_,
@@ -200,9 +184,7 @@ class SourceAddressTokenTest : public QuicTest {
   }
 
   HandshakeFailureReason ValidateSourceAddressTokens(
-      std::string config_id,
-      absl::string_view srct,
-      const QuicIpAddress& ip,
+      std::string config_id, absl::string_view srct, const QuicIpAddress& ip,
       CachedNetworkParameters* cached_network_params) {
     return peer_.ValidateSourceAddressTokens(
         config_id, srct, ip, clock_.WallNow(), cached_network_params);
@@ -300,8 +282,7 @@ class CryptoServerConfigsTest : public QuicTest {
  public:
   CryptoServerConfigsTest()
       : rand_(QuicRandom::GetInstance()),
-        config_(QuicCryptoServerConfig::TESTING,
-                rand_,
+        config_(QuicCryptoServerConfig::TESTING, rand_,
                 crypto_test_utils::ProofSourceForTesting(),
                 KeyExchangeSource::Default()),
         test_peer_(&config_) {}
@@ -469,7 +450,7 @@ TEST_F(CryptoServerConfigsTest, AdvancePrimary) {
 
 class ValidateCallback : public ValidateClientHelloResultCallback {
  public:
-  void Run(QuicReferenceCountedPointer<Result> /*result*/,
+  void Run(quiche::QuicheReferenceCountedPointer<Result> /*result*/,
            std::unique_ptr<ProofSource::Details> /*details*/) override {}
 };
 
@@ -490,7 +471,7 @@ TEST_F(CryptoServerConfigsTest, AdvancePrimaryViaValidate) {
   }
   ASSERT_NE(transport_version, QUIC_VERSION_UNSUPPORTED);
   MockClock clock;
-  QuicReferenceCountedPointer<QuicSignedServerConfig> signed_config(
+  quiche::QuicheReferenceCountedPointer<QuicSignedServerConfig> signed_config(
       new QuicSignedServerConfig);
   std::unique_ptr<ValidateClientHelloResultCallback> done_cb(
       new ValidateCallback);

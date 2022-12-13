@@ -17,6 +17,7 @@
 #include "gquiche/quic/core/quic_crypto_stream.h"
 #include "gquiche/quic/core/quic_server_id.h"
 #include "gquiche/quic/core/quic_session.h"
+#include "gquiche/quic/core/quic_types.h"
 #include "gquiche/quic/core/quic_versions.h"
 #include "gquiche/quic/platform/api/quic_export.h"
 
@@ -169,6 +170,14 @@ class QUIC_EXPORT_PRIVATE QuicCryptoClientStream
     // for the connection.
     virtual bool encryption_established() const = 0;
 
+    // Returns true if receiving CRYPTO_FRAME at encryption `level` is expected.
+    virtual bool IsCryptoFrameExpectedForEncryptionLevel(
+        EncryptionLevel level) const = 0;
+
+    // Returns the encryption level to send CRYPTO_FRAME for `space`.
+    virtual EncryptionLevel GetEncryptionLevelToSendCryptoDataOfSpace(
+        PacketNumberSpace space) const = 0;
+
     // Returns true once 1RTT keys are available.
     virtual bool one_rtt_keys_available() const = 0;
 
@@ -182,9 +191,6 @@ class QUIC_EXPORT_PRIVATE QuicCryptoClientStream
     // Used by QuicCryptoStream to know how much unprocessed data can be
     // buffered at each encryption level.
     virtual size_t BufferSizeLimitForLevel(EncryptionLevel level) const = 0;
-
-    // Returns whether the implementation supports key update.
-    virtual bool KeyUpdateSupportedLocally() const = 0;
 
     // Called to generate a decrypter for the next key phase. Each call should
     // generate the key for phase n+1.
@@ -245,8 +251,7 @@ class QUIC_EXPORT_PRIVATE QuicCryptoClientStream
         const ProofVerifyDetails& verify_details) = 0;
   };
 
-  QuicCryptoClientStream(const QuicServerId& server_id,
-                         QuicSession* session,
+  QuicCryptoClientStream(const QuicServerId& server_id, QuicSession* session,
                          std::unique_ptr<ProofVerifyContext> verify_context,
                          QuicCryptoClientConfig* crypto_config,
                          ProofHandler* proof_handler,
@@ -283,11 +288,15 @@ class QUIC_EXPORT_PRIVATE QuicCryptoClientStream
   void SetServerApplicationStateForResumption(
       std::unique_ptr<ApplicationState> application_state) override;
   size_t BufferSizeLimitForLevel(EncryptionLevel level) const override;
-  bool KeyUpdateSupportedLocally() const override;
   std::unique_ptr<QuicDecrypter> AdvanceKeysAndCreateCurrentOneRttDecrypter()
       override;
   std::unique_ptr<QuicEncrypter> CreateCurrentOneRttEncrypter() override;
   SSL* GetSsl() const override;
+  bool IsCryptoFrameExpectedForEncryptionLevel(
+      EncryptionLevel level) const override;
+  EncryptionLevel GetEncryptionLevelToSendCryptoDataOfSpace(
+      PacketNumberSpace space) const override;
+
   bool ExportKeyingMaterial(absl::string_view label, absl::string_view context,
                             size_t result_len, std::string* result) override;
   std::string chlo_hash() const;

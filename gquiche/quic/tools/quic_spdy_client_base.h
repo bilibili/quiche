@@ -18,6 +18,7 @@
 #include "gquiche/quic/core/quic_config.h"
 #include "gquiche/quic/platform/api/quic_socket_address.h"
 #include "gquiche/quic/tools/quic_client_base.h"
+#include "gquiche/spdy/core/http2_header_block.h"
 
 namespace quic {
 
@@ -35,8 +36,7 @@ class QuicSpdyClientBase : public QuicClientBase,
     ResponseListener() {}
     virtual ~ResponseListener() {}
     virtual void OnCompleteResponse(
-        QuicStreamId id,
-        const spdy::Http2HeaderBlock& response_headers,
+        QuicStreamId id, const spdy::Http2HeaderBlock& response_headers,
         const std::string& response_body) = 0;
   };
 
@@ -47,8 +47,7 @@ class QuicSpdyClientBase : public QuicClientBase,
    public:
     // |headers| may be null, since it's possible to send data without headers.
     QuicDataToResend(std::unique_ptr<spdy::Http2HeaderBlock> headers,
-                     absl::string_view body,
-                     bool fin);
+                     absl::string_view body, bool fin);
     QuicDataToResend(const QuicDataToResend&) = delete;
     QuicDataToResend& operator=(const QuicDataToResend&) = delete;
 
@@ -86,13 +85,11 @@ class QuicSpdyClientBase : public QuicClientBase,
 
   // Sends an HTTP request and does not wait for response before returning.
   void SendRequest(const spdy::Http2HeaderBlock& headers,
-                   absl::string_view body,
-                   bool fin);
+                   absl::string_view body, bool fin);
 
   // Sends an HTTP request and waits for response before returning.
   void SendRequestAndWaitForResponse(const spdy::Http2HeaderBlock& headers,
-                                     absl::string_view body,
-                                     bool fin);
+                                     absl::string_view body, bool fin);
 
   // Sends a request simple GET for each URL in |url_list|, and then waits for
   // each to complete.
@@ -172,8 +169,7 @@ class QuicSpdyClientBase : public QuicClientBase,
   void ResendSavedData() override;
 
   void AddPromiseDataToResend(const spdy::Http2HeaderBlock& headers,
-                              absl::string_view body,
-                              bool fin);
+                              absl::string_view body, bool fin);
   bool HasActiveRequests() override;
 
  private:
@@ -181,8 +177,7 @@ class QuicSpdyClientBase : public QuicClientBase,
   class ClientQuicDataToResend : public QuicDataToResend {
    public:
     ClientQuicDataToResend(std::unique_ptr<spdy::Http2HeaderBlock> headers,
-                           absl::string_view body,
-                           bool fin,
+                           absl::string_view body, bool fin,
                            QuicSpdyClientBase* client)
         : QuicDataToResend(std::move(headers), body, fin), client_(client) {
       QUICHE_DCHECK(headers_);
@@ -200,8 +195,7 @@ class QuicSpdyClientBase : public QuicClientBase,
   };
 
   void SendRequestInternal(spdy::Http2HeaderBlock sanitized_headers,
-                           absl::string_view body,
-                           bool fin);
+                           absl::string_view body, bool fin);
 
   // Index of pending promised streams. Must outlive |session_|.
   QuicClientPushPromiseIndex push_promise_index_;

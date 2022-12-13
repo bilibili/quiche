@@ -11,7 +11,7 @@
 
 #include "absl/strings/string_view.h"
 #include "gquiche/common/platform/api/quiche_export.h"
-#include "gquiche/spdy/core/spdy_header_block.h"
+#include "gquiche/spdy/core/http2_header_block.h"
 #include "gquiche/spdy/core/spdy_headers_handler_interface.h"
 
 namespace spdy {

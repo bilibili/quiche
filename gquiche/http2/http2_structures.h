@@ -32,21 +32,19 @@
 #include <string>
 
 #include "gquiche/http2/http2_constants.h"
-#include "gquiche/http2/platform/api/http2_logging.h"
 #include "gquiche/common/platform/api/quiche_export.h"
+#include "gquiche/common/platform/api/quiche_logging.h"
 
 namespace http2 {
 
 struct QUICHE_EXPORT_PRIVATE Http2FrameHeader {
   Http2FrameHeader() {}
-  Http2FrameHeader(uint32_t payload_length,
-                   Http2FrameType type,
-                   uint8_t flags,
+  Http2FrameHeader(uint32_t payload_length, Http2FrameType type, uint8_t flags,
                    uint32_t stream_id)
       : payload_length(payload_length),
         stream_id(stream_id),
         type(type),
-        flags(static_cast<Http2FrameFlag>(flags)) {
+        flags(flags) {
     QUICHE_DCHECK_LT(payload_length, static_cast<uint32_t>(1 << 24))
         << "Payload Length is only a 24 bit field\n"
         << ToString();
@@ -56,9 +54,7 @@ struct QUICHE_EXPORT_PRIVATE Http2FrameHeader {
 
   // Keep the current value of those flags that are in
   // valid_flags, and clear all the others.
-  void RetainFlags(uint8_t valid_flags) {
-    flags = static_cast<Http2FrameFlag>(flags & valid_flags);
-  }
+  void RetainFlags(uint8_t valid_flags) { flags = (flags & valid_flags); }
 
   // Returns true if any of the flags in flag_mask are set,
   // otherwise false.
@@ -128,7 +124,7 @@ struct QUICHE_EXPORT_PRIVATE Http2FrameHeader {
   // Flag bits, with interpretations that depend upon the frame type.
   // Flag bits not used by the frame type are cleared.
   // Third field in encoding.
-  Http2FrameFlag flags;
+  uint8_t flags;
 };
 
 QUICHE_EXPORT_PRIVATE bool operator==(const Http2FrameHeader& a,
@@ -144,8 +140,7 @@ QUICHE_EXPORT_PRIVATE std::ostream& operator<<(std::ostream& out,
 
 struct QUICHE_EXPORT_PRIVATE Http2PriorityFields {
   Http2PriorityFields() {}
-  Http2PriorityFields(uint32_t stream_dependency,
-                      uint32_t weight,
+  Http2PriorityFields(uint32_t stream_dependency, uint32_t weight,
                       bool is_exclusive)
       : stream_dependency(stream_dependency),
         weight(weight),
@@ -186,7 +181,7 @@ QUICHE_EXPORT_PRIVATE std::ostream& operator<<(std::ostream& out,
 
 // Http2RstStreamFields:
 
-struct Http2RstStreamFields {
+struct QUICHE_EXPORT_PRIVATE Http2RstStreamFields {
   static constexpr size_t EncodedSize() { return 4; }
   bool IsSupportedErrorCode() const {
     return IsSupportedHttp2ErrorCode(error_code);
@@ -206,7 +201,7 @@ QUICHE_EXPORT_PRIVATE std::ostream& operator<<(std::ostream& out,
 
 // Http2SettingFields:
 
-struct Http2SettingFields {
+struct QUICHE_EXPORT_PRIVATE Http2SettingFields {
   Http2SettingFields() {}
   Http2SettingFields(Http2SettingsParameter parameter, uint32_t value)
       : parameter(parameter), value(value) {}
@@ -230,7 +225,7 @@ QUICHE_EXPORT_PRIVATE std::ostream& operator<<(std::ostream& out,
 
 // Http2PushPromiseFields:
 
-struct Http2PushPromiseFields {
+struct QUICHE_EXPORT_PRIVATE Http2PushPromiseFields {
   static constexpr size_t EncodedSize() { return 4; }
 
   uint32_t promised_stream_id;
@@ -247,7 +242,7 @@ QUICHE_EXPORT_PRIVATE std::ostream& operator<<(std::ostream& out,
 
 // Http2PingFields:
 
-struct Http2PingFields {
+struct QUICHE_EXPORT_PRIVATE Http2PingFields {
   static constexpr size_t EncodedSize() { return 8; }
 
   uint8_t opaque_bytes[8];
@@ -264,7 +259,7 @@ QUICHE_EXPORT_PRIVATE std::ostream& operator<<(std::ostream& out,
 
 // Http2GoAwayFields:
 
-struct Http2GoAwayFields {
+struct QUICHE_EXPORT_PRIVATE Http2GoAwayFields {
   Http2GoAwayFields() {}
   Http2GoAwayFields(uint32_t last_stream_id, Http2ErrorCode error_code)
       : last_stream_id(last_stream_id), error_code(error_code) {}
@@ -288,7 +283,7 @@ QUICHE_EXPORT_PRIVATE std::ostream& operator<<(std::ostream& out,
 
 // Http2WindowUpdateFields:
 
-struct Http2WindowUpdateFields {
+struct QUICHE_EXPORT_PRIVATE Http2WindowUpdateFields {
   static constexpr size_t EncodedSize() { return 4; }
 
   // 31-bit, unsigned increase in the window size (only positive values are
@@ -303,12 +298,11 @@ QUICHE_EXPORT_PRIVATE inline bool operator!=(const Http2WindowUpdateFields& a,
   return !(a == b);
 }
 QUICHE_EXPORT_PRIVATE std::ostream& operator<<(
-    std::ostream& out,
-    const Http2WindowUpdateFields& v);
+    std::ostream& out, const Http2WindowUpdateFields& v);
 
 // Http2AltSvcFields:
 
-struct Http2AltSvcFields {
+struct QUICHE_EXPORT_PRIVATE Http2AltSvcFields {
   static constexpr size_t EncodedSize() { return 2; }
 
   // This is the one fixed size portion of the ALTSVC payload.
@@ -342,13 +336,11 @@ struct QUICHE_EXPORT_PRIVATE Http2PriorityUpdateFields {
 QUICHE_EXPORT_PRIVATE bool operator==(const Http2PriorityUpdateFields& a,
                                       const Http2PriorityUpdateFields& b);
 QUICHE_EXPORT_PRIVATE inline bool operator!=(
-    const Http2PriorityUpdateFields& a,
-    const Http2PriorityUpdateFields& b) {
+    const Http2PriorityUpdateFields& a, const Http2PriorityUpdateFields& b) {
   return !(a == b);
 }
 QUICHE_EXPORT_PRIVATE std::ostream& operator<<(
-    std::ostream& out,
-    const Http2PriorityUpdateFields& v);
+    std::ostream& out, const Http2PriorityUpdateFields& v);
 
 }  // namespace http2
 
