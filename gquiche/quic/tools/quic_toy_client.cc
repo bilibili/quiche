@@ -283,7 +283,8 @@ int QuicToyClient::SendRequestsAndPrintResponses(
           FLAGS_disable_certificate_verification)) {
     proof_verifier = std::make_unique<FakeProofVerifier>();
   } else {
-    printf("\033[0;31mCurrently does not support the certificate verification function, please set disable_certificate_verification=true to ensure the normal operation of the program\033[0m\n");
+    //proof_verifier = quic::CreateDefaultProofVerifier(url.host());
+    std::cerr << "simple_quic_client don't support certificate verification." << std::endl;
     return 1;
   }
   std::unique_ptr<quic::SessionCache> session_cache;
