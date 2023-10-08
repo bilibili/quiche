@@ -28,6 +28,11 @@ std::unique_ptr<ProofSource> CreateDefaultProofSourceImpl() {
   const base::FilePath cert_path = base::FilePath(GetQuicFlag(FLAGS_certificate_file));
   const base::FilePath key_path  = base::FilePath(GetQuicFlag(FLAGS_key_file));
 
+  if (!cert_path.IsAbsolute() || !key_path.IsAbsolute()) {
+    QUIC_DLOG(FATAL) << "Certificate and key paths must be absolute.";
+    return nullptr;
+  }
+
   // Initialize OpenSSL if it isn't already initialized. This must be called
   // before any other OpenSSL functions though it is safe and cheap to call this
   // multiple times.

@@ -207,6 +207,22 @@ bool FilePath::ReferencesParent() const {
   return false;
 }
 
+bool FilePath::IsAbsolute() const {
+  if (path_.empty())
+    return false;
+
+  // If there is a drive letter, it's an absolute path.
+  if (FindDriveLetter(path_) != StringType::npos)
+    return true;
+
+  // Starts with a separator, it's an absolute path.
+  if (IsSeparator(path_[0]))
+    return true;
+
+  // Otherwise, it's a relative path.
+  return false;
+}
+
 
 void FilePath::StripTrailingSeparatorsInternal() {
   // If there is no drive letter, start will be 1, which will prevent stripping
