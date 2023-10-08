@@ -17,7 +17,7 @@ int main(int argc, char* argv[]) {
   const char* usage = "Usage: quic_server [options]";
   std::vector<std::string> non_option_args =
       quiche::QuicheParseCommandLineFlags(usage, argc, argv);
-  if (!non_option_args.empty()) {
+  if (non_option_args.empty()) {
     quiche::QuichePrintCommandLineFlagHelp(usage);
     exit(0);
   }

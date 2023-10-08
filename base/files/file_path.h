@@ -112,6 +112,9 @@ class FilePath {
   // directory (e.g. has a path component that is "..").
   bool ReferencesParent() const;
 
+  // Returns true if this FilePath contains an attempt to reference the root
+  bool IsAbsolute() const;
+
  private:
   // Remove trailing separators from this object.  If the path is absolute, it
   // will never be stripped any more than to refer to the absolute root
